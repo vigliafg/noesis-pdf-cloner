@@ -130,6 +130,41 @@ class CachePathTests(unittest.TestCase):
         self.assertIsNone(self.engine._src_pdf)
 
 
+class SplitIndexTests(unittest.TestCase):
+    """ensure_split must use the same 0-based index as the rest of the app."""
+
+    def _make_pdf(self, path: Path, n: int = 3) -> None:
+        try:
+            import pymupdf
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        doc = pymupdf.open()
+        for i in range(n):
+            pg = doc.new_page()
+            pg.insert_text((72, 72), f"PAGE{i}", fontsize=20)
+        doc.save(str(path))
+        doc.close()
+
+    def test_ensure_split_extracts_the_same_zero_based_page(self):
+        try:
+            import pymupdf
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "book.pdf"
+            self._make_pdf(src, 3)
+            eng = clone_engine.CloneEngine(Path(tmp) / "cache")
+            eng.set_document(src)
+            sp = eng.ensure_split(1)          # pagina 2 (0-based)
+            self.assertIsNotNone(sp)
+            d = pymupdf.open(str(sp))
+            text = d[0].get_text()
+            d.close()
+            self.assertIn("PAGE1", text)
+            self.assertNotIn("PAGE0", text)
+            self.assertNotIn("PAGE2", text)
+
+
 class PipelineTests(unittest.TestCase):
     """Full pipeline with a fake pdf2zh_next (no real translation)."""
 

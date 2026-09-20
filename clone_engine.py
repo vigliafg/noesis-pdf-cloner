@@ -252,7 +252,11 @@ class CloneEngine:
     # ── split ─────────────────────────────────────────────────────────
 
     def ensure_split(self, page: int) -> Path | None:
-        """Estrae la singola pagina (0.2-2 MB) dal PDF sorgente. Una volta sola."""
+        """Estrae la singola pagina (0.2-2 MB) dal PDF sorgente. Una volta sola.
+
+        ``page`` è un indice **0-based** (stessa convenzione del resto dell'app
+        e di ``translated_path``/``split_path``).
+        """
         if self._src_pdf is None:
             return None
         path = self.split_path(page)
@@ -268,7 +272,7 @@ class CloneEngine:
             return None
         try:
             new = pymupdf.open()
-            new.insert_pdf(src, from_page=page - 1, to_page=page - 1)
+            new.insert_pdf(src, from_page=page, to_page=page)
             new.save(str(path), garbage=4, deflate=True)
             new.close()
             return path

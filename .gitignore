@@ -11,3 +11,6 @@ dist/
 # engine / translation caches
 cache/
 engine_events.jsonl
+
+# test PDF (copyright: non committare)
+ha22.pdf
