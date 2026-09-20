@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ayuda — Noesis PDF Cloner</title>
+  <link rel="stylesheet" href="../css/help.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">Noesis PDF Reader <span class="lite">Lite</span> — <em>Ayuda</em></div>
+    <div class="lang-switch">
+      <a href="../it/" lang="it">🇮🇹 Italiano</a>
+      <a href="../en/" lang="en">🇬🇧 English</a>
+      <a href="../fr/" lang="fr">🇫🇷 Français</a>
+      <a href="../de/" lang="de">🇩🇪 Deutsch</a>
+      <a href="../es/" class="active" lang="es">🇪🇸 Español</a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <nav class="sidebar">
+      <div class="group-label">Producto</div>
+      <a href="#features">Funciones</a>
+      <a href="#getting-started">Primeros pasos</a>
+      <a href="#interface">Interfaz</a>
+      <div class="group-label">Uso</div>
+      <a href="#navigation">Navegación</a>
+      <a href="#extraction">Extracción de texto</a>
+      <a href="#zones-exclude">Zonas de exclusión</a>
+      <a href="#zones-include">Zonas de inclusión</a>
+      <a href="#images">Extracción de imágenes</a>
+      <a href="#translation">Traducción</a>
+      <a href="#settings">Configuración</a>
+      <div class="group-label">Plataformas</div>
+      <a href="#install">Instalación</a>
+      <a href="#uninstall">Desinstalación</a>
+      <div class="group-label">Legal</div>
+      <a href="#legal">Aviso de uso lícito</a>
+      <div class="group-label">Referencia</div>
+      <a href="#shortcuts">Atajos &amp; Preguntas frecuentes</a>
+    </nav>
+
+    <main class="content">
+      <h1>Noesis PDF Cloner — Ayuda</h1>
+      <p>Bienvenido a la ayuda completa. Aquí encontrarás la descripción de
+      todas las funciones, las instrucciones de instalación y desinstalación
+      para cada plataforma y la información sobre el uso lícito del
+      programa.</p>
+
+      <!-- ═══════════════ PRODUCTO ═══════════════ -->
+
+      <h2 id="features">Funciones</h2>
+      <p>Noesis PDF Cloner es un lector de PDF con un motor de extracción
+      de texto adaptativo que reconstruye automáticamente el orden de lectura
+      de la página. En comparación con el proyecto padre, esta versión usa un
+      solo motor de renderizado (<strong>PyMuPDF</strong>) y un solo motor de
+      extracción (<strong>PyMuPDF4LLM</strong>), sin selector en tiempo de
+      ejecución: todo es automático, con la posibilidad de intervenir
+      manualmente cuando sea necesario.</p>
+
+      <div class="cards">
+        <div class="card"><h4>📄 Extracción inteligente</h4><p>El texto de la
+          página se extrae en Markdown con el orden de lectura correcto:
+          columnas, tablas, títulos, leyendas.</p></div>
+        <div class="card"><h4>🔍 Vista lado a lado</h4><p>Página renderizada a
+          la izquierda, texto extraído a la derecha, con navegación, índice
+          (TOC) y zoom.</p></div>
+        <div class="card"><h4>🚫 Zonas de exclusión</h4><p>Arrastra un recuadro
+          rojo sobre el ruido (encabezados, pies, imágenes, leyendas) para
+          eliminarlo del texto.</p></div>
+        <div class="card"><h4>🟩 Zonas de inclusión</h4><p>Los recuadros verdes
+          numerados definen el orden de lectura manual para páginas
+          complejas.</p></div>
+        <div class="card"><h4>🖼️ Extracción de imágenes</h4><p>Selecciona una
+          zona de la página y guarda la figura recortada en la galería.</p></div>
+        <div class="card"><h4>🌐 Traducción</h4><p>Traduce la página al idioma
+          de destino elegido, con caché en disco.</p></div>
+        <div class="card"><h4>⚙️ Configuración</h4><p>Idioma de la interfaz,
+          idiomas de traducción, zoom, fuente, cabecera y comportamiento de
+          lectura.</p></div>
+        <div class="card"><h4>🌍 Interfaz multilingüe</h4><p>Italiano, English,
+          Français, Deutsch, Español — cambiable al instante.</p></div>
+      </div>
+
+      <h3>En resumen</h3>
+      <ul>
+        <li><strong>Automático por defecto</strong>: el motor adaptativo
+          decide el plan de lectura de cada página.</li>
+        <li><strong>Manual cuando haga falta</strong>: las zonas rojas y
+          verdes intervienen solo si las dibujas tú.</li>
+        <li><strong>Cero configuración para empezar</strong>: abre un PDF y
+          lee.</li>
+      </ul>
+
+      <!-- ═══════════════ PRIMEROS PASOS ═══════════════ -->
+
+      <h2 id="getting-started">Primeros pasos</h2>
+      <ol>
+        <li>Inicia la aplicación (consulta <a href="#install">Instalación</a>
+          para tu plataforma).</li>
+        <li>Haz clic en <strong>📂 Abrir PDF</strong> en la barra de
+          herramientas y elige un archivo PDF.</li>
+        <li>La página aparece a la izquierda, el texto extraído a la
+          derecha.</li>
+        <li>Usa <strong>◀ Ant.</strong> / <strong>Sig. ▶</strong>, las flechas
+          o el <strong>📑 Índice</strong> para desplazarte por el
+          documento.</li>
+        <li>Si el texto contiene ruido, prueba las
+          <a href="#zones-exclude">zonas de exclusión</a>.</li>
+      </ol>
+
+      <div class="note"><strong>Consejo</strong> En el primer inicio la app
+        abre en la última página del documento (si la opción «Reanudar en la
+        última página» está activa) y en el idioma detectado del sistema
+        operativo.</div>
+
+      <!-- ═══════════════ INTERFAZ ═══════════════ -->
+
+      <h2 id="interface">Interfaz</h2>
+      <p>La ventana se divide en tres áreas principales:</p>
+
+      <h3>Barra de herramientas superior</h3>
+      <table>
+        <tr><th>Elemento</th><th>Función</th></tr>
+        <tr><td>📂 Abrir PDF</td><td>Abre un documento PDF</td></tr>
+        <tr><td>📑 Índice</td><td>Muestra/oculta el índice (TOC) a la izquierda</td></tr>
+        <tr><td>◀ Ant. / Sig. ▶ + números</td><td>Navegación entre páginas</td></tr>
+        <tr><td>🔍− / Escala / 🔍+</td><td>Zoom de la página</td></tr>
+        <tr><td>📝 MD ✓</td><td>Activa/desactiva el renderizado Markdown del texto</td></tr>
+        <tr><td>⚙️ Configuración</td><td>Idiomas, preferencias y comportamiento</td></tr>
+        <tr><td>❓ Ayuda</td><td>Abre esta ayuda en el navegador</td></tr>
+      </table>
+
+      <h3>Panel de página (izquierda)</h3>
+      <p>Encima de la página están las herramientas de zona:</p>
+      <table>
+        <tr><th>Elemento</th><th>Función</th></tr>
+        <tr><td>🖱️ Seleccionar zona</td><td>Extrae la imagen de la zona dibujada</td></tr>
+        <tr><td>🚫 Excluir zona</td><td>Excluye la zona del texto (recuadro rojo)</td></tr>
+        <tr><td>🟩 Incluir zona</td><td>Define el orden de lectura (recuadros verdes numerados)</td></tr>
+        <tr><td>🧹 Restablecer zonas</td><td>Elimina todas las zonas de la página actual</td></tr>
+      </table>
+
+      <h3>Panel derecho (texto)</h3>
+      <p>Tres pestañas arriba a la derecha:</p>
+      <ul>
+        <li><strong>📄 Original</strong> — el texto extraído (auto o manual).</li>
+        <li><strong>🇫🇷 … (bandera + idioma)</strong> — la traducción de la
+          página al idioma de destino elegido en Configuración.</li>
+        <li><strong>🖼️ Imágenes</strong> — la galería de las figuras
+          extraídas.</li>
+      </ul>
+      <p>Las dos pestañas de texto (📄 Original y la traducción) son ventanas
+      editables: puedes escribir, seleccionar, copiar y pegar libremente
+      (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Cada ventana tiene su mini barra
+      de herramientas con <strong>A−</strong>, el tamaño actual y
+      <strong>A+</strong> para reducir o aumentar el texto en vivo, además de
+      <strong>↺</strong> para restaurar el tamaño de Configuración y
+      <strong>💾</strong> para exportar el texto de la ventana como
+      <code>.md</code> o <code>.txt</code> (con tus cambios, sin la
+      cabecera). Con el guardado activo, un punto naranja
+      <strong>●</strong> junto a los botones avisa de cambios aún no
+      escritos en el disco. Las dos
+      ventanas hacen zoom de forma independiente. Tras una modificación, el
+      texto se muestra como texto sin formato. Los cambios se guardan por
+      página (carpeta de datos de la aplicación) y vuelven al reabrir el
+      documento.</p>
+
+      <h3>Barra de estado</h3>
+      <p>Abajo muestra la página actual, el documento y el tiempo de
+      extracción, además de los mensajes relativos a las zonas.</p>
+
+      <!-- ═══════════════ NAVEGACIÓN ═══════════════ -->
+
+      <h2 id="navigation">Navegación</h2>
+      <ul>
+        <li><strong>Botones</strong>: ◀ Ant. / Sig. ▶ y la casilla del número
+          de página.</li>
+        <li><strong>Teclado</strong>: flechas ← → y RePág/AvPág.</li>
+        <li><strong>Índice (TOC)</strong>: haz clic en 📑 Índice y elige una
+          entrada para saltar al capítulo.</li>
+        <li><strong>Zoom</strong>: botones 🔍−/🔍+,
+          <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd>,
+          <kbd>Ctrl</kbd>+<kbd>0</kbd> para restablecer. 1,00× ajusta la
+          página a la ventana; la etiqueta muestra la escala actual
+          (0,25×–8,00×).</li>
+        <li><strong>Reanudar</strong>: si está activado en Configuración, la
+          app reabre el documento en la última página leída.</li>
+      </ul>
+
+      <!-- ═══════════════ EXTRACCIÓN DE TEXTO ═══════════════ -->
+
+      <h2 id="extraction">Extracción de texto</h2>
+      <p>El texto se extrae con <strong>PyMuPDF4LLM</strong> y luego lo
+      reordena el <strong>motor adaptativo</strong>, que elige
+      automáticamente el plan de lectura (perfil → plan → pipeline):
+      reordenación de columnas, reconocimiento de tablas, gestión de recuadros,
+      leyendas y epígrafes, deduplicación de títulos y espaciados.</p>
+
+      <div class="note"><strong>PDF escaneados</strong> Las páginas sin capa
+        de texto se reconocen mediante el <strong>OCR Tesseract</strong>
+        incluido en la app (paquetes Windows/macOS/Linux); el idioma del OCR
+        sigue el ajuste del idioma del documento (detección automática por
+        defecto). La extracción se ejecuta en segundo plano, así que la
+        interfaz sigue respondiendo, y los resultados se guardan en caché por
+        página.</div>
+
+      <h3>Cabecera de extracción</h3>
+      <p>Si está activada (Configuración → «Mostrar la cabecera de
+      extracción»), aparece una línea informativa encima del texto:</p>
+      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12 345 caracteres │ Fix: Motor adaptativo │ OCR: 🌐 Auto │ Trad.: Google Translate ──</code></pre>
+      <p>El nombre del motor en la cabecera refleja siempre el
+      motor activo: cambiarlo en vivo actualiza la línea sobre el texto
+      original y el traducido.</p>
+
+      <h3>Renderizado Markdown</h3>
+      <p>El texto se muestra como Markdown renderizado (incluidas tablas y
+      formato). Con <strong>📝 MD ✓</strong> puedes pasar a texto plano.
+      Atajo: <kbd>Ctrl</kbd>+<kbd>M</kbd>.</p>
+
+      <div class="note"><strong>Nota</strong> La extracción trabaja sobre el
+        <em>texto</em> de la página. Las imágenes que contienen texto pueden
+        generar ruido: usa las <a href="#zones-exclude">zonas de
+        exclusión</a> para eliminarlo.</div>
+
+      <!-- ═══════════════ ZONAS DE EXCLUSIÓN ═══════════════ -->
+
+      <h2 id="zones-exclude">Zonas de exclusión (rojas)</h2>
+      <p>Cuando una página contiene elementos que no forman parte de la
+      lectura (encabezados, pies, números de página, imágenes con texto,
+      leyendas, publicidad), puedes excluirlos manualmente:</p>
+      <ol>
+        <li>Haz clic en <strong>🚫 Excluir zona</strong>.</li>
+        <li>Arrastra con el ratón un <strong>recuadro rojo</strong> sobre el
+          contenido que quieras eliminar.</li>
+        <li>El texto se recalcula inmediatamente sin ese contenido.</li>
+        <li>Pulsa el botón de nuevo para terminar.</li>
+      </ol>
+
+      <h3>Excluir + extraer en un solo gesto</h3>
+      <p>Si la zona roja contiene una imagen incrustada, <strong>toda la
+      zona seleccionada</strong> se captura automáticamente en la pestaña
+      🖼️ Imágenes (las figuras compuestas — varias imágenes, imagen +
+      leyenda — se conservan completas, no solo un fragmento; el foco
+      permanece en la ventana de texto <strong>Original</strong>). La barra
+      de estado confirma la operación.</p>
+
+      <div class="warning"><strong>Atención</strong> La exclusión es por
+        página y vive solo en memoria: al cerrar la app las zonas se
+        pierden.</div>
+
+      <!-- ═══════════════ ZONAS DE INCLUSIÓN ═══════════════ -->
+
+      <h2 id="zones-include">Zonas de inclusión (verdes)</h2>
+      <p>Para las páginas con un diseño complejo (p. ej. varias columnas o
+      recuadros dispersos) puedes definir tú mismo el orden de lectura con los
+      <strong>recuadros verdes numerados</strong>:</p>
+      <ol>
+        <li>Haz clic en <strong>🟩 Incluir zona</strong>.</li>
+        <li>Arrastra un recuadro verde sobre la primera columna/región de
+          lectura (aparece el número <strong>1</strong>).</li>
+        <li>Dibuja el siguiente recuadro en orden de lectura (2, 3, …).</li>
+        <li>El texto se reconstruye siguiendo la numeración.</li>
+      </ol>
+
+      <h3>Reglas</h3>
+      <ul>
+        <li><strong>Un recuadro verde = una columna/región</strong>. No uses
+          un solo recuadro para abarcar dos columnas.</li>
+        <li><strong>Lista blanca</strong>: con al menos un recuadro verde,
+          todo lo que queda fuera de los recuadros se descarta.</li>
+        <li><strong>Dentro de un recuadro</strong>: orden de arriba a abajo y
+          luego de izquierda a derecha.</li>
+        <li><strong>Composición</strong>: las rojas eliminan primero el ruido,
+          las verdes ordenan lo que queda; donde se solapan, gana el rojo.</li>
+      </ul>
+
+      <!-- ═══════════════ EXTRACCIÓN DE IMÁGENES ═══════════════ -->
+
+      <h2 id="images">Extracción de imágenes</h2>
+      <p>Puedes recortar una figura directamente de la página:</p>
+      <ol>
+        <li>Haz clic en <strong>🖱️ Seleccionar zona</strong>.</li>
+        <li>Arrastra un rectángulo sobre la figura.</li>
+        <li>La imagen se guarda en la pestaña <strong>🖼️ Imágenes</strong>.</li>
+      </ol>
+      <p>En la galería cada imagen tiene los botones:</p>
+      <ul>
+        <li><strong>💾 Guardar</strong> — guarda en un archivo (PNG/JPEG).</li>
+        <li><strong>📋 Copiar</strong> — copia al portapapeles.</li>
+        <li><strong>🗑️ Eliminar</strong> — borra de la galería.</li>
+        <li>Clic en la vista previa para ampliar.</li>
+      </ul>
+      <p>Las imágenes extraídas se guardan en la carpeta de datos de la app y
+      se conservan entre un inicio y otro.</p>
+
+      <!-- ═══════════════ TRADUCCIÓN ═══════════════ -->
+
+      <h2 id="translation">Traducción</h2>
+      <p>El panel derecho puede mostrar la página traducida al idioma de
+      destino elegido (por defecto: italiano).</p>
+      <ol>
+        <li>Abre <strong>⚙️ Configuración</strong> → sección
+          <em>Idioma</em>.</li>
+        <li>Elige el <strong>idioma del documento</strong> (origen; «auto»
+          para la detección automática) y el <strong>idioma de la
+          traducción</strong> (destino).</li>
+        <li>Haz clic en la pestaña con <strong>bandera + nombre</strong> del
+          idioma de destino en el panel derecho.</li>
+      </ol>
+
+      <h3>Cómo funciona</h3>
+      <ul>
+        <li>La traducción se ejecuta en segundo plano con el motor elegido en
+          ⚙️ Configuración — Google Translate (por defecto) o Microsoft Edge,
+          ambos gratuitos y sin clave API. También puedes cambiar de motor en
+          vivo con los botones de radio Google / Microsoft a la izquierda de
+          la barra de pestañas de traducción: la elección se guarda, la página
+          actual se vuelve a traducir y un aviso confirma el cambio durante
+          2 segundos.</li>
+        <li>Mientras se produce la traducción, aparece un aviso (⏳ Traduciendo con <em>motor</em>…) sobre
+          el texto traducido; desaparece cuando
+          aparece el resultado.</li>
+        <li>La caché en disco evita volver a traducir la misma página: está
+          indexada por página e idioma de destino.</li>
+        <li>Mientras dibujas zonas, la traducción se difiere con una pausa de
+          600 ms (sin ráfagas de peticiones).</li>
+        <li>Si cambias el idioma de destino, la pestaña se actualiza y la
+          página se vuelve a traducir.</li>
+      </ul>
+
+      <div class="warning"><strong>Atención</strong> La traducción requiere
+        conexión a Internet y envía el texto de la página a un servicio
+        externo. No traduzcas documentos confidenciales sin tener derecho a
+        hacerlo.</div>
+
+      <!-- ═══════════════ CONFIGURACIÓN ═══════════════ -->
+
+      <h2 id="settings">Configuración</h2>
+      <p>El menú <strong>⚙️ Configuración</strong> (arriba a la derecha)
+      reúne todo lo relacionado con el idioma y las preferencias. Se muestra
+      en el idioma de la interfaz elegido y la vista previa del idioma es en
+      directo.</p>
+
+      <h3>Idioma</h3>
+      <ul>
+        <li><strong>Idioma de la interfaz</strong> — it/en/fr/de/es; cambia
+          al instante toda la interfaz (el texto del PDF se mantiene en el
+          idioma original).</li>
+        <li><strong>Idioma del documento (origen)</strong> — el idioma del
+          PDF; «auto» para la detección automática.</li>
+        <li><strong>Idioma de la traducción (destino)</strong> — el idioma al
+          que traducir el texto.</li>
+      </ul>
+
+      <h3>Traducción</h3>
+      <ul>
+        <li><strong>Motor de traducción</strong> — Google Translate (por
+          defecto) o Microsoft Edge (gratis), sin clave API. Cambiarlo vuelve
+          a traducir la página actual. Google Translate cambia automáticamente
+          entre tres endpoints gratuitos (dict-chrome-ex → translate-pa → gtx): si el servicio
+          está bloqueado en tu red, aparece un aviso en lugar de mostrar
+          silenciosamente el texto sin traducir.</li>
+      </ul>
+
+      <h3>Texto</h3>
+      <ul>
+        <li><strong>Tamaño de fuente</strong> — 10–16 pt.</li>
+        <li><strong>Renderizado Markdown</strong> — activado/desactivado.</li>
+        <li><strong>Mostrar la cabecera de extracción</strong> —
+          activado/desactivado.</li>
+        <li><strong>Guardar cambios de texto</strong> — guarda los cambios
+          hechos en las ventanas Original/Traducción por documento (activo por
+          defecto).</li>
+        <li><strong>🗑️ Borrar cambios guardados</strong> — elimina los cambios
+          guardados del documento actual (con confirmación).</li>
+      </ul>
+
+      <h3>Visualización</h3>
+      <ul>
+        <li><strong>Zoom inicial</strong> — resolución base del renderizado,
+          0,5×–4,0× (afecta a la nitidez; la escala visible empieza en
+          1,00× = ajustar).</li>
+      </ul>
+
+      <h3>Comportamiento</h3>
+      <ul>
+        <li><strong>Reanudar en la última página</strong> — por documento.</li>
+        <li><strong>Recordar la última pestaña</strong> — del panel derecho.</li>
+      </ul>
+
+      <p>Todo se guarda en el archivo <code>config.json</code> de la carpeta
+      de datos de la app (creado en el primer inicio con el idioma del SO o
+      italiano) y sobrevive a las actualizaciones. Consulta
+      <a href="#uninstall">Desinstalación</a> para la ubicación exacta por
+      plataforma.</p>
+
+      <!-- ═══════════════ INSTALACIÓN ═══════════════ -->
+
+      <h2 id="install">Instalación</h2>
+      <p>El programa es <strong>portátil</strong>: no existe un instalador
+      real. Descargas el paquete de tu plataforma desde la página de versiones
+      del proyecto en GitHub y lo ejecutas.</p>
+
+      <h3>Windows (x64)</h3>
+      <ol>
+        <li>Descarga <code>NoesisPDFReaderLite-windows-x64.exe</code>.</li>
+        <li>Doble clic en el archivo para iniciar la app (puede quedarse en la
+          carpeta Descargas).</li>
+        <li>Sin instalación, sin servicio, sin entrada de registro
+          obligatoria.</li>
+      </ol>
+      <p><strong>Requisitos</strong>: Windows 10/11 x64. SmartScreen puede
+      pedir confirmación en el primer inicio.</p>
+
+      <h3>macOS (x64 / Apple Silicon)</h3>
+      <ol>
+        <li>Descarga <code>NoesisPDFReaderLite-macos-x64.dmg</code> (Mac Intel)
+          o <code>NoesisPDFReaderLite-macos-arm64.dmg</code> (Apple
+          Silicon).</li>
+        <li>Abre el <code>.dmg</code> y arrastra la app a la carpeta
+          <strong>Aplicaciones</strong>.</li>
+        <li>En el primer inicio la app no está firmada: <strong>clic derecho
+          sobre la app → Abrir</strong> y confirma para saltarte
+          Gatekeeper.</li>
+      </ol>
+      <p><strong>Requisitos</strong>: macOS 11 o posterior.</p>
+
+      <h3>Linux (x86_64)</h3>
+      <ol>
+        <li>Descarga <code>NoesisPDFReaderLite-x86_64.AppImage</code>.</li>
+        <li>Hazlo ejecutable:
+          <pre><code>chmod +x NoesisPDFReaderLite-x86_64.AppImage</code></pre></li>
+        <li>Ejecútalo con doble clic o desde la terminal:
+          <pre><code>./NoesisPDFReaderLite-x86_64.AppImage</code></pre></li>
+      </ol>
+      <p><strong>Requisitos</strong>: Linux x86_64 con FUSE (para el AppImage)
+      y las bibliotecas Qt6. Si FUSE no está disponible, extrae el AppImage
+      con <code>--appimage-extract-and-run</code>.</p>
+
+      <h3>Desde el código fuente (desarrolladores)</h3>
+      <pre><code>python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python main.py</code></pre>
+
+      <div class="note"><strong>Nota</strong> Cada actualización se aplica
+        descargando y ejecutando el nuevo paquete de la misma plataforma. Las
+        preferencias (config.json, caché, imágenes) permanecen en la carpeta
+        de datos de la app y no se tocan.</div>
+
+      <!-- ═══════════════ DESINSTALACIÓN ═══════════════ -->
+
+      <h2 id="uninstall">Desinstalación</h2>
+      <p>Al ser portátil, desinstalar consiste en eliminar los archivos del
+      programa y, si lo deseas, la carpeta de datos de usuario.</p>
+
+      <h3>Windows</h3>
+      <ol>
+        <li>Elimina <code>NoesisPDFReaderLite-windows-x64.exe</code>.</li>
+        <li>Para eliminar también los datos de usuario, borra la carpeta
+          <code>%APPDATA%\noesis-pdf-cloner\</code> (config, caché de
+          traducción, imágenes).</li>
+      </ol>
+
+      <h3>macOS</h3>
+      <ol>
+        <li>Arrastra la app de la carpeta <strong>Aplicaciones</strong> a la
+          Papelera.</li>
+        <li>Para eliminar también los datos de usuario, borra la carpeta
+          <code>~/Library/Application Support/noesis-pdf-cloner/</code>.</li>
+      </ol>
+
+      <h3>Linux</h3>
+      <ol>
+        <li>Elimina el archivo
+          <code>NoesisPDFReaderLite-x86_64.AppImage</code>.</li>
+        <li>Para eliminar también los datos de usuario, borra la carpeta
+          <code>~/.local/share/noesis-pdf-cloner/</code>.</li>
+      </ol>
+
+      <div class="warning"><strong>Atención</strong> La carpeta de datos
+        contiene tus preferencias e imágenes extraídas: borrarla es
+        irreversible. Si piensas reinstalar, puedes conservarla.</div>
+
+      <!-- ═══════════════ AVISO DE USO LÍCITO ═══════════════ -->
+
+      <h2 id="legal">Aviso de uso lícito</h2>
+      <div class="legal">
+        <strong>Responsabilidad del usuario</strong>
+        <p>Noesis PDF Cloner es una herramienta de lectura que extrae
+        texto e imágenes de documentos PDF. El usuario es el único responsable
+        del uso que haga del programa y de los documentos que procese.</p>
+        <p>Antes de extraer, copiar, traducir o redistribuir contenido,
+        verifica que tienes derecho a hacerlo:</p>
+        <ul>
+          <li>utiliza el programa solo con documentos de los que poseas los
+            derechos o para los que hayas obtenido autorización;</li>
+          <li>respeta los derechos de autor y las condiciones de licencia de
+            los materiales (libros, artículos, publicaciones científicas,
+            manuales);</li>
+          <li>no utilices el programa para eludir protecciones, violar
+            condiciones de servicio o facilitar la piratería;</li>
+          <li>no redistribuyas contenido extraído o traducido sin
+            autorización;</li>
+          <li>respeta las leyes de tu país sobre propiedad intelectual y
+            privacidad.</li>
+        </ul>
+        <p>La traducción envía el texto a un servicio externo: no traduzcas
+        documentos confidenciales o protegidos sin tener derecho a hacerlo.</p>
+        <p>Este texto es una invitación a la prudencia y <strong>no
+        constituye asesoramiento legal</strong>. Para casos concretos,
+        consulta a un profesional habilitado o las leyes vigentes en tu
+        país.</p>
+        <p>El programa se proporciona «tal cual», sin garantías de ningún
+        tipo, expresas o implícitas.</p>
+      </div>
+
+      <!-- ═══════════════ ATAJOS & PREGUNTAS FRECUENTES ═══════════════ -->
+
+      <h2 id="shortcuts">Atajos de teclado</h2>
+      <table>
+        <tr><th>Atajo</th><th>Acción</th></tr>
+        <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Página siguiente / anterior</td></tr>
+        <tr><td><kbd>AvPág</kbd> / <kbd>RePág</kbd></td><td>Página siguiente / anterior</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd></td><td>Acercar / alejar</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Restablecer zoom</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Activar/desactivar Markdown</td></tr>
+      </table>
+
+      <h3>Preguntas frecuentes</h3>
+      <h4>¿Por qué el texto extraído contiene palabras que no veo en la página?</h4>
+      <p>Probablemente son textos dentro de imágenes (figuras, diagramas) que
+      pasan por el OCR. Usa una <a href="#zones-exclude">zona de
+      exclusión</a> sobre el recuadro de la imagen para eliminarlos.</p>
+
+      <h4>El orden de lectura no es correcto en una página compleja.</h4>
+      <p>Usa las <a href="#zones-include">zonas de inclusión</a> verdes para
+      definir manualmente el orden de las columnas.</p>
+
+      <h4>Mis zonas desaparecen al cerrar la app.</h4>
+      <p>Sí: las zonas (rojas y verdes) viven en memoria y son por página. Las
+      preferencias, en cambio, se guardan en el config.</p>
+
+      <h4>¿Cómo cambio el idioma de la interfaz?</h4>
+      <p>⚙️ Configuración → Idioma → Idioma de la interfaz.</p>
+
+      <h4>La traducción no arranca.</h4>
+      <p>Comprueba la conexión a Internet y que la pestaña del idioma de
+      destino esté activa. La traducción se difiere mientras dibujas
+      zonas.</p>
+
+      <h4>¿Hay una versión nueva disponible?</h4>
+      <p>Las versiones se publican en la página de GitHub del proyecto:
+      descarga el paquete de tu plataforma y ejecútalo. Las preferencias se
+      mantienen intactas.</p>
+    </main>
+  </div>
+
+  <footer>
+    Noesis PDF Cloner — Ayuda · Documentación del proyecto ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner">Repositorio de GitHub</a>
+  </footer>
+
+  <script src="../js/help.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+.venv/
+.venv2/
+__pycache__/
+*.pyc
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# engine / translation caches
+cache/
+engine_events.jsonl

@@ -1,0 +1,198 @@
+name: build-releases
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-15-intel
+            name: macos-x64
+          - os: macos-15
+            name: macos-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Windows) SEP=';' ;;
+            *)       SEP=':' ;;
+          esac
+          ICON=""
+          case "$RUNNER_OS" in
+            Windows) ICON="--icon assets/noesispdf.ico" ;;
+            macOS)   ICON="--icon assets/noesispdf.icns" ;;
+          esac
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --clean \
+            --noconfirm \
+            --name NoesisPDFCloner \
+            $ICON \
+            --collect-data pymupdf \
+            --add-data "gtranslate_cli.py${SEP}." \
+            main.py
+
+      - name: Build NSIS installer (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install nsis -y --no-progress
+          V="${GITHUB_REF#refs/tags/v}"
+          [[ "$V" == "$GITHUB_REF" ]] && V="0.0.0-dev"
+          echo "NSIS VERSION=$V"
+          export PATH="/c/Program Files (x86)/NSIS:$PATH"
+          MSYS_NO_PATHCONV=1 makensis "/DVERSION=$V" installer.nsi
+          ls -la NoesisPDFCloner-*-setup.exe
+
+      - name: Package artifact
+        shell: bash
+        env:
+          BASE: NoesisPDFCloner-${{ matrix.name }}
+        run: |
+          case "$RUNNER_OS" in
+            Windows)
+              mv "dist/NoesisPDFCloner.exe" "$BASE.exe"
+              SETUP=$(echo NoesisPDFCloner-*-setup.exe)
+              if [ -f "$SETUP" ]; then
+                mv "$SETUP" "$BASE-setup.exe"
+              fi
+              ;;
+            macOS)
+              hdiutil create -volname "NoesisPDFCloner" \
+                -srcfolder "dist/NoesisPDFCloner.app" \
+                -ov -format UDZO "$BASE.dmg"
+              ;;
+          esac
+          ls -la
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoesisPDFCloner-${{ matrix.name }}
+          path: NoesisPDFCloner-${{ matrix.name }}*
+          if-no-files-found: error
+
+  linux-appimage:
+    name: linux-x86_64-appimage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --clean \
+            --noconfirm \
+            --name NoesisPDFCloner \
+            --collect-data pymupdf \
+            --add-data "gtranslate_cli.py:." \
+            main.py
+
+      - name: Package AppImage
+        shell: bash
+        run: |
+          set -e
+          APPDIR=AppDir
+          mkdir -p "$APPDIR/usr/bin"
+
+          cp "dist/NoesisPDFCloner" "$APPDIR/usr/bin/NoesisPDFCloner"
+          chmod +x "$APPDIR/usr/bin/NoesisPDFCloner"
+
+          cp assets/noesispdf-256.png "$APPDIR/NoesisPDFCloner.png"
+
+          cat > "$APPDIR/NoesisPDFCloner.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Noesis PDF Cloner
+          Exec=NoesisPDFCloner
+          Icon=NoesisPDFCloner
+          Categories=Office;Viewer;
+          Comment=Split-screen PDF viewer with layout-preserving translated clone
+          Terminal=false
+          EOF
+
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/NoesisPDFCloner" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool.AppImage
+          chmod +x appimagetool.AppImage
+          ./appimagetool.AppImage --appimage-extract-and-run \
+            "$APPDIR" "NoesisPDFCloner-x86_64.AppImage"
+          ls -la
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoesisPDFCloner-linux-x86_64-appimage
+          path: NoesisPDFCloner-x86_64.AppImage
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, linux-appimage]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*
+            setup_engine.sh
+            setup_engine.ps1
+          generate_release_notes: true
