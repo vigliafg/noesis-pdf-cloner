@@ -130,6 +130,144 @@ class CachePathTests(unittest.TestCase):
         self.assertIsNone(self.engine._src_pdf)
 
 
+class CacheQueryTests(unittest.TestCase):
+    """cached_pages scans the on-disk cache (cross-session) without side effects."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self._tmp.name) / "cache"
+        self.engine = clone_engine.CloneEngine(self.cache)
+        self.src = Path(self._tmp.name) / "book.pdf"
+        self.src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(self.src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _touch(self, page: int, engine: str = "google") -> Path:
+        p = self.engine.translated_path(page, engine)
+        p.write_bytes(b"%PDF-1.4 fake")
+        return p
+
+    def test_translated_path_for_does_not_create_dirs(self):
+        p = self.engine.translated_path_for(7, "google")
+        self.assertFalse(p.parent.exists())
+        self.assertEqual(p.name, "page_000007.pdf")
+
+    def test_cached_pages_returns_present_sorted(self):
+        self._touch(2)
+        self._touch(0)
+        self._touch(5)
+        self.assertEqual(self.engine.cached_pages(0, 5, "google"), [0, 2, 5])
+
+    def test_cached_pages_handles_reversed_range(self):
+        self._touch(3)
+        self.assertEqual(self.engine.cached_pages(4, 1, "google"), [3])
+
+    def test_cached_pages_is_per_engine_and_language(self):
+        self._touch(1, engine="bing")
+        self.assertEqual(self.engine.cached_pages(0, 3, "google"), [])
+        self.assertEqual(self.engine.cached_pages(0, 3, "bing"), [1])
+        self.engine.lang_out = "fr"
+        self.assertEqual(self.engine.cached_pages(0, 3, "bing"), [])
+
+    def test_cached_pages_survives_new_instance(self):
+        self._touch(4)
+        other = clone_engine.CloneEngine(self.cache)
+        other.set_document(self.src)
+        other.lang_in, other.lang_out = "en", "it"
+        self.assertEqual(other.cached_pages(0, 9, "google"), [4])
+
+    def test_explicit_languages_override_current(self):
+        self._touch(1)  # en-it
+        self.assertEqual(
+            self.engine.cached_pages(0, 3, "google", "en", "it"), [1]
+        )
+        self.assertEqual(
+            self.engine.cached_pages(0, 3, "google", "en", "fr"), []
+        )
+        self.assertNotEqual(
+            self.engine.translated_path_for(1, "google", "en", "it"),
+            self.engine.translated_path_for(1, "google", "en", "fr"),
+        )
+        self.assertTrue(self.engine.is_cached(1, "google", "en", "it"))
+        self.assertFalse(self.engine.is_cached(1, "google", "en", "fr"))
+
+
+class ExportPdfTests(unittest.TestCase):
+    """export_pdf merges the cached single-page clones into one PDF."""
+
+    def setUp(self):
+        try:
+            import pymupdf  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.engine = clone_engine.CloneEngine(Path(self._tmp.name) / "cache")
+        self.src = Path(self._tmp.name) / "book.pdf"
+        self.src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(self.src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+        self.dest = Path(self._tmp.name) / "out.pdf"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _page_pdf(self, page: int, text: str) -> Path:
+        import pymupdf
+        out = self.engine.translated_path(page, "google")
+        doc = pymupdf.open()
+        pg = doc.new_page()
+        pg.insert_text((72, 72), text, fontsize=20)
+        doc.save(str(out))
+        doc.close()
+        return out
+
+    def test_merges_in_the_given_order(self):
+        import pymupdf
+        self._page_pdf(3, "THREE")
+        self._page_pdf(0, "ZERO")
+        count = self.engine.export_pdf([0, 3], "google", self.dest)
+        self.assertEqual(count, 2)
+        with pymupdf.open(str(self.dest)) as doc:
+            self.assertEqual(len(doc), 2)
+            self.assertIn("ZERO", doc[0].get_text())
+            self.assertIn("THREE", doc[1].get_text())
+
+    def test_skips_pages_not_in_cache(self):
+        import pymupdf
+        self._page_pdf(1, "ONE")
+        count = self.engine.export_pdf([0, 1, 2], "google", self.dest)
+        self.assertEqual(count, 1)
+        with pymupdf.open(str(self.dest)) as doc:
+            self.assertEqual(len(doc), 1)
+
+    def test_raises_when_nothing_is_available(self):
+        with self.assertRaises(ValueError):
+            self.engine.export_pdf([0, 1], "google", self.dest)
+        self.assertFalse(self.dest.exists())
+
+    def test_export_pdf_with_explicit_languages(self):
+        import pymupdf
+        # Clone under a different target language than the engine's current.
+        out = self.engine.translated_path(2, "google", "en", "fr")
+        doc = pymupdf.open()
+        doc.new_page().insert_text((72, 72), "FRENCH", fontsize=20)
+        doc.save(str(out))
+        doc.close()
+        # Current language (en-it) does not see it…
+        with self.assertRaises(ValueError):
+            self.engine.export_pdf([2], "google", self.dest)
+        # …but the explicit pair does.
+        count = self.engine.export_pdf(
+            [2], "google", self.dest, "en", "fr"
+        )
+        self.assertEqual(count, 1)
+        with pymupdf.open(str(self.dest)) as merged:
+            self.assertIn("FRENCH", merged[0].get_text())
+
+
 class SplitIndexTests(unittest.TestCase):
     """ensure_split must use the same 0-based index as the rest of the app."""
 

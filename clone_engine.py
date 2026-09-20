@@ -203,18 +203,105 @@ class CloneEngine:
     def split_path(self, page: int) -> Path:
         return self.split_root / self._doc_key / f"page_{page:06d}.pdf"
 
-    def translated_path(self, page: int, engine: str) -> Path:
-        d = (
+    def translated_path_for(
+        self,
+        page: int,
+        engine: str,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+    ) -> Path:
+        """Percorso del clone tradotto **senza** creare la cartella.
+
+        Getter puro, usato dagli scan di cache/export: non ha effetti
+        collaterali sul filesystem. ``lang_in``/``lang_out`` permettono di
+        interrogare una coppia linguistica diversa da quella corrente
+        (es. anteprima export) senza mutare l'engine.
+        """
+        li = self.lang_in if lang_in is None else lang_in
+        lo = self.lang_out if lang_out is None else lang_out
+        return (
             self.translated_root
             / self._doc_key
             / engine
-            / self._lang_key()
+            / f"{li}-{lo}"
+            / f"page_{page:06d}.pdf"
         )
-        d.mkdir(parents=True, exist_ok=True)
-        return d / f"page_{page:06d}.pdf"
 
-    def is_cached(self, page: int, engine: str) -> bool:
-        return self.translated_path(page, engine).is_file()
+    def translated_path(
+        self,
+        page: int,
+        engine: str,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+    ) -> Path:
+        out = self.translated_path_for(page, engine, lang_in, lang_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        return out
+
+    def is_cached(
+        self,
+        page: int,
+        engine: str,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+    ) -> bool:
+        return self.translated_path_for(page, engine, lang_in, lang_out).is_file()
+
+    def cached_pages(
+        self,
+        page_from: int,
+        page_to: int,
+        engine: str,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+    ) -> list[int]:
+        """Indici **0-based** in ``[page_from, page_to]`` già in cache.
+
+        Legge solo il filesystem: la cache sopravvive alle sessioni, quindi il
+        risultato comprende i cloni prodotti in esecuzioni precedenti. Gli
+        estremi sono accettati in qualunque ordine.
+        """
+        if page_from > page_to:
+            page_from, page_to = page_to, page_from
+        return [
+            p
+            for p in range(page_from, page_to + 1)
+            if self.translated_path_for(
+                p, engine, lang_in, lang_out
+            ).is_file()
+        ]
+
+    def export_pdf(
+        self,
+        pages,
+        engine: str,
+        dest: str | Path,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+    ) -> int:
+        """Unisce i mono-PDF tradotti delle ``pages`` (0-based) in ``dest``.
+
+        Le pagine non in cache sono saltate; l'ordine è quello di ``pages``.
+        Ritorna il numero di pagine scritte. Solleva ``ValueError`` se nessuna
+        delle pagine richieste è disponibile.
+        """
+        import pymupdf  # import locale, come ensure_split
+
+        dest = Path(dest)
+        merged = 0
+        with pymupdf.open() as out:
+            for page in pages:
+                src = self.translated_path_for(page, engine, lang_in, lang_out)
+                if not src.is_file():
+                    continue
+                with pymupdf.open(str(src)) as doc:
+                    out.insert_pdf(doc)
+                    merged += 1
+            if merged == 0:
+                raise ValueError("nessuna pagina tradotta da esportare")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            out.save(str(dest), garbage=4, deflate=True)
+        return merged
 
     # ── stato ─────────────────────────────────────────────────────────
 

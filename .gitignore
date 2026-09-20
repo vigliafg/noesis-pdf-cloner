@@ -14,3 +14,6 @@ engine_events.jsonl
 
 # test PDF (copyright: non committare)
 ha22.pdf
+
+# exported translated ranges (artefatti di test/ispezione)
+ha22_pag*.pdf

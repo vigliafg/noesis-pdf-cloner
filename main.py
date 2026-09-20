@@ -65,7 +65,7 @@ except ImportError:
 
 from PyQt6.QtCore import (
     Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
-    QLocale,
+    QLocale, QEventLoop,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
@@ -92,6 +92,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QCheckBox,
     QDialog,
+    QProgressBar,
+    QPlainTextEdit,
     QMessageBox,
     QStatusBar,
     QWidget,
@@ -2355,6 +2357,74 @@ class CloneTranslateThread(QThread):
         )
 
 
+class CloneExportThread(QThread):
+    """Background thread: pre-translate the missing pages of an export range.
+
+    Iterates ``pages`` (0-based) **sequentially** through
+    ``CloneEngine.translate_page`` (cache-aware, per-page serialised) and emits
+    progress after each page. ``cancel`` stops after the page in flight: the
+    running ``pdf2zh_next`` subprocess cannot be interrupted (see HANDOFF §7).
+    """
+
+    progress = pyqtSignal(int, int, int)        # done, total, page
+    page_error = pyqtSignal(int, str)           # page, message
+    batch_finished = pyqtSignal(int, int, int)  # done, failed, total
+
+    def __init__(
+        self,
+        engine: clone_engine.CloneEngine,
+        pages: list[int],
+        engine_name: str,
+    ):
+        super().__init__()
+        self._engine = engine
+        self._pages = list(pages)
+        self._engine_name = engine_name
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def is_cancelled(self) -> bool:
+        return self._cancelled
+
+    def _translate_one(self, page: int) -> tuple[Path | None, str]:
+        """Traduce una pagina, attendendo un eventuale worker concorrente.
+
+        Se un altro thread sta già traducendo la stessa pagina (es. la
+        traduzione della pagina corrente ancora in corso) ``translate_page``
+        ritorna ``None`` con stato ``running``: si attende che la cache
+        compaia invece di segnarla come errore.
+        """
+        for _ in range(600):  # ~5 minuti al massimo
+            path = self._engine.translate_page(page, self._engine_name)
+            if path is not None or self._cancelled:
+                return path, ""
+            status = self._engine.status(page, self._engine_name)
+            if status == "running":
+                time.sleep(0.5)
+                continue
+            if status.startswith("error:"):
+                return None, status.split("error:", 1)[-1]
+            return None, status
+        return None, "timeout"
+
+    def run(self):
+        done = failed = 0
+        total = len(self._pages)
+        for index, page in enumerate(self._pages, start=1):
+            if self._cancelled:
+                break
+            path, message = self._translate_one(page)
+            if path is not None:
+                done += 1
+            elif not self._cancelled:
+                failed += 1
+                self.page_error.emit(page, message)
+            self.progress.emit(index, total, page)
+        self.batch_finished.emit(done, failed, total)
+
+
 class TranslatablePanel(QWidget):
     """Wraps TextPanel with tabs: original, Italian translation, and images."""
 
@@ -3346,6 +3416,7 @@ class TranslatedPagePanel(QWidget):
     """
 
     engine_changed = pyqtSignal(str)
+    export_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3406,6 +3477,19 @@ class TranslatedPagePanel(QWidget):
         self._lbl_status = QLabel("")
         self._lbl_status.setStyleSheet("color: #aaa; font-size: 12px;")
         bar.addWidget(self._lbl_status)
+
+        # Esporta la pagina tradotta: piccolo pulsante nella barra motori.
+        self.btn_export = QPushButton("💾")
+        self.btn_export.setToolTip(T("clone.export.tip"))
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export.setFlat(True)
+        self.btn_export.setStyleSheet(
+            "QPushButton { background: transparent; color: #ddd; border: none;"
+            " font-size: 14px; padding: 0 4px; }"
+            "QPushButton:hover { color: #fff; }"
+        )
+        self.btn_export.clicked.connect(self.export_requested.emit)
+        bar.addWidget(self.btn_export)
 
         # ── Page view (read-only) wrapped in a scroll area ────────────
         self.view = PdfPageView()
@@ -3550,6 +3634,7 @@ class TranslatedPagePanel(QWidget):
         self._collapse_btn.setToolTip(
             T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
         )
+        self.btn_export.setToolTip(T("clone.export.tip"))
         self.view.retranslate()
 
 
@@ -3661,6 +3746,14 @@ QComboBox, QSpinBox, QDoubleSpinBox {
 QComboBox QAbstractItemView { background: #444; color: #eee;
     selection-background-color: #3a6bc5; selection-color: #fff; }
 QCheckBox { color: #ddd; font-size: 13px; spacing: 8px; }
+QRadioButton { color: #ddd; font-size: 13px; spacing: 8px; }
+QRadioButton::indicator {
+    width: 13px; height: 13px; border: 1px solid #888;
+    border-radius: 7px; background: #444;
+}
+QRadioButton::indicator:checked {
+    background: #3a6bc5; border-color: #3a6bc5;
+}
 QPushButton {
     background: #444; color: #eee; border: 1px solid #555;
     border-radius: 4px; padding: 6px 18px; font-size: 13px;
@@ -3911,6 +4004,502 @@ class SettingsDialog(QDialog):
         }
 
 
+class ExportDialog(QDialog):
+    """Choose what to export: the current page or a page range.
+
+    The dialog also lets the user pick the **engine** and the **output
+    language** for this export only (one-off, independent of the right
+    panel's current settings). In range mode it can optionally queue the
+    translation of pages that are not in cache yet ("translate missing pages
+    first"); ``cached_pages`` is queried with the selected engine/languages so
+    the "ready on disk" count is accurate. The dialog only collects the
+    choice; MainWindow owns the wait/translation/export.
+    """
+
+    def __init__(
+        self,
+        engine: clone_engine.CloneEngine,
+        engine_name: str,
+        target_lang: str,
+        source_lang: str,
+        current_page: int,
+        page_count: int,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._engine = engine
+        self._engine_name = engine_name
+        self._target_lang = target_lang
+        self._source_lang = source_lang
+        self._page_count = max(int(page_count), 1)
+        self._current_page = min(max(int(current_page), 0), self._page_count - 1)
+
+        self.setWindowTitle(T("export.title"))
+        self.setMinimumWidth(460)
+        self.setStyleSheet(_SETTINGS_QSS)
+
+        root = QVBoxLayout(self)
+        root.setSpacing(10)
+
+        self._mode_box = QGroupBox(T("export.title"))
+        mode_lay = QVBoxLayout(self._mode_box)
+
+        self._rad_current = QRadioButton(T("export.mode.current"))
+        self._rad_range = QRadioButton(T("export.mode.range"))
+        self._rad_current.setChecked(True)
+        self._rad_current.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._rad_range.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.addButton(self._rad_current)
+        self._mode_group.addButton(self._rad_range)
+        mode_lay.addWidget(self._rad_current)
+        mode_lay.addWidget(self._rad_range)
+
+        # Range inputs (visible only in range mode).
+        self._range_widget = QWidget()
+        range_form = QFormLayout(self._range_widget)
+        range_form.setContentsMargins(20, 0, 0, 0)
+        self._lbl_from = QLabel(T("export.range.from"))
+        self._lbl_to = QLabel(T("export.range.to"))
+        self._from_spin = QSpinBox()
+        self._to_spin = QSpinBox()
+        for sp in (self._from_spin, self._to_spin):
+            sp.setRange(1, self._page_count)
+            sp.setValue(self._current_page + 1)
+        range_form.addRow(self._lbl_from, self._from_spin)
+        range_form.addRow(self._lbl_to, self._to_spin)
+        mode_lay.addWidget(self._range_widget)
+
+        self._ready_lbl = QLabel("")
+        self._ready_lbl.setStyleSheet("color: #999; font-size: 12px;")
+        self._ready_lbl.setContentsMargins(20, 0, 0, 0)
+        mode_lay.addWidget(self._ready_lbl)
+
+        self._chk_translate = QCheckBox(T("export.translate_missing"))
+        self._chk_translate.setChecked(False)
+        self._chk_translate.setContentsMargins(20, 0, 0, 0)
+        # Finché l'utente non tocca la casella, viene attivata da sola quando
+        # l'intervallo scelto contiene pagine non ancora tradotte (altrimenti
+        # con range non in cache non partirebbe né salvataggio né traduzione).
+        self._translate_touched = False
+        self._chk_translate.toggled.connect(self._on_translate_toggled)
+        mode_lay.addWidget(self._chk_translate)
+
+        root.addWidget(self._mode_box)
+
+        # ── Traduzione: motore + lingua di uscita (solo per questo export) ──
+        self._trans_box = QGroupBox(T("export.group.translation"))
+        trans_form = QFormLayout(self._trans_box)
+        self._lbl_engine = QLabel(T("settings.translation.engine"))
+        self._engine_combo = QComboBox()
+        for code in CLONE_ENGINES:
+            self._engine_combo.addItem(T(f"engine.option.{code}"), code)
+        eidx = self._engine_combo.findData(engine_name)
+        self._engine_combo.setCurrentIndex(max(0, eidx))
+        trans_form.addRow(self._lbl_engine, self._engine_combo)
+
+        self._lbl_dst = QLabel(T("settings.lang.target"))
+        self._dst_combo = QComboBox()
+        for code, (flag, name) in TRANSLATION_LANGUAGES.items():
+            if code == "auto":
+                continue
+            self._dst_combo.addItem(f"{flag} {name}", code)
+        didx = self._dst_combo.findData(target_lang)
+        self._dst_combo.setCurrentIndex(max(0, didx))
+        trans_form.addRow(self._lbl_dst, self._dst_combo)
+        root.addWidget(self._trans_box)
+
+        btns = QHBoxLayout()
+        btns.addStretch(1)
+        self._btn_ok = QPushButton(T("settings.ok"))
+        self._btn_ok.clicked.connect(self.accept)
+        self._btn_cancel = QPushButton(T("settings.cancel"))
+        self._btn_cancel.clicked.connect(self.reject)
+        for b in (self._btn_ok, self._btn_cancel):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            btns.addWidget(b)
+        root.addLayout(btns)
+
+        self._rad_range.toggled.connect(self._update_mode)
+        self._from_spin.valueChanged.connect(self._on_spin_changed)
+        self._to_spin.valueChanged.connect(self._on_spin_changed)
+        self._engine_combo.currentIndexChanged.connect(self._update_ready)
+        self._dst_combo.currentIndexChanged.connect(self._update_ready)
+        self._update_mode()
+
+    # ── stato del dialogo ─────────────────────────────────────────────
+
+    def _update_mode(self):
+        range_on = self._rad_range.isChecked()
+        self._range_widget.setVisible(range_on)
+        self._ready_lbl.setVisible(range_on)
+        self._chk_translate.setVisible(range_on)
+        self._update_ready()
+
+    def _on_spin_changed(self):
+        # I due campi sono indipendenti: NON si forza l'altro campo. Se
+        # l'utente inserisce "da" > "a" l'intervallo viene normalizzato in
+        # ``_range_pages`` (min/max) al momento dell'uso.
+        self._update_ready()
+
+    def _range_pages(self) -> tuple[int, int]:
+        a = self._from_spin.value() - 1
+        b = self._to_spin.value() - 1
+        return (min(a, b), max(a, b))
+
+    def _on_translate_toggled(self, _checked: bool):
+        self._translate_touched = True
+
+    def _update_ready(self):
+        if not self._rad_range.isChecked():
+            return
+        a, b = self._range_pages()
+        cached = self._engine.cached_pages(
+            a, b, self.chosen_engine(), self._source_lang, self.chosen_target()
+        )
+        total = b - a + 1
+        missing = total - len(cached)
+        self._ready_lbl.setText(
+            T(
+                "export.ready",
+                cached=len(cached),
+                total=total,
+                missing=missing,
+            )
+        )
+        # L'opzione ha senso solo se manca qualcosa.
+        self._chk_translate.setEnabled(missing > 0)
+        # Attiva da sola la traduzione quando ci sono pagine mancanti, finché
+        # l'utente non ha espresso una scelta esplicita.
+        if missing > 0 and not self._translate_touched:
+            self._chk_translate.blockSignals(True)
+            self._chk_translate.setChecked(True)
+            self._chk_translate.blockSignals(False)
+
+    # ── API per MainWindow ────────────────────────────────────────────
+
+    def is_current(self) -> bool:
+        return self._rad_current.isChecked()
+
+    def chosen_engine(self) -> str:
+        return self._engine_combo.currentData() or "google"
+
+    def chosen_target(self) -> str:
+        return self._dst_combo.currentData() or self._target_lang
+
+    def chosen_source(self) -> str:
+        return self._source_lang
+
+    def chosen_pages(self) -> list[int]:
+        if self.is_current():
+            return [self._current_page]
+        a, b = self._range_pages()
+        return list(range(a, b + 1))
+
+    def translate_missing(self) -> bool:
+        return self._rad_range.isChecked() and self._chk_translate.isChecked()
+
+    def range_label(self) -> str:
+        """Suffisso per il nome file: "156" oppure "156-159"."""
+        if self.is_current():
+            return str(self._current_page + 1)
+        a, b = self._range_pages()
+        return f"{a + 1}-{b + 1}"
+
+
+def _fmt_duration(seconds: float) -> str:
+    """Formatta secondi come MM:SS (o H:MM:SS se serve)."""
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+class ExportProgressDialog(QDialog):
+    """Modal wait shown while the missing range pages are translated and the
+    PDF is written.
+
+    It keeps the user informed with live feedback (engine/language, range,
+    a working/done activity line, page i/N, a busy-then-determinate progress
+    bar, running counts, elapsed + estimated remaining time and a per-page
+    log) and holds the application modal so navigation/settings cannot change
+    mid-queue. When the job finishes it stays open in a "completed" state
+    showing the saved file path, so the export never closes abruptly. Cancel
+    is cooperative: the in-flight pdf2zh_next subprocess cannot be
+    interrupted, so the queue stops after the current page.
+    """
+
+    cancelled = pyqtSignal()
+
+    def __init__(
+        self,
+        engine_label: str,
+        lang_label: str,
+        page_from: int,
+        page_to: int,
+        missing: int,
+        cached: int,
+        total: int,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle(T("export.progress.title"))
+        self.setMinimumWidth(560)
+        self.setStyleSheet(_SETTINGS_QSS)
+        self._total = max(int(total), 1)
+        self._start: float | None = None
+        self._done = 0
+        self._failed = 0
+        self._phase = "idle"
+        self._finished = False
+        self._current_page: int | None = None
+        self._dots = 0
+        self._dest: Path | None = None
+
+        root = QVBoxLayout(self)
+        root.setSpacing(8)
+
+        self._ctx_lbl = QLabel(
+            T("export.progress.engine_lang", engine=engine_label, lang=lang_label)
+        )
+        root.addWidget(self._ctx_lbl)
+
+        self._range_lbl = QLabel(
+            T(
+                "export.progress.range",
+                **{
+                    "from": page_from,
+                    "to": page_to,
+                    "missing": missing,
+                    "cached": cached,
+                },
+            )
+        )
+        self._range_lbl.setStyleSheet("color: #aaa; font-size: 12px;")
+        root.addWidget(self._range_lbl)
+
+        # Riga di attività: sempre valorizzata, così la finestra non appare
+        # mai "vuota" durante l'attesa.
+        self._activity_lbl = QLabel("")
+        self._activity_lbl.setStyleSheet(
+            "color: #fff; font-size: 14px; font-weight: bold;"
+        )
+        root.addWidget(self._activity_lbl)
+
+        self._page_lbl = QLabel("")
+        self._page_lbl.setStyleSheet("color: #ddd;")
+        root.addWidget(self._page_lbl)
+
+        self._bar = QProgressBar()
+        self._bar.setRange(0, self._total)
+        self._bar.setValue(0)
+        root.addWidget(self._bar)
+
+        self._stats_lbl = QLabel("")
+        self._stats_lbl.setStyleSheet("color: #999; font-size: 12px;")
+        root.addWidget(self._stats_lbl)
+
+        self._eta_lbl = QLabel("")
+        self._eta_lbl.setStyleSheet("color: #999; font-size: 12px;")
+        root.addWidget(self._eta_lbl)
+
+        self._path_lbl = QLabel("")
+        self._path_lbl.setStyleSheet("color: #7fd67f; font-size: 12px;")
+        self._path_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._path_lbl.setWordWrap(True)
+        self._path_lbl.setVisible(False)
+        root.addWidget(self._path_lbl)
+
+        self._log = QPlainTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setMaximumHeight(110)
+        self._log.setStyleSheet("font-family: monospace; font-size: 12px;")
+        root.addWidget(self._log)
+
+        btns = QHBoxLayout()
+        btns.addStretch(1)
+        self._btn_open = QPushButton(T("export.progress.open_folder"))
+        self._btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_open.clicked.connect(self._open_folder)
+        self._btn_open.setVisible(False)
+        btns.addWidget(self._btn_open)
+        self._btn_cancel = QPushButton(T("settings.cancel"))
+        self._btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cancel.clicked.connect(self._on_cancel)
+        btns.addWidget(self._btn_cancel)
+        self._btn_close = QPushButton(T("export.progress.close"))
+        self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_close.clicked.connect(self.accept)
+        self._btn_close.setVisible(False)
+        btns.addWidget(self._btn_close)
+        root.addLayout(btns)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(500)
+        self._timer.timeout.connect(self._tick)
+
+    # ── ciclo di vita del job ─────────────────────────────────────────
+
+    def begin(self, page_1based: int):
+        """Avvia la fase di traduzione mostrando subito l'attività."""
+        self._start = time.perf_counter()
+        self._current_page = page_1based
+        self._phase = "translating"
+        self._log.appendPlainText(
+            T("export.progress.activity_page", page=page_1based)
+        )
+        self.set_translating(page_1based)
+        self._timer.start()
+
+    def set_translating(self, page_1based: int):
+        self._current_page = page_1based
+        self._phase = "translating"
+        self._bar.setRange(0, 0)  # busy/indeterminata
+        self._page_lbl.setText(
+            T(
+                "export.progress.label",
+                page=page_1based,
+                done=self._done,
+                total=self._total,
+            )
+        )
+        self._activity_lbl.setText(
+            T("export.progress.activity_page", page=page_1based)
+            + "." * self._dots
+        )
+        self._update_stats()
+
+    def log_ok(self, page: int):
+        self._log.appendPlainText(T("export.progress.page_ok", page=page + 1))
+        self._activity_lbl.setText(
+            T("export.progress.activity_done_page", page=page + 1)
+        )
+
+    def log_fail(self, page: int, reason: str):
+        self._log.appendPlainText(
+            T("export.progress.page_fail", page=page + 1, reason=reason)
+        )
+        self._activity_lbl.setText(
+            T("export.progress.activity_done_page", page=page + 1)
+        )
+
+    def set_stats(self, done: int, failed: int, total: int):
+        self._done = int(done)
+        self._failed = int(failed)
+        self._total = max(int(total), 1)
+        self._bar.setRange(0, self._total)
+        self._bar.setValue(self._done)
+        self._update_stats()
+
+    def set_phase_exporting(self):
+        if self._start is None:
+            self._start = time.perf_counter()
+            self._timer.start()
+        self._phase = "exporting"
+        self._current_page = None
+        self._bar.setRange(0, 0)  # busy mentre si scrive il PDF
+        self._page_lbl.setText("")
+        self._activity_lbl.setText(T("export.progress.activity_exporting"))
+        self._update_stats()
+
+    def set_completed(self, dest: str, count: int, failed: int):
+        self._finished = True
+        self._timer.stop()
+        self._phase = "done"
+        self._bar.setRange(0, self._total)
+        self._bar.setValue(self._total)
+        self._activity_lbl.setText(T("export.progress.completed_title"))
+        self._page_lbl.setText("")
+        self._stats_lbl.setText(
+            T(
+                "export.progress.completed_summary",
+                count=count,
+                failed=failed,
+                elapsed=_fmt_duration(self._elapsed()),
+            )
+        )
+        self._eta_lbl.setText("")
+        self._dest = Path(dest)
+        self._path_lbl.setText(
+            T("export.progress.saved_path", path=str(dest))
+        )
+        self._path_lbl.setVisible(True)
+        self._log.appendPlainText(T("export.progress.completed_title"))
+        self._btn_cancel.setVisible(False)
+        self._btn_open.setVisible(True)
+        self._btn_close.setVisible(True)
+        self._btn_close.setFocus()
+
+    def set_error(self, message: str):
+        """Termina in errore mantenendo la finestra aperta (feedback)."""
+        self._finished = True
+        self._timer.stop()
+        self._phase = "error"
+        self._bar.setRange(0, self._total)
+        self._activity_lbl.setText(message)
+        self._page_lbl.setText("")
+        self._eta_lbl.setText("")
+        self._btn_cancel.setVisible(False)
+        self._btn_close.setVisible(True)
+        self._btn_close.setFocus()
+
+    def set_cancelling(self):
+        self._btn_cancel.setEnabled(False)
+        self._activity_lbl.setText(T("export.progress.cancelling"))
+
+    def finish(self):
+        self._finished = True
+        self._timer.stop()
+
+    # ── interni ───────────────────────────────────────────────────────
+
+    def _elapsed(self) -> float:
+        return (time.perf_counter() - self._start) if self._start else 0.0
+
+    def _tick(self):
+        self._dots = (self._dots + 1) % 4
+        if self._phase == "translating" and self._current_page:
+            self._activity_lbl.setText(
+                T("export.progress.activity_page", page=self._current_page)
+                + "." * self._dots
+            )
+        self._update_stats()
+
+    def _update_stats(self):
+        if self._phase not in ("translating", "exporting"):
+            return
+        elapsed = self._elapsed()
+        self._stats_lbl.setText(
+            T(
+                "export.progress.stats",
+                done=self._done,
+                failed=self._failed,
+                elapsed=_fmt_duration(elapsed),
+            )
+        )
+        eta = None
+        if self._phase == "translating" and 0 < self._done < self._total:
+            eta = (elapsed / self._done) * (self._total - self._done)
+        self._eta_lbl.setText(
+            T("export.progress.eta", eta=_fmt_duration(eta))
+            if eta is not None
+            else ""
+        )
+
+    def _on_cancel(self):
+        if self._finished:
+            return
+        self.cancelled.emit()
+
+    def _open_folder(self):
+        if self._dest is not None:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._dest.parent)))
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  main window
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4029,6 +4618,7 @@ class MainWindow(QMainWindow):
         # Right — clone of the current page, translated (layout preserved)
         self.translated_panel = TranslatedPagePanel()
         self.translated_panel.engine_changed.connect(self._on_engine_selected)
+        self.translated_panel.export_requested.connect(self._on_export_translated)
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
         # Ripristina lo stato collassato/espanso della barra motori (persistito).
@@ -4066,6 +4656,11 @@ class MainWindow(QMainWindow):
         )
         QShortcut(
             QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_M), self, self._toggle_markdown
+        )
+        QShortcut(
+            QKeySequence(Qt.Modifier.CTRL | Qt.Key.Key_E),
+            self,
+            self._on_export_translated,
         )
 
         # Dark theme
@@ -4150,6 +4745,12 @@ class MainWindow(QMainWindow):
         self.btn_open = QPushButton(T("toolbar.open"))
         self.btn_open.clicked.connect(self._on_open)
         bar.addWidget(self.btn_open)
+
+        # Esporta la pagina tradotta in PDF (Ctrl+E)
+        self.btn_export = QPushButton(T("toolbar.export"))
+        self.btn_export.setToolTip(T("toolbar.export.tip"))
+        self.btn_export.clicked.connect(self._on_export_translated)
+        bar.addWidget(self.btn_export)
 
         # TOC toggle
         self.btn_toc = QPushButton(T("toolbar.toc"))
@@ -4857,6 +5458,8 @@ class MainWindow(QMainWindow):
         self.btn_help.setText(T("toolbar.help"))
         self.btn_help.setToolTip(T("toolbar.help.tip"))
         self.btn_open.setText(T("toolbar.open"))
+        self.btn_export.setText(T("toolbar.export"))
+        self.btn_export.setToolTip(T("toolbar.export.tip"))
         self.btn_toc.setText(T("toolbar.toc"))
         self.btn_toc.setToolTip(T("toolbar.toc.tip"))
         self.btn_prev.setText(T("toolbar.prev"))
@@ -5106,6 +5709,211 @@ class MainWindow(QMainWindow):
             self.translated_panel.show_message(T("clone.render_error"))
             return
         self.translated_panel.show_page(pix)
+
+    # ── export della pagina tradotta ──────────────────────────────────────
+
+    def _on_export_translated(self):
+        """Export current translated page, or a range, as a single PDF.
+
+        The export dialog also lets the user pick the engine and the output
+        language for this export only. In range mode the user may ask to
+        translate the missing pages first: the app holds the user with a
+        modal progress dialog until the queue finishes (or is cancelled),
+        then merges the cached pages and shows a completion state with the
+        saved file path.
+        """
+        if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
+            self.status_bar.showMessage(T("export.need_doc"), 4000)
+            return
+        self._configure_clone_engine()
+        source = get_source_lang()
+
+        dlg = ExportDialog(
+            self._clone_engine,
+            get_translation_engine(),
+            get_target_lang(),
+            source,
+            self._current_page,
+            self._page_count,
+            self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        engine = dlg.chosen_engine()
+        target = dlg.chosen_target()
+        pages = dlg.chosen_pages()
+        want_translate = dlg.translate_missing()
+        lo, hi = min(pages), max(pages)
+        cached = self._clone_engine.cached_pages(lo, hi, engine, source, target)
+        missing = [
+            p
+            for p in pages
+            if not self._clone_engine.is_cached(p, engine, source, target)
+        ]
+
+        if not cached and not want_translate:
+            self.status_bar.showMessage(
+                T("export.not_ready") if dlg.is_current() else T("export.none_ready"),
+                5000,
+            )
+            return
+        if want_translate and missing and not self._clone_engine.available():
+            self.status_bar.showMessage(T("clone.no_engine"), 6000)
+            return
+
+        # Destinazione scelta PRIMA della traduzione: l'attesa termina con il
+        # file già scritto, senza ulteriori interruzioni.
+        default = (
+            f"{self._pdf_path.stem}_pag{dlg.range_label()}_{engine}_{target}.pdf"
+        )
+        dest, _ = QFileDialog.getSaveFileName(
+            self, T("export.dialog"), default, T("export.filter")
+        )
+        if not dest:
+            return
+        if not dest.lower().endswith(".pdf"):
+            dest += ".pdf"
+
+        # Engine dedicato con motore/lingua scelti: non disturba l'engine
+        # condiviso col pannello destro (che può avere un thread in corso).
+        translate = bool(want_translate and missing)
+        export_engine = self._clone_engine
+        if translate:
+            export_engine = clone_engine.CloneEngine(
+                cache_root=self._clone_engine.cache_root,
+                pdf2zh_bin=get_setting("pdf2zh_bin", "") or None,
+            )
+            export_engine.set_document(self._pdf_path)
+            export_engine.lang_in = source
+            export_engine.lang_out = target
+
+        ok, count, failed = self._run_export_with_progress(
+            export_engine,
+            missing,
+            translate,
+            engine,
+            source,
+            target,
+            lo,
+            hi,
+            len(cached),
+            dest,
+        )
+        if not ok:
+            return
+        self.status_bar.showMessage(
+            T("export.done", count=count, failed=failed), 6000
+        )
+
+    def _run_export_with_progress(
+        self,
+        engine,
+        missing: list[int],
+        translate: bool,
+        engine_name: str,
+        source: str,
+        target: str,
+        page_from: int,
+        page_to: int,
+        cached_count: int,
+        dest: str,
+    ) -> tuple[bool, int, int]:
+        """Translate (optionally), merge and save, with a modal progress dialog.
+
+        The dialog is application-modal so the user cannot navigate away while
+        the job runs; its event loop keeps the UI painting (activity line,
+        busy/determinate bar, counts, elapsed/ETA, per-page log) without
+        blocking the GUI thread. On success it stays open in a "completed"
+        state showing the saved path until the user closes it. Cancel is
+        cooperative and stops after the page in flight.
+
+        Returns ``(ok, pages_written, pages_failed)``.
+        """
+        total = len(missing)
+        prog = ExportProgressDialog(
+            engine_label=T(f"engine.option.{engine_name}"),
+            lang_label=flag_endonym(target),
+            page_from=page_from + 1,
+            page_to=page_to + 1,
+            missing=total,
+            cached=cached_count,
+            total=max(total, 1),
+            parent=self,
+        )
+        prog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        prog.show()
+
+        state = {"cancelled": False, "failed": {}}
+        if translate and missing:
+            thread = CloneExportThread(engine, missing, engine_name)
+
+            def _on_page_error(page: int, reason: str):
+                state["failed"][page] = reason
+
+            def _on_progress(done: int, tot: int, page: int):
+                if page in state["failed"]:
+                    prog.log_fail(page, state["failed"][page])
+                else:
+                    prog.log_ok(page)
+                prog.set_stats(done, len(state["failed"]), tot)
+                next_page = missing[done] if done < tot else None
+                if next_page is not None:
+                    prog.set_translating(next_page + 1)
+                else:
+                    prog.set_phase_exporting()
+
+            def _on_cancel():
+                # Lo slot è invocato anche alla chiusura del dialogo: ignoralo
+                # se la coda è già terminata, altrimenti un export riuscito
+                # verrebbe marcato come annullato.
+                if not thread.isRunning():
+                    return
+                state["cancelled"] = True
+                thread.cancel()
+                prog.set_cancelling()
+
+            thread.page_error.connect(_on_page_error)
+            thread.progress.connect(_on_progress)
+            prog.cancelled.connect(_on_cancel)
+
+            prog.begin(missing[0] + 1)
+            loop = QEventLoop()
+            thread.batch_finished.connect(lambda *_: loop.quit())
+            thread.start()
+            loop.exec()
+            thread.wait(2000)
+
+            if state["cancelled"] or thread.is_cancelled():
+                prog.set_error(T("export.cancelled"))
+                prog.exec()
+                self.status_bar.showMessage(T("export.cancelled"), 5000)
+                return (False, 0, 0)
+        else:
+            prog.set_phase_exporting()
+
+        ready = engine.cached_pages(page_from, page_to, engine_name, source, target)
+        if not ready:
+            prog.set_error(T("export.none_ready"))
+            prog.exec()
+            self.status_bar.showMessage(T("export.none_ready"), 5000)
+            return (False, 0, 0)
+        try:
+            count = engine.export_pdf(ready, engine_name, dest, source, target)
+        except Exception:  # noqa: BLE001 — riportato nella finestra
+            log.exception("export PDF fallito: %s", dest)
+            prog.set_error(T("export.error"))
+            prog.exec()
+            self.status_bar.showMessage(T("export.error"), 5000)
+            return (False, 0, 0)
+        failed = sum(
+            1
+            for p in missing
+            if not engine.is_cached(p, engine_name, source, target)
+        )
+        prog.set_completed(str(dest), count, failed)
+        prog.exec()  # resta aperta finché l'utente non preme "Chiudi"
+        return (True, count, failed)
 
     def _wait_clone_threads(self):
         """Wait for in-flight clone translations before the app closes."""
