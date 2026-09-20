@@ -23,7 +23,9 @@ la pagina è istantanea.
   **pagina precedente / successiva** e scorciatoie da tastiera.
 - Zoom sincronizzato sui due pannelli (`🔍+` / `🔍−`, Ctrl+±, Ctrl+0).
 - Radio dei motori (Google / Bing / LLM) nel pannello destro, con spinner e
-  avviso dei fallback (Microsoft/LLM) della catena gratuita.
+  avviso dei fallback (Microsoft/LLM) della catena gratuita. La barra dei
+  motori è **collassabile** (chevron in alto a destra): al collasso lo spazio
+  torna al viewport e la pagina si riadatta; lo stato è ricordato tra sessioni.
 - ⚙️ Impostazioni: lingua UI (it/en/fr/de/es), lingua del documento (origine) e
   della traduzione (destinazione), motore, zoom di avvio, "riprendi dall'ultima
   pagina" e percorso dell'eseguibile `pdf2zh_next`.

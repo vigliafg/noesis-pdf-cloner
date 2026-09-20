@@ -86,6 +86,7 @@ DEFAULTS: dict = {
     "dst_lang": "it",       # destinazione traduzione (TRANSLATION_LANGUAGES, no auto)
     "engine": "google",     # motore di traduzione (TRANSLATION_ENGINES)
     "pdf2zh_bin": "",        # percorso pdf2zh_next (vuoto = auto-rilevamento)
+    "clone_bar_collapsed": False,  # barra motori del pannello destro collassata
     "zoom": 3.0,             # risoluzione base del render (0.5–4.0);
                            # lo zoom visibile è runtime (1.0 = adatta)
     "render_md": True,       # rendering Markdown on/off
@@ -592,6 +593,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Übersetzte Seite kann nicht angezeigt werden",
         "es": "No se puede mostrar la página traducida",
     },
+    "clone.bar.collapse": {
+        "it": "Comprimi la barra dei motori",
+        "en": "Collapse the engines bar",
+        "fr": "Réduire la barre des moteurs",
+        "de": "Engine-Leiste einklappen",
+        "es": "Contraer la barra de motores",
+    },
+    "clone.bar.expand": {
+        "it": "Espandi la barra dei motori",
+        "en": "Expand the engines bar",
+        "fr": "Développer la barre des moteurs",
+        "de": "Engine-Leiste ausklappen",
+        "es": "Expandir la barra de motores",
+    },
     # ── dialogs ─────────────────────────────────────────────────────────────
     "dlg.open": {
         "it": "Apri PDF", "en": "Open PDF", "fr": "Ouvrir un PDF",
@@ -912,7 +927,7 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits"):
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     if raw.get("last_tab") in ("original", "translated", "images"):
         out["last_tab"] = raw["last_tab"]

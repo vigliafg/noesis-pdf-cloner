@@ -3363,7 +3363,9 @@ class TranslatedPagePanel(QWidget):
             " border-bottom: 1px solid #555; }"
         )
         bar = QHBoxLayout(self._bar)
-        bar.setContentsMargins(10, 2, 10, 2)
+        # Margine destro riservato al pulsante flottante di collasso, così non
+        # copre la label di stato.
+        bar.setContentsMargins(10, 2, 36, 2)
         bar.setSpacing(10)
 
         self._lbl_target = QLabel("")
@@ -3426,7 +3428,59 @@ class TranslatedPagePanel(QWidget):
         self._spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spinner.hide()
 
+        # ── Pulsante flottante di collasso della barra motori ─────────
+        # Figlio del pannello ma FUORI dal layout: non consuma spazio, quindi
+        # al collasso l'intera barra viene nascosta e i suoi pixel tornano al
+        # viewport. Resta sempre visibile per riespandere.
+        self._is_collapsed: bool = False
+        self._collapse_btn = QPushButton("▾", self)
+        self._collapse_btn.setFixedSize(26, 22)
+        self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._collapse_btn.setFlat(True)
+        self._collapse_btn.setStyleSheet(
+            "QPushButton { background: rgba(58,58,58,220); color: #ddd;"
+            " border: 1px solid #666; border-radius: 4px; font-size: 12px;"
+            " padding: 0; }"
+            "QPushButton:hover { background: #555; color: #fff; }"
+        )
+        self._collapse_btn.clicked.connect(self._toggle_collapsed)
+        self._collapse_btn.raise_()
+
         self._view_zoom: float = 1.0
+
+    # ── collapse / expand della barra motori ──────────────────────────
+
+    def _toggle_collapsed(self):
+        self.set_collapsed(not self._is_collapsed)
+
+    def is_collapsed(self) -> bool:
+        return self._is_collapsed
+
+    def set_collapsed(self, collapsed: bool, persist: bool = True):
+        """Collassa/espande la barra motori restituendo lo spazio al viewport.
+
+        Con la barra nascosta il ``QVBoxLayout`` non le riserva più altezza:
+        lo ``scroll_area`` cresce e ``PdfPageView.resizeEvent`` riadatta la
+        pagina. Il pulsante flottante resta visibile per riespandere.
+        """
+        self._is_collapsed = bool(collapsed)
+        self._bar.setVisible(not self._is_collapsed)
+        self._collapse_btn.setText("▸" if self._is_collapsed else "▾")
+        self._collapse_btn.setToolTip(
+            T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
+        )
+        self._reposition_collapse_btn()
+        self._collapse_btn.raise_()
+        # Re-fit immediato (sicuro anche senza pixmap).
+        self.view._fit_to_view()
+        if persist:
+            set_setting("clone_bar_collapsed", self._is_collapsed)
+            save_config()
+
+    def _reposition_collapse_btn(self):
+        b = self._collapse_btn
+        x = max(0, self.width() - b.width() - 6)
+        b.move(x, 6)
 
     # ── engine radios ─────────────────────────────────────────────────
 
@@ -3469,6 +3523,7 @@ class TranslatedPagePanel(QWidget):
         self._position_spinner()
         self._spinner.show()
         self._spinner.raise_()
+        self._collapse_btn.raise_()
 
     def hide_spinner(self):
         self._spinner.hide()
@@ -3484,6 +3539,7 @@ class TranslatedPagePanel(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._reposition_collapse_btn()
         if self._spinner.isVisible():
             self._position_spinner()
 
@@ -3491,6 +3547,9 @@ class TranslatedPagePanel(QWidget):
         self.set_target_language(get_target_lang())
         for code, rb in self._radios.items():
             rb.setText(T(f"engine.short.{code}"))
+        self._collapse_btn.setToolTip(
+            T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
+        )
         self.view.retranslate()
 
 
@@ -3972,6 +4031,10 @@ class MainWindow(QMainWindow):
         self.translated_panel.engine_changed.connect(self._on_engine_selected)
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
+        # Ripristina lo stato collassato/espanso della barra motori (persistito).
+        self.translated_panel.set_collapsed(
+            bool(get_setting("clone_bar_collapsed", False)), persist=False
+        )
 
         # Pannello testo di noesis-pdf-reader-lite: mantenuto dormiente
         # (nascosto, non aggiunto al layout) per la futura integrazione Docling.
