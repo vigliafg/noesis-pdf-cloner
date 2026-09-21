@@ -8,7 +8,7 @@ Adattamento desktop di ``pdfcloner/translator.py``:
     * ``google``  = catena gratuita ``gtranslate_cli.py`` via ``--clitranslator``
                     (dict-chrome-ex -> translate-pa -> gtx -> microsoft -> LLM)
     * ``bing``    = traduttore Bing built-in di pdf2zh_next
-    * ``openai``  = LLM via OpenRouter (``--openai``)
+    * ``llm``     = LLM via OpenRouter (flag pdf2zh ``--openai``; modello Mercury)
 
 Il modulo è puro Python (nessuna dipendenza da PyQt): l'app lo guida da un
 thread di background e ne mostra il risultato.
@@ -36,7 +36,16 @@ from pathlib import Path
 log = logging.getLogger("clone_engine")
 
 # Engine selezionabili nella UI (label via i18n). Ordine = ordine dei radio.
-ENGINES: tuple[str, ...] = ("google", "bing", "openai")
+# ``llm`` usa il percorso "OpenAI-compatibile" (flag --openai) di pdf2zh_next
+# puntato a OpenRouter (Mercury), NON OpenAI. L'alias ``openai`` è accettato.
+ENGINES: tuple[str, ...] = ("google", "bing", "llm")
+ENGINE_ALIASES: dict[str, str] = {"openai": "llm"}
+
+
+def normalize_engine(engine: str) -> str:
+    """Normalizza l'id motore (accetta l'alias storico ``openai`` → ``llm``)."""
+    code = (engine or "").strip().lower()
+    return ENGINE_ALIASES.get(code, code)
 
 DEFAULT_MODEL = "inception/mercury-2.5"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
@@ -399,7 +408,7 @@ class CloneEngine:
 
     def _translator_flags(self, engine: str) -> tuple[list[str], str]:
         """Flag CLI di pdf2zh_next per l'engine scelto, + nome descrittivo."""
-        if engine == "openai":
+        if normalize_engine(engine) == "llm":
             return (
                 [
                     "--openai",
@@ -425,6 +434,7 @@ class CloneEngine:
 
     def translate_page(self, page: int, engine: str) -> Path | None:
         """Traduce la pagina se serve e ritorna il path del PDF tradotto."""
+        engine = normalize_engine(engine)
         if engine not in ENGINES:
             engine = "google"
         out = self.translated_path(page, engine)
@@ -440,7 +450,7 @@ class CloneEngine:
                 self._status[key] = "error:nessun documento aperto"
                 return None
 
-            if engine == "openai" and not os.environ.get("OPENROUTER_API_KEY"):
+            if engine == "llm" and not os.environ.get("OPENROUTER_API_KEY"):
                 self._status[key] = "error:OPENROUTER_API_KEY non impostata"
                 return None
 

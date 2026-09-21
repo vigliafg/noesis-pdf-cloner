@@ -77,19 +77,25 @@ class FlagsTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_engines_tuple(self):
-        self.assertEqual(clone_engine.ENGINES, ("google", "bing", "openai"))
+        self.assertEqual(clone_engine.ENGINES, ("google", "bing", "llm"))
 
     def test_bing_flags(self):
         flags, name = self.engine._translator_flags("bing")
         self.assertIn("--bing", flags)
         self.assertEqual(name, "bing")
 
-    def test_openai_flags(self):
-        flags, name = self.engine._translator_flags("openai")
+    def test_llm_flags_use_openai_path(self):
+        # il motore "llm" usa i flag "OpenAI-compatibili" di pdf2zh
+        flags, name = self.engine._translator_flags("llm")
         self.assertIn("--openai", flags)
         self.assertIn("--openai-model", flags)
         self.assertIn(self.engine.llm_model, flags)
         self.assertTrue(name.startswith("llm"))
+
+    def test_openai_alias_is_normalized(self):
+        self.assertEqual(clone_engine.normalize_engine("openai"), "llm")
+        flags, _ = self.engine._translator_flags("openai")
+        self.assertIn("--openai", flags)
 
     def test_google_flags_use_clitranslator(self):
         flags, name = self.engine._translator_flags("google")
@@ -346,12 +352,12 @@ class PipelineTests(unittest.TestCase):
             run.assert_not_called()
         self.assertTrue(again.is_file())
 
-    def test_openai_without_key_reports_error(self):
+    def test_llm_without_key_reports_error(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("OPENROUTER_API_KEY", None)
-            out = self.engine.translate_page(1, "openai")
+            out = self.engine.translate_page(1, "llm")
         self.assertIsNone(out)
-        self.assertTrue(self.engine.status(1, "openai").startswith("error:"))
+        self.assertTrue(self.engine.status(1, "llm").startswith("error:"))
 
     def test_missing_engine_reports_error(self):
         engine = clone_engine.CloneEngine(

@@ -76,7 +76,7 @@ TRANSLATION_LANGUAGES: dict[str, tuple[str, str]] = {
 
 # Translation engines selectable in the settings dialog (label via T()).
 # I tre motori di pdfcloner: catena gratuita Google, Bing, LLM via OpenRouter.
-TRANSLATION_ENGINES: tuple[str, ...] = ("google", "bing", "openai")
+TRANSLATION_ENGINES: tuple[str, ...] = ("google", "bing", "llm")
 
 # Default configuration (config.json schema v2). ``last_tab``/``last_pages``
 # are runtime state persisted alongside the user settings.
@@ -529,12 +529,12 @@ _STRINGS: dict[str, dict[str, str]] = {
     "engine.short.bing": {
         "it": "Bing", "en": "Bing", "fr": "Bing", "de": "Bing", "es": "Bing",
     },
-    "engine.option.openai": {
+    "engine.option.llm": {
         "it": "LLM (OpenRouter)", "en": "LLM (OpenRouter)",
         "fr": "LLM (OpenRouter)", "de": "LLM (OpenRouter)",
         "es": "LLM (OpenRouter)",
     },
-    "engine.short.openai": {
+    "engine.short.llm": {
         "it": "LLM", "en": "LLM", "fr": "LLM", "de": "LLM", "es": "LLM",
     },
     # ── clone translation (pannello destro) ─────────────────────────────────

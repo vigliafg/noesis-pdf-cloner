@@ -5,7 +5,7 @@ Derivata da noesis-pdf-reader-lite: la UI, la navigazione (numero pagina, TOC,
 prec/succ), lo zoom e le Impostazioni restano; al posto del testo estratto in
 markdown il pannello destro mostra la **pagina tradotta con layout preservato**,
 prodotta da pdf2zh_next v2 (BabelDOC) tramite ``clone_engine``. I tre motori di
-traduzione sono google (catena gratuita), bing e openai (LLM/OpenRouter).
+traduzione sono google (catena gratuita), bing e llm (LLM/OpenRouter).
 
 Il codice di estrazione testo + engine di layout è mantenuto dormiente (UI
 nascosta) in vista dell'integrazione futura del motore Docling.
