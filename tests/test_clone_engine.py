@@ -129,6 +129,12 @@ class CachePathTests(unittest.TestCase):
         self.assertEqual(self.engine._doc_key, "")
         self.assertIsNone(self.engine._src_pdf)
 
+    def test_cache_path_includes_version_and_model(self):
+        p = self.engine.translated_path_for(1, "google")
+        self.assertIn(f"cs{clone_engine.CACHE_SCHEMA_VERSION}-", str(p))
+        self.engine.llm_model = "altro/modello-xyz"
+        self.assertNotEqual(p, self.engine.translated_path_for(1, "google"))
+
 
 class CacheQueryTests(unittest.TestCase):
     """cached_pages scans the on-disk cache (cross-session) without side effects."""
@@ -361,6 +367,36 @@ class PipelineTests(unittest.TestCase):
             out = engine.translate_page(1, "bing")
         self.assertIsNone(out)
         self.assertIn("pdf2zh_next non trovato", engine.status(1, "bing"))
+
+
+class AtomicWriteTests(unittest.TestCase):
+    """Le scritture in cache devono essere atomiche (nessun file parziale)."""
+
+    def setUp(self):
+        try:
+            import pymupdf  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        import pymupdf
+
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        self.src = tmp / "book.pdf"
+        doc = pymupdf.open()
+        doc.new_page().insert_text((72, 72), "pagina di prova")
+        doc.save(str(self.src))
+        doc.close()
+        self.engine = clone_engine.CloneEngine(tmp / "cache")
+        self.engine.set_document(self.src)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_ensure_split_leaves_no_tmp_file(self):
+        path = self.engine.ensure_split(0)
+        self.assertIsNotNone(path)
+        self.assertTrue(path.is_file())
+        self.assertEqual(list(path.parent.glob("*.tmp")), [])
 
 
 if __name__ == "__main__":

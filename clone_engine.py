@@ -22,6 +22,7 @@ Flusso per ogni pagina ed engine:
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 import logging
 import os
@@ -40,6 +41,10 @@ ENGINES: tuple[str, ...] = ("google", "bing", "openai")
 DEFAULT_MODEL = "inception/mercury-2.5"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 PAGE_TIMEOUT = 900  # secondi: pdf2zh_next + BabelDOC su una pagina densa
+
+# Versione dello schema di cache: incrementarla invalida la cache esistente
+# (evita di servire output prodotti da versioni diverse del motore).
+CACHE_SCHEMA_VERSION = "1"
 
 
 def _is_windows() -> bool:
@@ -200,6 +205,18 @@ class CloneEngine:
     def _lang_key(self) -> str:
         return f"{self.lang_in}-{self.lang_out}"
 
+    def _version_tag(self) -> str:
+        """Segmento di cache: schema + modello LLM.
+
+        Evita di riusare output prodotti da versioni diverse del motore o da un
+        modello LLM diverso (come nella versione server).
+        """
+        tag = f"cs{CACHE_SCHEMA_VERSION}"
+        model = (self.llm_model or "").strip()
+        if model:
+            tag += "-" + hashlib.sha1(model.encode()).hexdigest()[:8]
+        return tag
+
     def split_path(self, page: int) -> Path:
         return self.split_root / self._doc_key / f"page_{page:06d}.pdf"
 
@@ -224,6 +241,7 @@ class CloneEngine:
             / self._doc_key
             / engine
             / f"{li}-{lo}"
+            / self._version_tag()
             / f"page_{page:06d}.pdf"
         )
 
@@ -300,7 +318,9 @@ class CloneEngine:
             if merged == 0:
                 raise ValueError("nessuna pagina tradotta da esportare")
             dest.parent.mkdir(parents=True, exist_ok=True)
-            out.save(str(dest), garbage=4, deflate=True)
+            tmp = dest.with_suffix(dest.suffix + ".tmp")
+            out.save(str(tmp), garbage=4, deflate=True)
+            os.replace(tmp, dest)  # salvataggio atomico dell'export
         return merged
 
     # ── stato ─────────────────────────────────────────────────────────
@@ -352,6 +372,7 @@ class CloneEngine:
         path.parent.mkdir(parents=True, exist_ok=True)
         import pymupdf  # import locale: l'app può girare senza la parte render
 
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
         try:
             src = pymupdf.open(str(self._src_pdf))
         except Exception:
@@ -360,13 +381,14 @@ class CloneEngine:
         try:
             new = pymupdf.open()
             new.insert_pdf(src, from_page=page, to_page=page)
-            new.save(str(path), garbage=4, deflate=True)
+            new.save(str(tmp), garbage=4, deflate=True)
             new.close()
+            os.replace(tmp, path)  # scrittura atomica: mai file parziali in cache
             return path
         except Exception:
             log.exception("split fallito pagina %d", page)
             try:
-                path.unlink()
+                tmp.unlink()
             except OSError:
                 pass
             return None
@@ -470,7 +492,7 @@ class CloneEngine:
                 monos = glob.glob(str(out_dir / "*.mono.pdf"))
                 if not monos:
                     raise RuntimeError("pdf2zh_next non ha prodotto il file mono")
-                shutil.move(monos[0], str(out))
+                os.replace(monos[0], str(out))  # scrittura atomica in cache
                 self._status[key] = "done"
                 return out
             except Exception as e:  # noqa: BLE001 — riportato in UI
