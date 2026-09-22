@@ -282,6 +282,25 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     - includere le licenze **MIT/Apache-2.0** di `uv`;
     - precedenza: `uv` di sistema/PATH (per aggiornamenti) → `uv` incluso nel
       bundle → (fallback) download a runtime del punto 9.
+12. **Setup Windows: motore integrato nell'installer NSIS** (da fare domani): oggi
+    `installer.nsi` **copia** solo `setup_engine.ps1` (non lo esegue) e il
+    motore va installato dopo, a mano o dal pulsante in-app; anche su Windows
+    `install_engine` richiede `uv` già presente. Idea: rendere l'installer un
+    one-shot con una **componente opzionale** *"Motore di traduzione"*:
+    - includere `uv.exe` nell'installer (`File "vendor\uv.exe"`, da
+      `uv-x86_64-pc-windows-msvc.zip`) — stessa logica del punto 11;
+    - nella sezione opzionale eseguire, senza finestra console
+      (`nsExec::ExecToLog`), `uv venv --python 3.12` + `uv pip install
+      pdf2zh_next`, con `DetailsPrint`/progress e avviso ~1,1 GB (scaricabile
+      dopo se si deseleziona);
+    - destinazione del `.venv2`: `%LOCALAPPDATA%\noesis-pdf-cloner\engine\.venv2`
+      (già auto-rilevato) per non dipendere da `C:\Program Files` non
+      scrivibile;
+    - alternativa più leggera: far **bootstrap di `uv` dentro
+      `setup_engine.ps1`** (scarica `uv.exe` se assente) — speculare al punto 9,
+      senza toccare l'NSIS;
+    - attenzione a SmartScreen/Defender (installer non firmato) e ai tempi del
+      download.
 
 ---
 
