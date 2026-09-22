@@ -111,3 +111,7 @@ python3 -m unittest discover -s tests -v
 - `i18n.py` — stringhe UI (5 lingue) e config.
 - `layout_engine.py` — engine adattativo dei fix di layout (dormiente).
 - `tests/` — test di regressione.
+
+Le icone di release (`assets/noesispdf.ico` per Windows, `assets/noesispdf.icns`
+per macOS, `assets/noesispdf-256.png` per l'AppImage) sono generate dal logo
+`PDFCLONER.jpeg`.

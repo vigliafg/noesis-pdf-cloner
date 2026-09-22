@@ -2,11 +2,16 @@
 .venv2/
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # PyInstaller build artifacts
 build/
 dist/
 *.spec
+
+# AppImage packaging (CI locale)
+AppDir/
+*.AppImage
 
 # engine / translation caches
 cache/
