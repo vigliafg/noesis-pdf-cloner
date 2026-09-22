@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -129,13 +130,28 @@ def llm_translate(text: str) -> str | None:
             {"role": "user", "content": text},
         ],
     }
-    body = http_post_json(
+    url = (
         os.environ.get("PDF_LLM_BASE_URL", "https://openrouter.ai/api/v1")
-        + "/chat/completions",
-        json.dumps(payload).encode(),
-        {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        + "/chat/completions"
     )
-    if body is None:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
+            body = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        # 401/403 = chiave assente/non valida: evento distinto dalla rete.
+        if exc.code in (401, 403):
+            log_event("llm_unauthorized")
+        return None
+    except Exception:
         return None
     try:
         return json.loads(body)["choices"][0]["message"]["content"].strip() or None

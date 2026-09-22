@@ -73,8 +73,10 @@ workflow GitHub Pages della guida: non hanno controparte nel servizio.
 - La **porta standard del servizio è 18080** (non 8000) — non usarla per il desktop.
 - Cache in app-data (`QStandardPaths.AppDataLocation` → `~/.local/share/noesis-pdf-cloner/clones/`),
   **non** nel repo. Chiave per documento + engine + coppia linguistica.
-- Segreti (es. `OPENROUTER_API_KEY`) solo da variabili d'ambiente: non scriverli nel
-  codice, nei log o nei commit.
+- Segreti (es. `OPENROUTER_API_KEY`): da variabile d'ambiente oppure dall'archivio
+  per-utente `secrets.json` (modulo `keystore.py`, permessi `0600`, in app-data);
+  **mai** in `config.json`, nei log o nei commit. La chiave non va negli argv se
+  evitabile.
 - Il motore `llm` usa il percorso "OpenAI-compatibile" di `pdf2zh_next` (flag `--openai`)
   puntato a **OpenRouter** (modello Mercury), **non** OpenAI. L'alias `openai` è
   normalizzato a `llm`.

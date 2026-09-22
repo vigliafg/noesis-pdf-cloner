@@ -397,6 +397,7 @@ class PipelineTests(unittest.TestCase):
             out = self.engine.translate_page(1, "llm")
         self.assertIsNone(out)
         self.assertTrue(self.engine.status(1, "llm").startswith("error:"))
+        self.assertIn("missing_key", self.engine.status(1, "llm"))
 
     def test_missing_engine_reports_error(self):
         engine = clone_engine.CloneEngine(
@@ -412,6 +413,44 @@ class PipelineTests(unittest.TestCase):
             out = engine.translate_page(1, "bing")
         self.assertIsNone(out)
         self.assertIn("pdf2zh_next non trovato", engine.status(1, "bing"))
+
+
+class KeyErrorDetectionTests(unittest.TestCase):
+    """Riconoscimento dell'errore di autenticazione dal subprocess."""
+
+    def test_auth_error_markers(self):
+        for text in ("HTTP 401", "Unauthorized", "Invalid API key",
+                     "invalid_api_key"):
+            self.assertTrue(clone_engine._looks_like_auth_error(text))
+        self.assertFalse(clone_engine._looks_like_auth_error("timeout"))
+
+    def test_llm_invalid_key_reports_invalid_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake = tmp_path / "pdf2zh_next"
+            fake.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "sys.stderr.write('401 Unauthorized\\n')\n"
+                "sys.exit(1)\n"
+            )
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
+            engine = clone_engine.CloneEngine(
+                tmp_path / "cache", pdf2zh_bin=fake
+            )
+            src = tmp_path / "book.pdf"
+            src.write_bytes(b"%PDF-1.4 source")
+            engine.set_document(src)
+            engine.lang_in, engine.lang_out = "en", "it"
+            split = engine.split_path(1)
+            split.parent.mkdir(parents=True, exist_ok=True)
+            split.write_bytes(b"%PDF-1.4 page 1")
+            with mock.patch.dict(
+                os.environ, {"OPENROUTER_API_KEY": "sk-or-bad"}
+            ):
+                out = engine.translate_page(1, "llm")
+            self.assertIsNone(out)
+            self.assertEqual(engine.status(1, "llm"), "error:invalid_key")
 
 
 class CancelTests(unittest.TestCase):

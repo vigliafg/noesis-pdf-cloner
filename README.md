@@ -29,10 +29,25 @@ la pagina è istantanea.
 - ⚙️ Impostazioni: lingua UI (it/en/fr/de/es), lingua del documento (origine) e
   della traduzione (destinazione), motore, zoom di avvio, "riprendi dall'ultima
   pagina" e percorso dell'eseguibile `pdf2zh_next`.
-- 💾 **Esporta** le pagine tradotte (corrente o intervallo) come **un unico PDF**
-  oppure come **pagine singole in un archivio ZIP**; le pagine non ancora in
-  cache possono essere tradotte prima, con annullamento immediato.
+- 💾 **Esporta** con una **procedura guidata a 5 passi** (File → Pagine → Lingue →
+  Motore → Output, nello stile del wizard del servizio): pagina corrente o
+  intervallo, motore e lingua, **un unico PDF** oppure **pagine singole in un
+  archivio ZIP**, percorso di salvataggio. Lo step **Pagine** mostra **anteprime
+  grandi e live** (prima/ultima pagina della selezione) con il numero **fisico** e
+  quello **stampato** (`/PageLabels`) quando differiscono. Le pagine non ancora in
+  cache possono essere tradotte prima, con annullamento immediato. Dal menu del
+  pulsante 💾 è disponibile anche l'export **rapido della sola pagina corrente**.
+  A fine processo la finestra di avanzamento offre **⬇ Salva in Download**.
+- 🌊 Durante la traduzione la preview di destra mostra un **riempimento "liquido"**
+  (progresso stimato) sopra la pagina, con un pulsante **Annulla** che interrompe
+  subito il subprocess; la finestra di progresso export mostra la **pagina
+  correntemente in lavorazione** che avanza pagina per pagina.
 - ❓ Guida online (`docs/help/`, pubblicata su GitHub Pages).
+- 🔑 **Chiave OpenRouter**: se il motore LLM è selezionato senza chiave, l'app la
+  chiede (dialogo dedicato) e la salva in un **file per-utente** protetto
+  (`keystore.py`, 0600, nella cartella dati) oppure la legge da
+  `OPENROUTER_API_KEY`. Il campo è in ⚙️ Impostazioni → Motore con **Verifica**;
+  gli errori "chiave assente/invalida" sono messaggi guidati.
 
 > Il codice di estrazione testo/markdown e gli strumenti a zone di lite sono
 > **mantenuti dormienti** (UI nascosta) e verranno riattivati con l'integrazione

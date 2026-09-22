@@ -36,6 +36,8 @@ import time
 import zipfile
 from pathlib import Path
 
+from pagelabels import build_page_labels
+
 log = logging.getLogger("clone_engine")
 
 # Engine selezionabili nella UI (label via i18n). Ordine = ordine dei radio.
@@ -61,6 +63,17 @@ CACHE_SCHEMA_VERSION = "1"
 
 class TranslationCancelled(RuntimeError):
     """Traduzione annullata dall'utente (subprocess terminato)."""
+
+
+def _looks_like_auth_error(text: str) -> bool:
+    """True se lo stderr di pdf2zh_next indica una chiave OpenRouter invalida."""
+    low = (text or "").lower()
+    return (
+        "401" in low
+        or "unauthorized" in low
+        or "invalid api key" in low
+        or "invalid_api_key" in low
+    )
 
 
 def _is_windows() -> bool:
@@ -201,6 +214,22 @@ class CloneEngine:
     def available(self) -> bool:
         """True se l'eseguibile pdf2zh_next è stato trovato."""
         return self.pdf2zh_bin() is not None
+
+    @staticmethod
+    def page_labels(path: str | Path) -> list[str]:
+        """Etichette ``/PageLabels`` per pagina (fallback: numero fisico).
+
+        Allineato a ``app/engine.py::CloneEngine.page_labels`` del servizio.
+        """
+        import pymupdf
+
+        with pymupdf.open(str(path)) as document:
+            count = document.page_count
+            spec = []
+            if hasattr(document, "get_page_labels"):
+                with contextlib.suppress(Exception):
+                    spec = document.get_page_labels()
+        return build_page_labels(spec, count)
 
     def set_document(self, path: str | Path | None) -> None:
         """Imposta il PDF sorgente; resetta lo stato dipendente dal documento."""
@@ -506,7 +535,7 @@ class CloneEngine:
                 return None
 
             if engine == "llm" and not os.environ.get("OPENROUTER_API_KEY"):
-                self._status[key] = "error:OPENROUTER_API_KEY non impostata"
+                self._status[key] = "error:missing_key"
                 return None
 
             pdf2zh = self.pdf2zh_bin()
@@ -553,8 +582,11 @@ class CloneEngine:
                 r = self._run_engine(cmd, env, cancel_event)
                 log.info("pdf2zh_next pagina %d: rc=%d", page, r.returncode)
                 if r.returncode != 0:
+                    stderr = r.stderr or ""
+                    if engine == "llm" and _looks_like_auth_error(stderr):
+                        raise RuntimeError("invalid_key")
                     raise RuntimeError(
-                        f"pdf2zh_next exit {r.returncode}: {(r.stderr or '')[-400:]}"
+                        f"pdf2zh_next exit {r.returncode}: {stderr[-400:]}"
                     )
                 monos = glob.glob(str(out_dir / "*.mono.pdf"))
                 if not monos:

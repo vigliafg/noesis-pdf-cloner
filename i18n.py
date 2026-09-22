@@ -574,6 +574,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Errore", "en": "Error", "fr": "Erreur", "de": "Fehler",
         "es": "Error",
     },
+    "clone.status_cancelled": {
+        "it": "Annullata", "en": "Cancelled", "fr": "Annulée",
+        "de": "Abgebrochen", "es": "Cancelada",
+    },
+    "clone.cancelled": {
+        "it": "Traduzione annullata.", "en": "Translation cancelled.",
+        "fr": "Traduction annulée.", "de": "Übersetzung abgebrochen.",
+        "es": "Traducción cancelada.",
+    },
     "clone.done": {
         "it": "Clone pagina {page} pronto", "en": "Clone of page {page} ready",
         "fr": "Clone de la page {page} prêt", "de": "Klon von Seite {page} fertig",
@@ -585,6 +594,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Échec de la traduction : {reason}",
         "de": "Übersetzung fehlgeschlagen: {reason}",
         "es": "Traducción fallida: {reason}",
+    },
+    "clone.no_key": {
+        "it": "Serve una chiave OpenRouter per il motore LLM: inseriscila in "
+              "⚙️ Impostazioni → Motore (o in un dialogo dedicato).",
+        "en": "An OpenRouter key is required for the LLM engine: enter it in "
+              "⚙️ Settings → Engine (or in the dedicated dialog).",
+        "fr": "Une clé OpenRouter est requise pour le moteur LLM : saisissez-la "
+              "dans ⚙️ Paramètres → Moteur (ou dans la boîte dédiée).",
+        "de": "Für die LLM-Engine ist ein OpenRouter-Schlüssel nötig: trage ihn "
+              "in ⚙️ Einstellungen → Engine ein (oder im Dialog).",
+        "es": "Se necesita una clave OpenRouter para el motor LLM: introdúcela "
+              "en ⚙️ Ajustes → Motor (o en el diálogo dedicado).",
+    },
+    "clone.invalid_key": {
+        "it": "Chiave OpenRouter non valida (401). Controllala in "
+              "⚙️ Impostazioni → Motore.",
+        "en": "Invalid OpenRouter key (401). Check it in "
+              "⚙️ Settings → Engine.",
+        "fr": "Clé OpenRouter non valide (401). Vérifiez-la dans "
+              "⚙️ Paramètres → Moteur.",
+        "de": "Ungültiger OpenRouter-Schlüssel (401). Prüfe ihn in "
+              "⚙️ Einstellungen → Engine.",
+        "es": "Clave OpenRouter no válida (401). Compruébala en "
+              "⚙️ Ajustes → Motor.",
     },
     "clone.no_engine": {
         "it": "Motore pdf2zh_next non trovato.\nInstalla il motore di clonazione (vedi README / script di setup) oppure imposta il percorso in ⚙️ Impostazioni.",
@@ -712,11 +745,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Traduciendo las páginas faltantes",
     },
     "export.progress.label": {
-        "it": "Pagina {page} — {done} di {total}",
-        "en": "Page {page} — {done} of {total}",
-        "fr": "Page {page} — {done} sur {total}",
-        "de": "Seite {page} — {done} von {total}",
-        "es": "Página {page} — {done} de {total}",
+        "it": "Pagina {page} — {pos} di {total}",
+        "en": "Page {page} — {pos} of {total}",
+        "fr": "Page {page} — {pos} sur {total}",
+        "de": "Seite {page} — {pos} von {total}",
+        "es": "Página {page} — {pos} de {total}",
     },
     "export.progress.cancelling": {
         "it": "Interruzione…", "en": "Cancelling…",
@@ -765,6 +798,211 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Übersetzte Seiten speichern (ZIP)",
         "es": "Guardar páginas traducidas (ZIP)",
     },
+    "export.menu.wizard": {
+        "it": "Esporta… (procedura guidata)",
+        "en": "Export… (guided)",
+        "fr": "Exporter… (assisté)",
+        "de": "Exportieren… (Assistent)",
+        "es": "Exportar… (guiado)",
+    },
+    "export.menu.current": {
+        "it": "Esporta pagina corrente (rapido)",
+        "en": "Export current page (quick)",
+        "fr": "Exporter la page actuelle (rapide)",
+        "de": "Aktuelle Seite exportieren (schnell)",
+        "es": "Exportar página actual (rápido)",
+    },
+    "export.wizard.title": {
+        "it": "Esporta pagine tradotte",
+        "en": "Export translated pages",
+        "fr": "Exporter les pages traduites",
+        "de": "Übersetzte Seiten exportieren",
+        "es": "Exportar páginas traducidas",
+    },
+    "export.wizard.step.file": {
+        "it": "File", "en": "File", "fr": "Fichier", "de": "Datei", "es": "Archivo",
+    },
+    "export.wizard.step.pages": {
+        "it": "Pagine", "en": "Pages", "fr": "Pages", "de": "Seiten", "es": "Páginas",
+    },
+    "export.wizard.step.langs": {
+        "it": "Lingue", "en": "Languages", "fr": "Langues", "de": "Sprachen",
+        "es": "Idiomas",
+    },
+    "export.wizard.step.engine": {
+        "it": "Motore", "en": "Engine", "fr": "Moteur", "de": "Engine", "es": "Motor",
+    },
+    "export.wizard.step.output": {
+        "it": "Output", "en": "Output", "fr": "Sortie", "de": "Ausgabe", "es": "Salida",
+    },
+    "export.wizard.next": {
+        "it": "Avanti →", "en": "Next →", "fr": "Suivant →", "de": "Weiter →",
+        "es": "Siguiente →",
+    },
+    "export.wizard.back": {
+        "it": "← Indietro", "en": "← Back", "fr": "← Retour", "de": "← Zurück",
+        "es": "← Atrás",
+    },
+    "export.wizard.start": {
+        "it": "Avvia l'esportazione", "en": "Start export",
+        "fr": "Lancer l'exportation", "de": "Export starten",
+        "es": "Iniciar exportación",
+    },
+    "export.wizard.file.title": {
+        "it": "Documento", "en": "Document", "fr": "Document", "de": "Dokument",
+        "es": "Documento",
+    },
+    "export.wizard.file.hint": {
+        "it": "Il PDF aperto di cui stai esportando le pagine tradotte.",
+        "en": "The open PDF whose translated pages you are exporting.",
+        "fr": "Le PDF ouvert dont vous exportez les pages traduites.",
+        "de": "Das geöffnete PDF, dessen übersetzte Seiten exportiert werden.",
+        "es": "El PDF abierto cuyas páginas traducidas vas a exportar.",
+    },
+    "export.wizard.file.info": {
+        "it": "{name}\n{pages} pagine · {size} MB",
+        "en": "{name}\n{pages} pages · {size} MB",
+        "fr": "{name}\n{pages} pages · {size} Mo",
+        "de": "{name}\n{pages} Seiten · {size} MB",
+        "es": "{name}\n{pages} páginas · {size} MB",
+    },
+    "export.wizard.file.none": {
+        "it": "Nessun PDF aperto.", "en": "No PDF open.", "fr": "Aucun PDF ouvert.",
+        "de": "Kein PDF geöffnet.", "es": "Ningún PDF abierto.",
+    },
+    "export.wizard.pages.title": {
+        "it": "Quali pagine?", "en": "Which pages?", "fr": "Quelles pages ?",
+        "de": "Welche Seiten?", "es": "¿Qué páginas?",
+    },
+    "export.wizard.pages.hint": {
+        "it": "Esporta la pagina corrente oppure un intervallo.",
+        "en": "Export the current page or a range.",
+        "fr": "Exportez la page actuelle ou une plage.",
+        "de": "Aktuelle Seite oder einen Bereich exportieren.",
+        "es": "Exporta la página actual o un intervalo.",
+    },
+    "export.wizard.langs.title": {
+        "it": "Lingue", "en": "Languages", "fr": "Langues", "de": "Sprachen",
+        "es": "Idiomas",
+    },
+    "export.wizard.langs.hint": {
+        "it": "Origine «Auto» riconosce la lingua da sola.",
+        "en": "Source «Auto» detects the language on its own.",
+        "fr": "La source « Auto » détecte la langue.",
+        "de": "Quelle «Auto» erkennt die Sprache.",
+        "es": "El origen «Auto» detecta el idioma.",
+    },
+    "export.wizard.engine.title": {
+        "it": "Motore", "en": "Engine", "fr": "Moteur", "de": "Engine", "es": "Motor",
+    },
+    "export.wizard.engine.hint": {
+        "it": "Google/Bing sono gratuiti; LLM (OpenRouter) ha un costo per pagina.",
+        "en": "Google/Bing are free; LLM (OpenRouter) costs per page.",
+        "fr": "Google/Bing sont gratuits ; LLM (OpenRouter) coûte par page.",
+        "de": "Google/Bing sind kostenlos; LLM (OpenRouter) kostet pro Seite.",
+        "es": "Google/Bing son gratuitos; LLM (OpenRouter) cuesta por página.",
+    },
+    "export.wizard.est": {
+        "it": "Da tradurre: {missing} di {total} · già in cache: {cached} · tempo stimato: ~{time}",
+        "en": "To translate: {missing} of {total} · cached: {cached} · estimated time: ~{time}",
+        "fr": "À traduire : {missing} sur {total} · en cache : {cached} · temps estimé : ~{time}",
+        "de": "Zu übersetzen: {missing} von {total} · im Cache: {cached} · geschätzt: ~{time}",
+        "es": "Por traducir: {missing} de {total} · en caché: {cached} · tiempo estimado: ~{time}",
+    },
+    "export.wizard.output.title": {
+        "it": "Output", "en": "Output", "fr": "Sortie", "de": "Ausgabe", "es": "Salida",
+    },
+    "export.wizard.output.hint": {
+        "it": "Ultimo controllo: nome, formato e destinazione.",
+        "en": "Final check: name, format and destination.",
+        "fr": "Dernière vérification : nom, format et destination.",
+        "de": "Letzte Prüfung: Name, Format und Ziel.",
+        "es": "Última comprobación: nombre, formato y destino.",
+    },
+    "export.wizard.output.path": {
+        "it": "Percorso di salvataggio", "en": "Save path",
+        "fr": "Chemin d'enregistrement", "de": "Speicherpfad", "es": "Ruta de guardado",
+    },
+    "export.wizard.output.browse": {
+        "it": "Sfoglia…", "en": "Browse…", "fr": "Parcourir…",
+        "de": "Durchsuchen…", "es": "Examinar…",
+    },
+    "export.wizard.sum.file": {
+        "it": "File", "en": "File", "fr": "Fichier", "de": "Datei", "es": "Archivo",
+    },
+    "export.wizard.sum.langs": {
+        "it": "Lingue", "en": "Languages", "fr": "Langues", "de": "Sprachen",
+        "es": "Idiomas",
+    },
+    "export.wizard.sum.engine": {
+        "it": "Motore", "en": "Engine", "fr": "Moteur", "de": "Engine", "es": "Motor",
+    },
+    "export.wizard.sum.output": {
+        "it": "Uscita", "en": "Output", "fr": "Sortie", "de": "Ausgabe", "es": "Salida",
+    },
+    "export.wizard.pages.numbering": {
+        "it": "I numeri sono le pagine fisiche del file (1 = prima pagina). "
+              "Alcuni PDF hanno una numerazione stampata diversa (romana, con "
+              "prefisso, ecc.): la mostriamo accanto all'anteprima.",
+        "en": "The numbers are the file's physical pages (1 = first page). Some "
+              "PDFs use a different printed numbering (roman, prefixed, etc.): "
+              "we show it next to the preview.",
+        "fr": "Les numéros sont les pages physiques du fichier (1 = première "
+              "page). Certains PDF utilisent une numérotation imprimée "
+              "différente (romaine, avec préfixe, etc.) : nous l'affichons à "
+              "côté de l'aperçu.",
+        "de": "Die Nummern sind die physischen Seiten der Datei (1 = erste "
+              "Seite). Manche PDFs haben eine andere gedruckte Nummerierung "
+              "(römisch, mit Präfix usw.): wir zeigen sie neben der Vorschau.",
+        "es": "Los números son las páginas físicas del archivo (1 = primera "
+              "página). Algunos PDF usan una numeración impresa distinta "
+              "(romana, con prefijo, etc.): la mostramos junto a la vista previa.",
+    },
+    "export.wizard.preview.caption": {
+        "it": "pagina fisica {n} · stampata «{label}»",
+        "en": "physical page {n} · printed «{label}»",
+        "fr": "page physique {n} · imprimée «{label}»",
+        "de": "physische Seite {n} · gedruckt «{label}»",
+        "es": "página física {n} · impresa «{label}»",
+    },
+    "export.wizard.preview.caption_plain": {
+        "it": "pagina {n}", "en": "page {n}", "fr": "page {n}",
+        "de": "Seite {n}", "es": "página {n}",
+    },
+    "export.wizard.preview.spin_label": {
+        "it": "«{label}» stampata", "en": "printed «{label}»",
+        "fr": "«{label}» imprimée", "de": "gedruckt «{label}»",
+        "es": "impresa «{label}»",
+    },
+    "export.wizard.preview.label_diff": {
+        "it": "La numerazione stampata è diversa da quella fisica per la "
+              "selezione scelta.",
+        "en": "The printed numbering differs from the physical one for the "
+              "selected range.",
+        "fr": "La numérotation imprimée diffère de la numérotation physique "
+              "pour la plage sélectionnée.",
+        "de": "Die gedruckte Nummerierung weicht für den gewählten Bereich von "
+              "der physischen ab.",
+        "es": "La numeración impresa difiere de la física para el intervalo "
+              "seleccionado.",
+    },
+    "export.wizard.preview.none": {
+        "it": "Anteprima non disponibile (PyMuPDF assente).",
+        "en": "Preview unavailable (PyMuPDF missing).",
+        "fr": "Aperçu indisponible (PyMuPDF absent).",
+        "de": "Vorschau nicht verfügbar (PyMuPDF fehlt).",
+        "es": "Vista previa no disponible (falta PyMuPDF).",
+    },
+    "clone.working.badge": {
+        "it": "in lavorazione: pagina {n}", "en": "working: page {n}",
+        "fr": "en cours : page {n}", "de": "in Arbeit: Seite {n}",
+        "es": "en curso: página {n}",
+    },
+    "clone.working.many": {
+        "it": "{n} pagine in lavorazione", "en": "{n} pages in progress",
+        "fr": "{n} pages en cours", "de": "{n} Seiten in Arbeit",
+        "es": "{n} páginas en curso",
+    },
     "export.progress.engine_lang": {
         "it": "Motore: {engine} · Lingua di uscita: {lang}",
         "en": "Engine: {engine} · Output language: {lang}",
@@ -778,6 +1016,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Plage : {from}–{to} · À traduire : {missing} · En cache : {cached}",
         "de": "Bereich: {from}–{to} · Zu übersetzen: {missing} · Im Cache: {cached}",
         "es": "Intervalo: {from}–{to} · Por traducir: {missing} · En caché: {cached}",
+    },
+    "export.progress.range_done": {
+        "it": "Intervallo: {from}–{to} · Tradotte: {done} · Non riuscite: {failed}",
+        "en": "Range: {from}–{to} · Translated: {done} · Failed: {failed}",
+        "fr": "Plage : {from}–{to} · Traduites : {done} · Échecs : {failed}",
+        "de": "Bereich: {from}–{to} · Übersetzt: {done} · Fehlgeschlagen: {failed}",
+        "es": "Intervalo: {from}–{to} · Traducidas: {done} · Fallidas: {failed}",
     },
     "export.progress.stats": {
         "it": "Tradotte: {done} · Non riuscite: {failed} · Trascorso: {elapsed}",
@@ -809,6 +1054,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "⏳ Seite {page} in Arbeit",
         "es": "⏳ Página {page} en proceso",
     },
+    "export.progress.activity_page_log": {
+        "it": "▶ Pagina {page} in lavorazione",
+        "en": "▶ Page {page} in progress",
+        "fr": "▶ Page {page} en cours",
+        "de": "▶ Seite {page} in Arbeit",
+        "es": "▶ Página {page} en proceso",
+    },
+    "export.progress.activity_page_pos": {
+        "it": "⏳ Pagina {page} in lavorazione ({pos} di {total})",
+        "en": "⏳ Page {page} in progress ({pos} of {total})",
+        "fr": "⏳ Page {page} en cours ({pos} sur {total})",
+        "de": "⏳ Seite {page} in Arbeit ({pos} von {total})",
+        "es": "⏳ Página {page} en proceso ({pos} de {total})",
+    },
     "export.progress.activity_done_page": {
         "it": "✓ Pagina {page} completata", "en": "✓ Page {page} done",
         "fr": "✓ Page {page} terminée", "de": "✓ Seite {page} fertig",
@@ -836,6 +1095,24 @@ _STRINGS: dict[str, dict[str, str]] = {
     "export.progress.saved_path": {
         "it": "File: {path}", "en": "File: {path}", "fr": "Fichier : {path}",
         "de": "Datei: {path}", "es": "Archivo: {path}",
+    },
+    "export.progress.save_download": {
+        "it": "⬇ Salva in Download", "en": "⬇ Save to Downloads",
+        "fr": "⬇ Enregistrer dans Téléchargements",
+        "de": "⬇ In Downloads speichern",
+        "es": "⬇ Guardar en Descargas",
+    },
+    "export.progress.downloaded": {
+        "it": "✅ Salvato in {path}", "en": "✅ Saved to {path}",
+        "fr": "✅ Enregistré dans {path}", "de": "✅ Gespeichert in {path}",
+        "es": "✅ Guardado en {path}",
+    },
+    "export.progress.download_error": {
+        "it": "❌ Impossibile salvare nella cartella Download.",
+        "en": "❌ Could not save to the Downloads folder.",
+        "fr": "❌ Impossible d'enregistrer dans Téléchargements.",
+        "de": "❌ Speichern im Downloads-Ordner fehlgeschlagen.",
+        "es": "❌ No se pudo guardar en la carpeta Descargas.",
     },
     "export.progress.open_folder": {
         "it": "📂 Apri cartella", "en": "📂 Open folder",
@@ -994,6 +1271,83 @@ _STRINGS: dict[str, dict[str, str]] = {
     "settings.clone.browse": {
         "it": "Sfoglia…", "en": "Browse…", "fr": "Parcourir…",
         "de": "Durchsuchen…", "es": "Examinar…",
+    },
+    "settings.clone.apikey": {
+        "it": "Chiave OpenRouter (LLM)", "en": "OpenRouter key (LLM)",
+        "fr": "Clé OpenRouter (LLM)", "de": "OpenRouter-Schlüssel (LLM)",
+        "es": "Clave OpenRouter (LLM)",
+    },
+    "apikey.title": {
+        "it": "Chiave OpenRouter", "en": "OpenRouter key",
+        "fr": "Clé OpenRouter", "de": "OpenRouter-Schlüssel",
+        "es": "Clave OpenRouter",
+    },
+    "apikey.intro": {
+        "it": "Serve solo per il motore LLM (OpenRouter). La chiave viene "
+              "salvata in un file per-utente protetto nella cartella dati "
+              "dell'app e non finisce mai in config.json o nei log.",
+        "en": "Needed only for the LLM engine (OpenRouter). The key is stored "
+              "in a protected per-user file in the app data folder and never "
+              "goes into config.json or the logs.",
+        "fr": "Nécessaire uniquement pour le moteur LLM (OpenRouter). La clé "
+              "est enregistrée dans un fichier par utilisateur protégé dans le "
+              "dossier de données de l'app et n'apparaît jamais dans "
+              "config.json ni les logs.",
+        "de": "Nur für die LLM-Engine (OpenRouter) nötig. Der Schlüssel wird in "
+              "einer geschützten Benutzerdatei im App-Datenordner gespeichert "
+              "und landet nie in config.json oder den Logs.",
+        "es": "Solo se necesita para el motor LLM (OpenRouter). La clave se "
+              "guarda en un archivo por usuario protegido en la carpeta de "
+              "datos de la app y nunca acaba en config.json ni en los logs.",
+    },
+    "apikey.placeholder": {
+        "it": "sk-or-…", "en": "sk-or-…", "fr": "sk-or-…",
+        "de": "sk-or-…", "es": "sk-or-…",
+    },
+    "apikey.show": {
+        "it": "Mostra", "en": "Show", "fr": "Afficher", "de": "Anzeigen",
+        "es": "Mostrar",
+    },
+    "apikey.verify": {
+        "it": "Verifica", "en": "Verify", "fr": "Vérifier", "de": "Prüfen",
+        "es": "Verificar",
+    },
+    "apikey.clear": {
+        "it": "Rimuovi", "en": "Remove", "fr": "Supprimer", "de": "Entfernen",
+        "es": "Quitar",
+    },
+    "apikey.removed": {
+        "it": "Chiave rimossa.", "en": "Key removed.",
+        "fr": "Clé supprimée.", "de": "Schlüssel entfernt.",
+        "es": "Clave eliminada.",
+    },
+    "apikey.verify_ok": {
+        "it": "✅ Chiave valida.", "en": "✅ Valid key.", "fr": "✅ Clé valide.",
+        "de": "✅ Gültiger Schlüssel.", "es": "✅ Clave válida.",
+    },
+    "apikey.verify_invalid": {
+        "it": "❌ Chiave non valida (401).", "en": "❌ Invalid key (401).",
+        "fr": "❌ Clé non valide (401).", "de": "❌ Ungültiger Schlüssel (401).",
+        "es": "❌ Clave no válida (401).",
+    },
+    "apikey.verify_missing": {
+        "it": "Inserisci una chiave.", "en": "Enter a key.",
+        "fr": "Saisissez une clé.", "de": "Gib einen Schlüssel ein.",
+        "es": "Introduce una clave.",
+    },
+    "apikey.verify_unreachable": {
+        "it": "Impossibile contattare OpenRouter (rete?).",
+        "en": "Could not reach OpenRouter (network?).",
+        "fr": "Impossible de joindre OpenRouter (réseau ?).",
+        "de": "OpenRouter nicht erreichbar (Netzwerk?).",
+        "es": "No se pudo contactar con OpenRouter (¿red?).",
+    },
+    "apikey.link": {
+        "it": "Crea o gestisci una chiave su OpenRouter",
+        "en": "Create or manage a key on OpenRouter",
+        "fr": "Créer ou gérer une clé sur OpenRouter",
+        "de": "Schlüssel auf OpenRouter erstellen oder verwalten",
+        "es": "Crear o gestionar una clave en OpenRouter",
     },
     "settings.clone.hint": {
         "it": "Il motore pdf2zh_next gira in un venv separato (Python 3.12). "

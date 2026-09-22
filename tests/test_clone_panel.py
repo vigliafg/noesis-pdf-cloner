@@ -86,11 +86,17 @@ class CollapsibleBarTests(unittest.TestCase):
         self.panel.set_collapsed(False)
         self.assertEqual(self.panel._collapse_btn.toolTip(), i18n.T("clone.bar.collapse"))
 
-    def test_export_button_emits_request(self):
+    def test_export_menu_actions_emit_signals(self):
         received = []
-        self.panel.export_requested.connect(lambda: received.append(True))
-        self.panel.btn_export.click()
-        self.assertEqual(received, [True])
+        self.panel.export_requested.connect(lambda: received.append("wizard"))
+        self.panel.export_current_requested.connect(
+            lambda: received.append("current")
+        )
+        actions = self.panel.btn_export.menu().actions()
+        self.assertEqual(len(actions), 2)
+        actions[0].trigger()
+        actions[1].trigger()
+        self.assertEqual(received, ["wizard", "current"])
 
     def test_export_tooltip_is_translated(self):
         self.assertEqual(self.panel.btn_export.toolTip(), i18n.T("clone.export.tip"))

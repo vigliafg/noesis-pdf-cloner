@@ -101,6 +101,40 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
    pannello ma fuori dal layout, nasconde l'intera barra; i 36 px tornano al viewport e
    `PdfPageView.resizeEvent → _fit_to_view` riadatta la pagina. Stato persistito in
    `config.json` (`clone_bar_collapsed`) e ripristinato all'avvio.
+8. **Export guidato (wizard a 5 passi)**: i parametri di esportazione si raccolgono in
+   `ExportWizardDialog` (File → Pagine → Lingue → Motore → Output), sul modello del
+   wizard del servizio `noesis-pdf-cloner-service` (palette scura, step numerati,
+   footer Annulla/Indietro/Avanti). Il pulsante 💾 ha un menu a tendina con
+   *procedura guidata* e *pagina corrente (rapido, senza wizard)*; il flusso di
+   traduzione/export a valle resta invariato.
+9. **Anteprime live + numerazione**: lo step Pagine mostra anteprime grandi (prima/ultima
+   della selezione) renderizzate da un documento tenuto aperto con debounce; la didascalia
+   espone numero **fisico** e **stampato** (`/PageLabels`, port di `app/pagelabels.py`).
+   Il numero fisico resta l'unico input (box "vai a pagina" e TOC invariati).
+10. **Progresso "liquido"**: overlay condiviso (`LiquidOverlay`) nel pannello destro
+    durante la traduzione on-demand (progresso stimato: asintoto ~90% → 100% al done)
+    con pulsante **Annulla** (ferma solo il thread attivo; i thread ritirati continuano
+    a riempire la cache in background), e nella finestra di progresso export, dove
+    mostra la pagina in lavorazione che avanza. Il pannello mostra una targhetta
+    "in lavorazione: pagina N" se la pagina tradotta non è quella visualizzata.
+11. **Chiave OpenRouter**: archivio per-utente `keystore.py` (file `secrets.json`
+    0600 in app-data; nessun keyring per scelta) con priorità all'env esterno;
+    campo in Impostazioni (Mostra/Verifica/Rimuovi) e prompt automatico quando si
+    sceglie l'engine LLM senza chiave. Errori "chiave assente" (`missing_key`) e
+    "chiave non valida" (401, `invalid_key`) sono codici motore tradotti in UI;
+    `gtranslate_cli` registra `llm_unauthorized` nel log eventi.
+12. **Finestra di progresso export**: log per **ogni** pagina (▶ in lavorazione →
+    ✓/✗), indicatore "Pagina X — pos di N" durante la traduzione, intervallo che
+    a fine processo passa a "Tradotte: N · Non riuscite: M", e pulsante
+    **Salva in Download** (copia il file nella cartella Download, con nome unico).
+13. **Passo "Pagine" e "Apri cartella"**: **una sola riga** con i radio
+    "Pagina corrente"/"Intervallo di pagine" e i due box `Da pagina` / `A pagina`;
+    sotto ogni header la **miniatura live** della sua pagina (corrente sotto il
+    radio, Da/A sotto i rispettivi box). Miniatura **intera** con box calcolato
+    dall'aspetto reale della pagina, contenuto in un `QScrollArea` (su schermi
+    bassi si scorre senza tagliare). Toccare uno spin passa da solo a
+    "Intervallo". "Apri cartella" apre l'**ultima destinazione** (Download dopo
+    "Salva in Download").
 
 ---
 

@@ -1,4 +1,4 @@
-"""Tests for the translated-page export UI (ExportDialog + CloneExportThread).
+"""Tests for the translated-page export UI (ExportWizardDialog + CloneExportThread).
 
 Gira headless (QT_QPA_PLATFORM=offscreen) e viene saltato se PyQt6 manca.
 Non richiede pdf2zh_next: il motore è sostituito da un fake in-memory.
@@ -89,7 +89,7 @@ class _FakeEngine:
 
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
-class ExportDialogTests(unittest.TestCase):
+class ExportWizardDialogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._app = QApplication.instance() or QApplication([])
@@ -113,21 +113,41 @@ class ExportDialogTests(unittest.TestCase):
         self, current=155, total=300, engine=None,
         engine_name="google", target="it", source="auto",
     ):
-        return self.main.ExportDialog(
+        return self.main.ExportWizardDialog(
             engine or self.engine, engine_name, target, source, current, total
         )
+
+    def test_wizard_has_five_steps(self):
+        dlg = self._dialog()
+        self.assertEqual(len(dlg.STEPS), 5)
+        self.assertEqual(dlg._step, 0)
+        self.assertEqual(dlg._stack.currentIndex(), 0)
 
     def test_default_is_current_page(self):
         dlg = self._dialog()
         self.assertTrue(dlg.is_current())
         self.assertEqual(dlg.chosen_pages(), [155])
-        self.assertFalse(dlg.translate_missing())
 
     def test_default_engine_and_target_from_current_settings(self):
         dlg = self._dialog(engine_name="bing", target="fr", source="en")
         self.assertEqual(dlg.chosen_engine(), "bing")
         self.assertEqual(dlg.chosen_target(), "fr")
         self.assertEqual(dlg.chosen_source(), "en")
+
+    def test_navigation_back_and_next(self):
+        dlg = self._dialog()
+        self.assertTrue(dlg._btn_back.isHidden())
+        dlg._go_next()
+        self.assertEqual(dlg._step, 1)
+        self.assertEqual(dlg._stack.currentIndex(), 1)
+        self.assertFalse(dlg._btn_back.isHidden())
+        dlg._go_back()
+        self.assertEqual(dlg._step, 0)
+
+    def test_last_step_button_says_start(self):
+        dlg = self._dialog()
+        dlg._set_step(len(dlg.STEPS) - 1)
+        self.assertEqual(dlg._btn_next.text(), i18n.T("export.wizard.start"))
 
     def test_changing_engine_changes_ready_count(self):
         engine = _FakeEngine(cached=[155, 156])
@@ -142,9 +162,7 @@ class ExportDialogTests(unittest.TestCase):
         )
         # Il cambio motore passa il nuovo engine alle query di cache.
         engine.query_langs.clear()
-        dlg._engine_combo.setCurrentIndex(
-            dlg._engine_combo.findData("bing")
-        )
+        dlg._engine_buttons["bing"].setChecked(True)
         self._app.processEvents()
         self.assertTrue(any(q[0] == "bing" for q in engine.query_langs))
 
@@ -169,13 +187,6 @@ class ExportDialogTests(unittest.TestCase):
         self.assertEqual(dlg.chosen_pages(), [155, 156, 157, 158])
         self.assertEqual(dlg.range_label(), "156-159")
 
-    def test_translate_missing_only_in_range_mode(self):
-        dlg = self._dialog()
-        dlg._chk_translate.setChecked(True)
-        self.assertFalse(dlg.translate_missing())  # current mode
-        dlg._rad_range.setChecked(True)
-        self.assertTrue(dlg.translate_missing())
-
     def test_translate_missing_auto_checked_for_uncached_range(self):
         # Regressione: con range non in cache e casella non spuntata non
         # partiva né il salvataggio né la traduzione.
@@ -196,7 +207,6 @@ class ExportDialogTests(unittest.TestCase):
         self.assertTrue(dlg._chk_translate.isChecked())
         dlg._chk_translate.setChecked(False)  # scelta esplicita dell'utente
         dlg._from_spin.setValue(157)
-        dlg._to_spin.setValue(159)
         self._app.processEvents()
         self.assertFalse(dlg._chk_translate.isChecked())
         self.assertFalse(dlg.translate_missing())
@@ -262,19 +272,236 @@ class ExportDialogTests(unittest.TestCase):
             i18n.T("export.ready", cached=0, total=3, missing=3),
         )
 
-    def test_radio_labels_are_visible(self):
-        # Regressione: senza regola QSS i radio ereditavano testo scuro su
-        # sfondo scuro (label invisibili).
-        self.assertIn("QRadioButton", self.main._SETTINGS_QSS)
-
     def test_default_output_format_is_merged_pdf(self):
         dlg = self._dialog()
         self.assertFalse(dlg.chosen_zip())
+        self.assertTrue(dlg.chosen_path().endswith(".pdf"))
 
     def test_zip_output_format_can_be_chosen(self):
         dlg = self._dialog()
-        dlg._rad_zip.setChecked(True)
+        dlg._btn_zip.setChecked(True)
         self.assertTrue(dlg.chosen_zip())
+        self.assertTrue(dlg.chosen_path().endswith(".zip"))
+
+    def test_default_path_uses_choices(self):
+        dlg = self._dialog(engine_name="llm", target="it")
+        path = dlg.chosen_path()
+        self.assertTrue(path.endswith("_pag156_llm_it.pdf"), path)
+
+    def test_chosen_path_keeps_explicit_path(self):
+        dlg = self._dialog()
+        custom = str(Path(self._tmp.name) / "custom.pdf")
+        dlg._path_edit.setText(custom)
+        dlg._path_touched = True
+        self.assertEqual(dlg.chosen_path(), custom)
+
+    def test_qss_styles_the_wizard_controls(self):
+        # Lo stile è ricalcato dal wizard del servizio: radio e schede motore
+        # devono avere le regole dedicate (altrimenti testo scuro su scuro).
+        self.assertIn("QRadioButton", self.main._WIZARD_QSS)
+        self.assertIn("wizCardOpt", self.main._WIZARD_QSS)
+        self.assertIn("wizStep", self.main._WIZARD_QSS)
+
+
+@unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
+class PreviewAndLiquidTests(unittest.TestCase):
+    """Anteprime dello step Pagine e overlay liquido."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        cfg = Path(self._tmp.name) / "config.json"
+        self._prev_lang = i18n.get_language()
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.set_language("it")
+        import main
+        self.main = main
+        self.engine = _FakeEngine(cached=[0])
+
+    def tearDown(self):
+        i18n.set_language(self._prev_lang)
+        self._tmp.cleanup()
+
+    def _make_pdf(self, n: int = 5) -> Path:
+        import pymupdf
+
+        path = Path(self._tmp.name) / "doc.pdf"
+        doc = pymupdf.open()
+        for _ in range(n):
+            doc.new_page()
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    def _wizard(self, pdf, current=1, total=5):
+        return self.main.ExportWizardDialog(
+            self.engine, "google", "it", "auto", current, total, pdf
+        )
+
+    def test_spin_sits_above_its_own_thumbnail(self):
+        pdf = self._make_pdf(5)
+        try:
+            import pymupdf  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        dlg = self._wizard(pdf)
+        # Lo spin "Da" sta nella colonna sinistra, lo spin "A" nella destra.
+        self.assertTrue(dlg._col_from.isAncestorOf(dlg._from_spin))
+        self.assertTrue(dlg._col_to.isAncestorOf(dlg._to_spin))
+        # Nelle colonne l'header (spin) precede il riquadro della miniatura.
+        for col, head, prev, thumb in (
+            (dlg._col_from, dlg._from_head, dlg._from_prev, dlg._thumb_first),
+            (dlg._col_to, dlg._to_head, dlg._to_prev, dlg._thumb_last),
+        ):
+            self.assertTrue(col.isAncestorOf(thumb))
+            self.assertTrue(prev.isAncestorOf(thumb))
+            lay = col.layout()
+            self.assertLess(lay.indexOf(head), lay.indexOf(prev))
+        dlg.done(0)
+
+    def test_current_and_range_boxes_share_one_row(self):
+        pdf = self._make_pdf(5)
+        dlg = self._wizard(pdf)
+        # Radio "Pagina corrente" e i due box Da/A sono sulla stessa riga.
+        for widget in (dlg._rad_current, dlg._from_head, dlg._to_head):
+            self.assertTrue(dlg._preview_row.isAncestorOf(widget))
+        # E ognuno ha la propria miniatura sotto l'header.
+        self.assertTrue(dlg._col_current.isAncestorOf(dlg._thumb_current))
+        self.assertLess(
+            dlg._col_current.layout().indexOf(dlg._rad_current),
+            dlg._col_current.layout().indexOf(dlg._cur_prev),
+        )
+        dlg.done(0)
+
+    def test_thumbnail_box_matches_page_aspect(self):
+        import pymupdf
+
+        pdf = Path(self._tmp.name) / "tall.pdf"
+        doc = pymupdf.open()
+        doc.new_page(width=200, height=400)  # rapporto 0.5
+        doc.save(str(pdf))
+        doc.close()
+        dlg = self.main.ExportWizardDialog(
+            self.engine, "google", "it", "auto", 0, 1, pdf
+        )
+        dlg._update_page_preview()
+        # In modalità "Pagina corrente" la miniatura corrente ha l'aspetto reale.
+        self.assertEqual(dlg._thumb_current.width(), 150)  # 300 * 0.5
+        self.assertEqual(dlg._thumb_current.height(), self.main._PREVIEW_H)
+        dlg.done(0)
+
+    def test_preview_shows_first_and_last_of_range(self):
+        try:
+            import pymupdf  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        pdf = self._make_pdf(5)
+        dlg = self._wizard(pdf)
+        dlg._rad_range.setChecked(True)
+        dlg._from_spin.setValue(2)
+        dlg._to_spin.setValue(4)
+        dlg._update_page_preview()
+        self.assertFalse(dlg._thumb_first.pixmap().isNull())
+        self.assertFalse(dlg._from_prev.isHidden())
+        self.assertFalse(dlg._to_prev.isHidden())
+        self.assertIn("2", dlg._cap_first.text())
+        self.assertIn("4", dlg._cap_last.text())
+        dlg.done(0)
+
+    def test_preview_single_thumbnail_for_current_page(self):
+        try:
+            import pymupdf  # noqa: F401
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        pdf = self._make_pdf(5)
+        dlg = self._wizard(pdf)
+        dlg._rad_current.setChecked(True)
+        dlg._update_page_preview()
+        self.assertTrue(dlg._from_prev.isHidden())
+        self.assertTrue(dlg._to_prev.isHidden())
+        self.assertFalse(dlg._cur_prev.isHidden())
+        dlg.done(0)
+
+    def test_preview_caption_reports_printed_label(self):
+        try:
+            import pymupdf
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        pdf = Path(self._tmp.name) / "labeled.pdf"
+        doc = pymupdf.open()
+        for _ in range(3):
+            doc.new_page()
+        try:
+            doc.set_page_labels([
+                {"startpage": 0, "prefix": "", "style": "D", "firstpagenum": 100}
+            ])
+        except Exception:  # pragma: no cover
+            self.skipTest("set_page_labels non disponibile")
+        doc.save(str(pdf))
+        doc.close()
+        dlg = self.main.ExportWizardDialog(
+            self.engine, "google", "it", "auto", 0, 3, pdf
+        )
+        dlg._update_page_preview()
+        self.assertIn("100", dlg._cap_current.text())
+        dlg.done(0)
+
+    def test_preview_is_debounced(self):
+        pdf = self._make_pdf(5)
+        dlg = self._wizard(pdf)
+        dlg._from_spin.setValue(3)
+        self.assertTrue(dlg._preview_timer.isActive())
+        dlg.done(0)
+
+    def test_liquid_overlay_progress_caps_and_finishes(self):
+        overlay = self.main.LiquidOverlay()
+        overlay.start(None, "Traduzione…", duration_ms=1000)
+        for _ in range(4):
+            overlay._tick()
+        self.assertGreater(overlay.progress(), 0.0)
+        self.assertLessEqual(overlay.progress(), 90.0)
+        overlay.finish(True)
+        self.assertEqual(overlay.progress(), 100.0)
+        overlay.stop()
+        self.assertFalse(overlay.isVisible())
+
+    def test_liquid_cancel_button_emits(self):
+        overlay = self.main.LiquidOverlay()
+        seen = []
+        overlay.cancel_requested.connect(lambda: seen.append(True))
+        overlay.start(None, "x", cancelable=True)
+        self.assertFalse(overlay._btn_cancel.isHidden())
+        overlay._btn_cancel.click()
+        self.assertEqual(seen, [True])
+        self.assertFalse(overlay._btn_cancel.isEnabled())
+        overlay.stop()
+
+    def test_liquid_without_cancel_hides_button(self):
+        overlay = self.main.LiquidOverlay()
+        overlay.start(None, "x", cancelable=False)
+        self.assertTrue(overlay._btn_cancel.isHidden())
+        overlay.stop()
+
+    def test_translate_thread_emits_cancelled(self):
+        class _CancelEngine:
+            def translate_page(self, page, engine, cancel_event=None):
+                return None
+
+            def status(self, page, engine):
+                return "cancelled"
+
+        thread = self.main.CloneTranslateThread(_CancelEngine(), 3, "google", 1)
+        got = []
+        thread.cancelled.connect(lambda *a: got.append(a))
+        thread.run()
+        self.assertEqual(got, [(1, 3, "google")])
+
+    def test_translate_thread_exposes_page(self):
+        thread = self.main.CloneTranslateThread(self.engine, 41, "google", 1)
+        self.assertEqual(thread.page(), 41)
 
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
@@ -430,6 +657,100 @@ class ExportProgressDialogTests(unittest.TestCase):
         self.assertEqual(dlg._activity_lbl.text(), "boom")
         self.assertFalse(dlg._btn_close.isHidden())
         self.assertTrue(dlg._btn_cancel.isHidden())
+
+    def test_preview_follows_translating_page(self):
+        import pymupdf
+
+        pdf = Path(self._tmp.name) / "src.pdf"
+        doc = pymupdf.open()
+        for _ in range(3):
+            doc.new_page()
+        doc.save(str(pdf))
+        doc.close()
+        dlg = self.main.ExportProgressDialog(
+            engine_label="Google", lang_label="It",
+            page_from=1, page_to=3, missing=3, cached=0, total=3,
+            pdf_path=pdf,
+        )
+        dlg.begin(2)
+        self.assertFalse(dlg._preview.isHidden())
+        self.assertIn("2", dlg._preview._caption)
+        dlg.set_completed("/tmp/out.pdf", 3, 0)
+        self.assertTrue(dlg._preview.isHidden())
+
+    def test_log_records_each_page_in_progress(self):
+        dlg = self._dialog()
+        dlg.begin(510)
+        dlg.set_translating(511, position=2)
+        text = dlg._log.toPlainText()
+        self.assertIn("510", text)
+        self.assertIn("511", text)
+
+    def test_page_label_shows_position(self):
+        dlg = self._dialog()
+        dlg.begin(510)
+        dlg.set_translating(511, position=2)
+        self.assertIn("2 di 11", dlg._page_lbl.text())
+
+    def test_completed_range_label_switches_to_translated(self):
+        dlg = self._dialog()
+        dlg.set_completed("/tmp/out.pdf", count=11, failed=0)
+        self.assertIn("Tradotte", dlg._range_lbl.text())
+
+    def test_save_to_download_copies_file(self):
+        from unittest import mock
+
+        src_dir = Path(self._tmp.name) / "src"
+        src_dir.mkdir()
+        src = src_dir / "out.pdf"
+        src.write_bytes(b"%PDF-1.4 x")
+        dlg = self._dialog()
+        dlg.set_completed(str(src), 1, 0)
+        with mock.patch.object(
+            self.main.QStandardPaths,
+            "writableLocation",
+            return_value=self._tmp.name,
+        ):
+            dlg._save_to_download()
+        self.assertTrue((Path(self._tmp.name) / "out.pdf").is_file())
+
+    def test_open_folder_uses_export_destination(self):
+        from unittest import mock
+
+        dlg = self._dialog()
+        dlg.set_completed("/tmp/export_dir/out.pdf", 1, 0)
+        opened = []
+        with mock.patch.object(
+            self.main.QDesktopServices,
+            "openUrl",
+            side_effect=lambda url: opened.append(url.toLocalFile()),
+        ):
+            dlg._open_folder()
+        self.assertEqual(opened, ["/tmp/export_dir"])
+
+    def test_open_folder_follows_download_after_save(self):
+        from unittest import mock
+
+        src_dir = Path(self._tmp.name) / "src"
+        src_dir.mkdir()
+        src = src_dir / "out.pdf"
+        src.write_bytes(b"%PDF-1.4 x")
+        dlg = self._dialog()
+        dlg.set_completed(str(src), 1, 0)
+        with mock.patch.object(
+            self.main.QStandardPaths,
+            "writableLocation",
+            return_value=self._tmp.name,
+        ):
+            dlg._save_to_download()
+        opened = []
+        with mock.patch.object(
+            self.main.QDesktopServices,
+            "openUrl",
+            side_effect=lambda url: opened.append(url.toLocalFile()),
+        ):
+            dlg._open_folder()
+        self.assertEqual(opened, [self._tmp.name])
 
     def test_cancel_emits_once_and_blocks_after_finish(self):
         dlg = self._dialog()

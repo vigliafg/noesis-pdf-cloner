@@ -14,8 +14,11 @@ nascosta) in vista dell'integrazione futura del motore Docling.
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import hashlib
+import html as _html
 import json
+import math
 import os
 import re
 import shutil
@@ -35,6 +38,9 @@ import layout_engine
 # Motore di clonazione della pagina tradotta (pdf2zh_next v2 + cache per engine).
 import clone_engine
 from clone_engine import ENGINES as CLONE_ENGINES
+
+# Archivio per-utente della chiave OpenRouter (file, cross-platform).
+import keystore
 
 # Internazionalizzazione della sola interfaccia (dict T(), nessuna dipendenza
 # Qt): le stringhe del chrome UI passano da qui, la lingua si cambia al volo
@@ -66,11 +72,11 @@ except ImportError:
 
 from PyQt6.QtCore import (
     Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
-    QLocale, QEventLoop,
+    QRect, QLocale, QEventLoop,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut,
-    QPen, QBrush, QColor, QPainter, QDesktopServices,
+    QPen, QBrush, QColor, QPainter, QDesktopServices, QLinearGradient,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -84,6 +90,8 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QTextEdit,
     QToolBar,
+    QToolButton,
+    QMenu,
     QFileDialog,
     QSpinBox,
     QRadioButton,
@@ -119,6 +127,13 @@ from PyQt6.QtWidgets import (
 HELP_URL = (
     "https://vigliafg.github.io/noesis-pdf-cloner/help/"
 )
+
+# Stima indicativa del tempo di traduzione per pagina (il desktop non ha un
+# backend di stima): usata dal box del passo "Motore" e dall'overlay liquido.
+_EXPORT_EST_MS_PER_PAGE = 45_000
+# Anteprime grandi dello step "Pagine": altezza fissa, larghezza calcolata
+# dall'aspetto reale della pagina (così l'immagine resta intera).
+_PREVIEW_H = 300
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  helpers
@@ -1596,6 +1611,24 @@ def _config_file_path() -> Path:
     return _app_data_base() / "config.json"
 
 
+def _keystore_path() -> Path:
+    """Per-user secrets file (OpenRouter key), 0600 where supported."""
+    return _app_data_base() / "secrets.json"
+
+
+# Da dove proviene la chiave OpenRouter all'avvio: "env" | "file" | "none".
+_API_KEY_SOURCE = "none"
+
+
+def _friendly_reason(message: str) -> str:
+    """Traduce i codici motore (missing_key/invalid_key) in messaggi utente."""
+    if message == "missing_key":
+        return T("clone.no_key")
+    if message == "invalid_key":
+        return T("clone.invalid_key")
+    return T("clone.failed", reason=message)
+
+
 def _detect_os_lang() -> str:
     """Best-matching UI language for the OS locale, or 'it'."""
     try:
@@ -2327,6 +2360,7 @@ class CloneTranslateThread(QThread):
 
     done = pyqtSignal(int, int, str, str)   # generation, page, engine, pdf path
     error = pyqtSignal(int, int, str, str)  # generation, page, engine, message
+    cancelled = pyqtSignal(int, int, str)   # generation, page, engine
 
     def __init__(
         self, engine: clone_engine.CloneEngine, page: int, engine_name: str,
@@ -2343,6 +2377,10 @@ class CloneTranslateThread(QThread):
         """Chiede l'interruzione del ``pdf2zh_next`` in corso."""
         self._cancel_event.set()
 
+    def page(self) -> int:
+        """Indice 0-based della pagina in traduzione."""
+        return self._page
+
     def run(self):
         try:
             path = self._engine.translate_page(
@@ -2355,6 +2393,11 @@ class CloneTranslateThread(QThread):
             return
         if path is None:
             status = self._engine.status(self._page, self._engine_name)
+            if status == "cancelled":
+                self.cancelled.emit(
+                    self._generation, self._page, self._engine_name
+                )
+                return
             message = status.split("error:", 1)[-1] if status.startswith("error:") else status
             self.error.emit(
                 self._generation, self._page, self._engine_name, message
@@ -3417,6 +3460,161 @@ class TranslatablePanel(QWidget):
         self._save_disk_cache()
 
 
+class LiquidOverlay(QWidget):
+    """Overlay con riempimento "liquido" (stile servizio) per un pixmap.
+
+    Mostra la pagina (sbiadita) e un gradiente blu che sale dal basso. Il
+    progresso è **stimato** (nessun progresso reale dal subprocess
+    ``pdf2zh_next``): sale asintoticamente verso ~90% in una durata tipica e
+    chiude a 100% al completamento. Usato sia dal pannello destro (traduzione
+    on-demand) sia dalla finestra di progresso export (pagina in lavorazione).
+    """
+
+    cancel_requested = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._pixmap: QPixmap | None = None
+        self._caption = ""
+        self._progress = 0.0
+        self._target = 90.0
+        self._duration = _EXPORT_EST_MS_PER_PAGE
+        self._elapsed = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(50)
+        self._timer.timeout.connect(self._tick)
+        self._cancelable = False
+        self._btn_cancel = QPushButton(T("settings.cancel"), self)
+        self._btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cancel.setStyleSheet(
+            "QPushButton { background: #1e2430; color: #e7ecf3;"
+            " border: 1px solid #4f8cff; border-radius: 8px;"
+            " padding: 7px 18px; font-size: 13px; }"
+            "QPushButton:hover { background: #24314a; }"
+            "QPushButton:disabled { color: #93a0b4; border-color: #2a3242; }"
+        )
+        self._btn_cancel.clicked.connect(self._on_cancel_clicked)
+        self._btn_cancel.hide()
+        self.hide()
+
+    # ── ciclo di vita ────────────────────────────────────────────────
+    def start(self, pixmap: QPixmap | None, caption: str,
+              duration_ms: int = _EXPORT_EST_MS_PER_PAGE,
+              cancelable: bool = False):
+        self._pixmap = pixmap
+        self._caption = caption or ""
+        self._progress = 0.0
+        self._target = 90.0
+        self._elapsed = 0
+        self._duration = max(1000, int(duration_ms))
+        self._cancelable = bool(cancelable)
+        self._btn_cancel.setVisible(self._cancelable)
+        self._btn_cancel.setEnabled(True)
+        self.show()
+        self.raise_()
+        self._position_cancel()
+        self.update()
+        self._timer.start()
+
+    def _on_cancel_clicked(self):
+        self._btn_cancel.setEnabled(False)
+        self._caption = T("export.progress.cancelling")
+        self.update()
+        self.cancel_requested.emit()
+
+    def set_target(self, target: float):
+        self._target = max(0.0, min(100.0, float(target)))
+
+    def finish(self, ok: bool = True):
+        self._timer.stop()
+        self._progress = 100.0 if ok else 0.0
+        self._btn_cancel.hide()
+        self.update()
+        QTimer.singleShot(200, self._hide_when_idle)
+
+    def stop(self):
+        self._timer.stop()
+        self._pixmap = None
+        self._btn_cancel.hide()
+        self.hide()
+
+    def progress(self) -> float:
+        return self._progress
+
+    def _position_cancel(self):
+        if not self._btn_cancel.isVisible():
+            return
+        self._btn_cancel.adjustSize()
+        x = (self.width() - self._btn_cancel.width()) // 2
+        y = (self.height() + 56) // 2
+        y = min(y, self.height() - self._btn_cancel.height() - 8)
+        self._btn_cancel.move(max(0, x), max(0, y))
+
+    def resizeEvent(self, event):  # noqa: N802 — override Qt
+        super().resizeEvent(event)
+        self._position_cancel()
+
+    # ── animazione ───────────────────────────────────────────────────
+    def _tick(self):
+        self._elapsed += self._timer.interval()
+        tau = self._duration / 2.5
+        self._progress = self._target * (1.0 - math.exp(-self._elapsed / tau))
+        self.update()
+
+    def _hide_when_idle(self):
+        if not self._timer.isActive():
+            self.hide()
+
+    # ── rendering ────────────────────────────────────────────────────
+    def paintEvent(self, event):  # noqa: N802 — override Qt
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect()
+        painter.fillRect(rect, QColor(11, 14, 19, 235))
+
+        if self._pixmap is not None and not self._pixmap.isNull():
+            scaled = self._pixmap.scaled(
+                rect.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (rect.width() - scaled.width()) // 2
+            y = (rect.height() - scaled.height()) // 2
+            painter.setOpacity(0.35)
+            painter.drawPixmap(x, y, scaled)
+            painter.setOpacity(1.0)
+
+        height = int(rect.height() * self._progress / 100.0)
+        if height > 0:
+            top = rect.height() - height
+            gradient = QLinearGradient(0, top, 0, rect.height())
+            gradient.setColorAt(0.0, QColor(79, 140, 255, 77))
+            gradient.setColorAt(1.0, QColor(79, 140, 255, 148))
+            painter.fillRect(QRect(0, top, rect.width(), height), gradient)
+            painter.setPen(QColor(79, 140, 255, 230))
+            painter.drawLine(0, top, rect.width(), top)
+
+        if self._caption:
+            font = painter.font()
+            font.setPointSize(13)
+            font.setBold(True)
+            painter.setFont(font)
+            flags = int(Qt.AlignmentFlag.AlignCenter) | int(
+                Qt.TextFlag.TextWordWrap
+            )
+            metrics = painter.fontMetrics()
+            box = metrics.boundingRect(
+                QRect(8, 0, max(40, rect.width() - 16), rect.height()),
+                flags,
+                self._caption,
+            )
+            box.adjust(-12, -8, 12, 8)
+            box.moveCenter(rect.center())
+            painter.fillRect(box, QColor(20, 20, 20, 230))
+            painter.setPen(QColor(255, 255, 255))
+            painter.drawText(box, flags, self._caption)
+
+
 class TranslatedPagePanel(QWidget):
     """Right panel — clone of the current page, translated, layout preserved.
 
@@ -3429,6 +3627,8 @@ class TranslatedPagePanel(QWidget):
 
     engine_changed = pyqtSignal(str)
     export_requested = pyqtSignal()
+    export_current_requested = pyqtSignal()
+    translate_cancel_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3490,17 +3690,35 @@ class TranslatedPagePanel(QWidget):
         self._lbl_status.setStyleSheet("color: #aaa; font-size: 12px;")
         bar.addWidget(self._lbl_status)
 
-        # Esporta la pagina tradotta: piccolo pulsante nella barra motori.
-        self.btn_export = QPushButton("💾")
+        # Targhetta "in lavorazione: pagina N" (traduzione di una pagina che
+        # non è quella attualmente mostrata).
+        self._lbl_working = QLabel("")
+        self._lbl_working.setStyleSheet(
+            "color: #ffcc66; font-size: 12px; font-weight: bold;"
+        )
+        bar.addWidget(self._lbl_working)
+
+        # Esporta la pagina tradotta: 💾 con menu a tendina (procedura guidata
+        # oppure esportazione rapida della sola pagina corrente).
+        self.btn_export = QToolButton()
+        self.btn_export.setText("💾")
         self.btn_export.setToolTip(T("clone.export.tip"))
         self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_export.setFlat(True)
+        self.btn_export.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.btn_export.setStyleSheet(
-            "QPushButton { background: transparent; color: #ddd; border: none;"
+            "QToolButton { background: transparent; color: #ddd; border: none;"
             " font-size: 14px; padding: 0 4px; }"
-            "QPushButton:hover { color: #fff; }"
+            "QToolButton:hover { color: #fff; }"
+            "QToolButton::menu-indicator { width: 0; }"
         )
-        self.btn_export.clicked.connect(self.export_requested.emit)
+        export_menu = QMenu(self.btn_export)
+        export_menu.addAction(
+            T("export.menu.wizard"), self.export_requested.emit
+        )
+        export_menu.addAction(
+            T("export.menu.current"), self.export_current_requested.emit
+        )
+        self.btn_export.setMenu(export_menu)
         bar.addWidget(self.btn_export)
 
         # ── Page view (read-only) wrapped in a scroll area ────────────
@@ -3523,6 +3741,13 @@ class TranslatedPagePanel(QWidget):
         """)
         self._spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spinner.hide()
+
+        # Overlay "liquido" (progresso stimato) sopra la pagina in traduzione.
+        self._liquid = LiquidOverlay(self)
+        self._liquid.cancel_requested.connect(
+            self.translate_cancel_requested.emit
+        )
+        self._liquid.hide()
 
         # ── Pulsante flottante di collasso della barra motori ─────────
         # Figlio del pannello ma FUORI dal layout: non consuma spazio, quindi
@@ -3604,10 +3829,27 @@ class TranslatedPagePanel(QWidget):
 
     def show_page(self, pixmap: QPixmap | None):
         self.hide_spinner()
+        self._liquid.stop()
         self.view.show_page(pixmap)
         self._lbl_status.setText("")
 
+    def show_translating(self, pixmap: QPixmap | None, caption: str,
+                         cancelable: bool = True):
+        """Mostra l'overlay liquido durante la traduzione della pagina."""
+        self.hide_spinner()
+        self.view.show_page(None)
+        self._lbl_status.setText(T("clone.status_running"))
+        self._liquid.setGeometry(self.scroll_area.geometry())
+        self._liquid.start(pixmap, caption, cancelable=cancelable)
+
+    def finish_translating(self, ok: bool = True):
+        self._liquid.finish(ok)
+
+    def hide_liquid(self):
+        self._liquid.stop()
+
     def show_message(self, text: str):
+        self._liquid.stop()
         self.view.show_message(text)
 
     def set_view_zoom(self, zoom: float):
@@ -3627,6 +3869,9 @@ class TranslatedPagePanel(QWidget):
     def set_status(self, text: str):
         self._lbl_status.setText(text)
 
+    def set_working(self, text: str):
+        self._lbl_working.setText(text)
+
     def _position_spinner(self):
         self._spinner.adjustSize()
         x = (self.width() - self._spinner.width()) // 2
@@ -3638,6 +3883,9 @@ class TranslatedPagePanel(QWidget):
         self._reposition_collapse_btn()
         if self._spinner.isVisible():
             self._position_spinner()
+        if self._liquid.isVisible():
+            self._liquid.setGeometry(self.scroll_area.geometry())
+            self._liquid.raise_()
 
     def retranslate(self):
         self.set_target_language(get_target_lang())
@@ -3775,6 +4023,94 @@ QPushButton:pressed { background: #666; }
 """
 
 
+class ApiKeyDialog(QDialog):
+    """Inserimento della chiave OpenRouter (cross-platform).
+
+    Usata sia dal gruppo "Motore" delle Impostazioni sia dal prompt quando si
+    sceglie l'engine LLM senza chiave. La chiave viene salvata dal chiamante
+    (MainWindow) nell'archivio per-utente.
+    """
+
+    OPENROUTER_KEYS_URL = "https://openrouter.ai/keys"
+
+    def __init__(self, parent=None, initial: str = ""):
+        super().__init__(parent)
+        self.setWindowTitle(T("apikey.title"))
+        self.setMinimumWidth(520)
+        self.setStyleSheet(_SETTINGS_QSS)
+
+        root = QVBoxLayout(self)
+        root.setSpacing(10)
+
+        intro = QLabel(T("apikey.intro"))
+        intro.setWordWrap(True)
+        root.addWidget(intro)
+
+        self._edit = QLineEdit()
+        self._edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._edit.setPlaceholderText(T("apikey.placeholder"))
+        self._edit.setText(initial or "")
+        root.addWidget(self._edit)
+
+        row = QHBoxLayout()
+        self._chk_show = QCheckBox(T("apikey.show"))
+        self._chk_show.toggled.connect(self._on_show_toggled)
+        row.addWidget(self._chk_show)
+        row.addStretch(1)
+        self._btn_verify = QPushButton(T("apikey.verify"))
+        self._btn_verify.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_verify.clicked.connect(self._on_verify)
+        row.addWidget(self._btn_verify)
+        root.addLayout(row)
+
+        self._result = QLabel("")
+        self._result.setWordWrap(True)
+        self._result.setStyleSheet("color: #999; font-size: 12px;")
+        root.addWidget(self._result)
+
+        link = QLabel(
+            f'<a href="{self.OPENROUTER_KEYS_URL}">{T("apikey.link")}</a>'
+        )
+        link.setOpenExternalLinks(True)
+        root.addWidget(link)
+
+        btns = QHBoxLayout()
+        btns.addStretch(1)
+        self._btn_ok = QPushButton(T("settings.ok"))
+        self._btn_ok.clicked.connect(self.accept)
+        self._btn_cancel = QPushButton(T("settings.cancel"))
+        self._btn_cancel.clicked.connect(self.reject)
+        for b in (self._btn_ok, self._btn_cancel):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            btns.addWidget(b)
+        root.addLayout(btns)
+
+    def value(self) -> str:
+        return self._edit.text().strip()
+
+    def _on_show_toggled(self, checked: bool):
+        self._edit.setEchoMode(
+            QLineEdit.EchoMode.Normal if checked
+            else QLineEdit.EchoMode.Password
+        )
+
+    def _on_verify(self):
+        key = self.value()
+        ok, reason = keystore.KeyStore.verify(key)
+        if ok:
+            self._result.setText(T("apikey.verify_ok"))
+            self._result.setStyleSheet("color: #7fd67f; font-size: 12px;")
+        elif reason == "invalid":
+            self._result.setText(T("apikey.verify_invalid"))
+            self._result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+        elif reason == "missing":
+            self._result.setText(T("apikey.verify_missing"))
+            self._result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+        else:
+            self._result.setText(T("apikey.verify_unreachable"))
+            self._result.setStyleSheet("color: #ffcc66; font-size: 12px;")
+
+
 class SettingsDialog(QDialog):
     """Menu di configurazione: lingua UI, lingue traduzione, preferenze.
 
@@ -3841,6 +4177,32 @@ class SettingsDialog(QDialog):
         pdf2zh_row.addWidget(self._pdf2zh_edit)
         pdf2zh_row.addWidget(self._btn_pdf2zh)
         clone_form.addRow(self._lbl_pdf2zh, pdf2zh_row)
+
+        # Chiave OpenRouter: salvata nell'archivio per-utente (non in config.json).
+        self._lbl_api = QLabel(T("settings.clone.apikey"))
+        api_row = QHBoxLayout()
+        self._api_edit = QLineEdit()
+        self._api_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._api_edit.setPlaceholderText(T("apikey.placeholder"))
+        self._api_edit.setText(keystore.KeyStore(_keystore_path()).get())
+        self._chk_api_show = QCheckBox(T("apikey.show"))
+        self._chk_api_show.toggled.connect(self._on_api_show_toggled)
+        self._btn_api_verify = QPushButton(T("apikey.verify"))
+        self._btn_api_verify.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_api_verify.clicked.connect(self._on_verify_api)
+        self._btn_api_clear = QPushButton(T("apikey.clear"))
+        self._btn_api_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_api_clear.clicked.connect(self._on_clear_api)
+        api_row.addWidget(self._api_edit)
+        api_row.addWidget(self._chk_api_show)
+        api_row.addWidget(self._btn_api_verify)
+        api_row.addWidget(self._btn_api_clear)
+        clone_form.addRow(self._lbl_api, api_row)
+        self._api_result = QLabel("")
+        self._api_result.setWordWrap(True)
+        self._api_result.setStyleSheet("color: #999; font-size: 12px;")
+        clone_form.addRow(self._api_result)
+
         self._lbl_clone_hint = QLabel(T("settings.clone.hint"))
         self._lbl_clone_hint.setWordWrap(True)
         self._lbl_clone_hint.setStyleSheet("color: #999; font-size: 12px;")
@@ -3914,6 +4276,34 @@ class SettingsDialog(QDialog):
         if path_str:
             self._pdf2zh_edit.setText(path_str)
 
+    def _on_api_show_toggled(self, checked: bool):
+        self._api_edit.setEchoMode(
+            QLineEdit.EchoMode.Normal if checked
+            else QLineEdit.EchoMode.Password
+        )
+
+    def _on_verify_api(self):
+        ok, reason = keystore.KeyStore.verify(self._api_edit.text().strip())
+        if ok:
+            self._api_result.setText(T("apikey.verify_ok"))
+            self._api_result.setStyleSheet("color: #7fd67f; font-size: 12px;")
+        elif reason == "invalid":
+            self._api_result.setText(T("apikey.verify_invalid"))
+            self._api_result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+        elif reason == "missing":
+            self._api_result.setText(T("apikey.verify_missing"))
+            self._api_result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+        else:
+            self._api_result.setText(T("apikey.verify_unreachable"))
+            self._api_result.setStyleSheet("color: #ffcc66; font-size: 12px;")
+
+    def _on_clear_api(self):
+        """Rimuove la chiave salvata (il salvataggio avviene in config col campo)."""
+        self._api_edit.clear()
+        keystore.KeyStore(_keystore_path()).clear()
+        self._api_result.setText(T("apikey.removed"))
+        self._api_result.setStyleSheet("color: #999; font-size: 12px;")
+
     def _on_clear_edits(self):
         """Ask confirmation, then wipe the current document's saved edits."""
         ret = QMessageBox.question(
@@ -3983,6 +4373,11 @@ class SettingsDialog(QDialog):
             idx = self._engine_combo.findData(cur)
             self._engine_combo.setCurrentIndex(max(0, idx))
         self._lbl_font.setText(T("settings.text.font"))
+        self._lbl_api.setText(T("settings.clone.apikey"))
+        self._chk_api_show.setText(T("apikey.show"))
+        self._btn_api_verify.setText(T("apikey.verify"))
+        self._btn_api_clear.setText(T("apikey.clear"))
+        self._api_edit.setPlaceholderText(T("apikey.placeholder"))
         self._md_check.setText(T("settings.text.md"))
         self._header_check.setText(T("settings.text.header"))
         self._save_edits_check.setText(T("settings.edits.save"))
@@ -4013,20 +4408,108 @@ class SettingsDialog(QDialog):
             "resume_last_page": bool(self._resume_check.isChecked()),
             "remember_tab": bool(self._tab_check.isChecked()),
             "pdf2zh_bin": self._pdf2zh_edit.text().strip(),
+            "openrouter_api_key": self._api_edit.text().strip(),
         }
 
 
-class ExportDialog(QDialog):
-    """Choose what to export: the current page or a page range.
+# ── Wizard di esportazione (stile del wizard del servizio) ──────────────────
+#
+# Ricalca il modal multi-step di ``noesis-pdf-cloner-service`` (palette scura,
+# 5 passi numerati, footer Annulla/Indietro/Avanti). Il desktop non ha un
+# backend di stima, quindi il box del passo "Motore" usa un tempo indicativo.
 
-    The dialog also lets the user pick the **engine** and the **output
-    language** for this export only (one-off, independent of the right
-    panel's current settings). In range mode it can optionally queue the
-    translation of pages that are not in cache yet ("translate missing pages
-    first"); ``cached_pages`` is queried with the selected engine/languages so
-    the "ready on disk" count is accurate. The dialog only collects the
-    choice; MainWindow owns the wait/translation/export.
+_WIZARD_QSS = """
+QDialog { background: #171b23; }
+QScrollArea#wizScroll, QWidget#wizViewport, QWidget#wizPane {
+    background: transparent; border: none;
+}
+QWidget#wizHeader { background: #171b23; border-bottom: 1px solid #2a3242; }
+QLabel#wizTitle { color: #e7ecf3; font-size: 14px; font-weight: 600; }
+QPushButton#wizX { background: transparent; border: 0; color: #93a0b4;
+                   font-size: 17px; padding: 0 6px; }
+QPushButton#wizX:hover { color: #e7ecf3; }
+QWidget#wizSteps { background: #1e2430; border-bottom: 1px solid #2a3242; }
+QLabel#wizStepNum {
+    color: #93a0b4; border: 1px solid #2a3242; border-radius: 10px;
+    min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px;
+    font-size: 11px;
+}
+QLabel#wizStepName { color: #93a0b4; font-size: 12px; }
+QWidget#wizStep[state="on"] QLabel#wizStepNum {
+    border-color: #4f8cff; color: #4f8cff;
+}
+QWidget#wizStep[state="on"] QLabel#wizStepName { color: #e7ecf3; }
+QWidget#wizStep[state="done"] QLabel#wizStepNum {
+    background: #35d0a5; border-color: #35d0a5; color: #06231b;
+}
+QWidget#wizStep[state="done"] QLabel#wizStepName { color: #e7ecf3; }
+QFrame#wizSep { background: #2a3242; max-height: 1px; }
+QLabel#wizH3 { color: #e7ecf3; font-size: 14px; font-weight: 600; }
+QLabel#wizHint { color: #93a0b4; font-size: 12.5px; }
+QLabel#wizThumb { background: #f7f4ee; border: 1px solid #2a3242; border-radius: 4px; }
+QLabel#wizThumbBig { background: #f7f4ee; border: 1px solid #2a3242; border-radius: 6px; }
+QWidget#wizCard {
+    background: #1e2430; border: 1px solid #2a3242; border-radius: 11px;
+}
+QPushButton#wizCardOpt {
+    background: #1e2430; border: 1px solid #2a3242; color: #e7ecf3;
+    border-radius: 11px; padding: 12px; text-align: left; font-size: 13px;
+}
+QPushButton#wizCardOpt:hover { border-color: #3a465e; }
+QPushButton#wizCardOpt:checked { border-color: #4f8cff; background: #1d3350; }
+QLabel#wizEst { background: #1e2430; border: 1px solid #2a3242; border-radius: 11px;
+                padding: 12px 14px; color: #93a0b4; font-size: 12.5px; }
+QLabel#wizSum { background: #1e2430; border: 1px solid #2a3242; border-radius: 11px;
+                padding: 14px; color: #e7ecf3; font-size: 13px; }
+QLineEdit, QComboBox, QSpinBox {
+    background: #1e2430; border: 1px solid #2a3242; color: #e7ecf3;
+    border-radius: 9px; padding: 8px 10px; font-size: 13px;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: #4f8cff; }
+QComboBox QAbstractItemView { background: #1e2430; color: #e7ecf3;
+    selection-background-color: #4f8cff; selection-color: #08152e; }
+QCheckBox, QRadioButton { color: #e7ecf3; font-size: 13px; spacing: 8px; }
+QCheckBox::indicator {
+    width: 14px; height: 14px; border: 1px solid #5a6b86;
+    border-radius: 4px; background: #1e2430;
+}
+QCheckBox::indicator:checked { background: #4f8cff; border-color: #4f8cff; }
+QRadioButton::indicator {
+    width: 13px; height: 13px; border: 1px solid #5a6b86;
+    border-radius: 7px; background: #1e2430;
+}
+QRadioButton::indicator:checked { background: #4f8cff; border-color: #4f8cff; }
+QPushButton#wizSeg {
+    background: #171b23; border: 1px solid #2a3242; color: #93a0b4;
+    border-radius: 9px; padding: 8px 14px; font-size: 12.5px;
+}
+QPushButton#wizSeg:hover { color: #e7ecf3; }
+QPushButton#wizSeg:checked { background: #1e2430; color: #e7ecf3; border-color: #4f8cff; }
+QWidget#wizFooter { background: #1e2430; border-top: 1px solid #2a3242; }
+QLabel#wizError { color: #ff6b6b; font-size: 12px; }
+QPushButton#wizGhost { background: transparent; border: 0; color: #93a0b4;
+    padding: 9px 12px; font-size: 13px; }
+QPushButton#wizGhost:hover { color: #e7ecf3; }
+QPushButton#wizBtn { background: #171b23; border: 1px solid #2a3242; color: #e7ecf3;
+    border-radius: 9px; padding: 9px 16px; font-size: 13px; }
+QPushButton#wizBtn:hover { border-color: #4f8cff; }
+QPushButton#wizPrimary { background: #4f8cff; border: 1px solid #4f8cff;
+    color: #08152e; border-radius: 9px; padding: 9px 16px; font-size: 13px;
+    font-weight: 700; }
+QPushButton#wizPrimary:hover { background: #6ba0ff; }
+"""
+
+
+class ExportWizardDialog(QDialog):
+    """Wizard multi-step per i parametri di esportazione.
+
+    Stile e flusso sono ricalcati dal wizard del servizio
+    (``noesis-pdf-cloner-service``): cinque passi numerati (File, Pagine,
+    Lingue, Motore, Output), footer Annulla/Indietro/Avanti. Il dialogo
+    raccoglie soltanto i parametri; MainWindow esegue traduzione ed export.
     """
+
+    STEPS = ("file", "pages", "langs", "engine", "output")
 
     def __init__(
         self,
@@ -4036,6 +4519,7 @@ class ExportDialog(QDialog):
         source_lang: str,
         current_page: int,
         page_count: int,
+        pdf_path=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -4045,32 +4529,255 @@ class ExportDialog(QDialog):
         self._source_lang = source_lang
         self._page_count = max(int(page_count), 1)
         self._current_page = min(max(int(current_page), 0), self._page_count - 1)
+        self._pdf_path = Path(pdf_path) if pdf_path else None
+        self._step = 0
+        self._translate_touched = False
+        self._path_touched = False
 
-        self.setWindowTitle(T("export.title"))
-        self.setMinimumWidth(460)
-        self.setStyleSheet(_SETTINGS_QSS)
+        # Etichette /PageLabels (numero stampato) e anteprime.
+        self._labels: list[str] = []
+        if self._pdf_path is not None and _has_pymupdf:
+            try:
+                self._labels = clone_engine.CloneEngine.page_labels(self._pdf_path)
+            except Exception:
+                self._labels = []
+        self._preview_doc = None
+        self._preview_cache: dict[tuple[int, int], QPixmap] = {}
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(150)
+        self._preview_timer.timeout.connect(self._update_page_preview)
+
+        self.setWindowTitle(T("export.wizard.title"))
+        self.setMinimumSize(820, 700)
+        self.setStyleSheet(_WIZARD_QSS)
 
         root = QVBoxLayout(self)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._build_header())
+        root.addWidget(self._build_steps_bar())
 
-        self._mode_box = QGroupBox(T("export.title"))
-        mode_lay = QVBoxLayout(self._mode_box)
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._build_step_file())
+        self._stack.addWidget(self._build_step_pages())
+        self._stack.addWidget(self._build_step_langs())
+        self._stack.addWidget(self._build_step_engine())
+        self._stack.addWidget(self._build_step_output())
+        root.addWidget(self._stack, 1)
+        root.addWidget(self._build_footer())
+
+        # Ricalcolo globale quando cambia una scelta che incide su
+        # cache/stima/nome file.
+        for btn in self._engine_buttons.values():
+            btn.toggled.connect(self._refresh_all)
+        self._src_combo.currentIndexChanged.connect(self._refresh_all)
+        self._dst_combo.currentIndexChanged.connect(self._refresh_all)
+
+        self._set_step(0)
+
+    # ── costruzione dei pezzi ─────────────────────────────────────────
+
+    def _build_header(self) -> QWidget:
+        header = QWidget()
+        header.setObjectName("wizHeader")
+        lay = QHBoxLayout(header)
+        lay.setContentsMargins(18, 14, 14, 14)
+        title = QLabel(T("export.wizard.title"))
+        title.setObjectName("wizTitle")
+        lay.addWidget(title)
+        lay.addStretch(1)
+        close = QPushButton("✕")
+        close.setObjectName("wizX")
+        close.setCursor(Qt.CursorShape.PointingHandCursor)
+        close.clicked.connect(self.reject)
+        lay.addWidget(close)
+        return header
+
+    def _build_steps_bar(self) -> QWidget:
+        self._steps_bar = QWidget()
+        self._steps_bar.setObjectName("wizSteps")
+        self._steps_layout = QHBoxLayout(self._steps_bar)
+        self._steps_layout.setContentsMargins(18, 12, 18, 12)
+        self._steps_layout.setSpacing(8)
+        return self._steps_bar
+
+    def _render_steps(self):
+        while self._steps_layout.count():
+            item = self._steps_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for index, key in enumerate(self.STEPS):
+            if index:
+                sep = QFrame()
+                sep.setObjectName("wizSep")
+                sep.setFixedSize(16, 1)
+                self._steps_layout.addWidget(sep)
+            item = QWidget()
+            item.setObjectName("wizStep")
+            lay = QHBoxLayout(item)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lay.setSpacing(7)
+            num = QLabel(str(index + 1))
+            num.setObjectName("wizStepNum")
+            num.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            name = QLabel(T(f"export.wizard.step.{key}"))
+            name.setObjectName("wizStepName")
+            lay.addWidget(num)
+            lay.addWidget(name)
+            state = "on" if index == self._step else ("done" if index < self._step else "off")
+            item.setProperty("state", state)
+            item.style().unpolish(item)
+            item.style().polish(item)
+            self._steps_layout.addWidget(item)
+        self._steps_layout.addStretch(1)
+
+    def _build_step_file(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(10)
+        title = QLabel(T("export.wizard.file.title"))
+        title.setObjectName("wizH3")
+        hint = QLabel(T("export.wizard.file.hint"))
+        hint.setObjectName("wizHint")
+        hint.setWordWrap(True)
+        lay.addWidget(title)
+        lay.addWidget(hint)
+
+        self._file_card = QWidget()
+        self._file_card.setObjectName("wizCard")
+        card_lay = QHBoxLayout(self._file_card)
+        card_lay.setContentsMargins(14, 14, 14, 14)
+        card_lay.setSpacing(14)
+        self._thumb = QLabel()
+        self._thumb.setObjectName("wizThumb")
+        self._thumb.setFixedSize(94, 124)
+        self._thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_lay.addWidget(self._thumb)
+        self._file_info = QLabel("")
+        self._file_info.setWordWrap(True)
+        card_lay.addWidget(self._file_info, 1)
+        lay.addWidget(self._file_card)
+        lay.addStretch(1)
+
+        self._refresh_file_step()
+        return w
+
+    def _refresh_file_step(self):
+        if self._pdf_path is None:
+            self._file_info.setText(T("export.wizard.file.none"))
+            return
+        try:
+            size = self._pdf_path.stat().st_size / 1048576.0
+        except OSError:
+            size = 0.0
+        self._file_info.setText(
+            T(
+                "export.wizard.file.info",
+                name=self._pdf_path.name,
+                pages=self._page_count,
+                size=f"{size:.1f}",
+            )
+        )
+        pix = self._render_source_thumb(self._current_page)
+        if pix is not None:
+            self._thumb.setPixmap(pix)
+
+    def _ensure_preview_doc(self):
+        """Apre (una volta) il PDF per le anteprime e lo tiene aperto."""
+        if self._preview_doc is not None:
+            return self._preview_doc
+        if not _has_pymupdf or self._pdf_path is None:
+            return None
+        try:
+            self._preview_doc = pymupdf.open(str(self._pdf_path))
+        except Exception:
+            self._preview_doc = None
+        return self._preview_doc
+
+    def _page_pixmap(self, page: int, width: int):
+        """Render della pagina ``page`` (0-based) larga ``width`` px.
+
+        Usa il documento tenuto aperto e una piccola cache; renderizza alla
+        ``devicePixelRatio`` per restare nitido su schermi HiDPI.
+        """
+        doc = self._ensure_preview_doc()
+        if doc is None or len(doc) == 0:
+            return None
+        index = min(max(int(page), 0), len(doc) - 1)
+        try:
+            ratio = float(self.devicePixelRatioF())
+        except Exception:
+            ratio = 1.0
+        px_width = max(1, int(round(width * ratio)))
+        key = (index, px_width)
+        cached = self._preview_cache.get(key)
+        if cached is not None:
+            return cached
+        try:
+            pdf_page = doc[index]
+            zoom = max(0.05, px_width / max(pdf_page.rect.width, 1.0))
+            pix = pdf_page.get_pixmap(
+                matrix=pymupdf.Matrix(zoom, zoom), alpha=False
+            )
+            img = QImage(
+                pix.samples, pix.width, pix.height, pix.stride,
+                QImage.Format.Format_RGB888,
+            )
+            result = QPixmap.fromImage(img)
+        except Exception:
+            return None
+        self._preview_cache[key] = result
+        while len(self._preview_cache) > 6:
+            self._preview_cache.pop(next(iter(self._preview_cache)))
+        return result
+
+    def _render_source_thumb(self, page: int, width: int = 94):
+        return self._page_pixmap(page, width)
+
+    def _close_preview_doc(self):
+        if self._preview_doc is not None:
+            with contextlib.suppress(Exception):
+                self._preview_doc.close()
+            self._preview_doc = None
+
+    def closeEvent(self, event):  # noqa: N802 — override Qt
+        self._close_preview_doc()
+        super().closeEvent(event)
+
+    def done(self, result):  # noqa: N802 — override Qt
+        self._close_preview_doc()
+        super().done(result)
+
+    def _build_step_pages(self) -> QWidget:
+        pane = QWidget()
+        pane.setObjectName("wizPane")
+        lay = QVBoxLayout(pane)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(8)
+        title = QLabel(T("export.wizard.pages.title"))
+        title.setObjectName("wizH3")
+        hint = QLabel(T("export.wizard.pages.hint"))
+        hint.setObjectName("wizHint")
+        hint.setWordWrap(True)
+        numbering = QLabel(T("export.wizard.pages.numbering"))
+        numbering.setObjectName("wizHint")
+        numbering.setWordWrap(True)
+        lay.addWidget(title)
+        lay.addWidget(hint)
+        lay.addWidget(numbering)
 
         self._rad_current = QRadioButton(T("export.mode.current"))
         self._rad_range = QRadioButton(T("export.mode.range"))
         self._rad_current.setChecked(True)
-        self._rad_current.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._rad_range.setCursor(Qt.CursorShape.PointingHandCursor)
+        for rb in (self._rad_current, self._rad_range):
+            rb.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mode_group = QButtonGroup(self)
         self._mode_group.addButton(self._rad_current)
         self._mode_group.addButton(self._rad_range)
-        mode_lay.addWidget(self._rad_current)
-        mode_lay.addWidget(self._rad_range)
 
-        # Range inputs (visible only in range mode).
-        self._range_widget = QWidget()
-        range_form = QFormLayout(self._range_widget)
-        range_form.setContentsMargins(20, 0, 0, 0)
         self._lbl_from = QLabel(T("export.range.from"))
         self._lbl_to = QLabel(T("export.range.to"))
         self._from_spin = QSpinBox()
@@ -4078,130 +4785,580 @@ class ExportDialog(QDialog):
         for sp in (self._from_spin, self._to_spin):
             sp.setRange(1, self._page_count)
             sp.setValue(self._current_page + 1)
-        range_form.addRow(self._lbl_from, self._from_spin)
-        range_form.addRow(self._lbl_to, self._to_spin)
-        mode_lay.addWidget(self._range_widget)
+        self._from_label = QLabel("")
+        self._from_label.setObjectName("wizHint")
+        self._to_label = QLabel("")
+        self._to_label.setObjectName("wizHint")
+
+        # ── UNA riga: "Pagina corrente" + i due box Da/A ────────────────
+        # Sotto ogni header c'è la miniatura live della sua pagina.
+        self._preview_row = QWidget()
+        row = QHBoxLayout(self._preview_row)
+        row.setContentsMargins(0, 6, 0, 0)
+        row.setSpacing(18)
+
+        # Colonna "Pagina corrente": radio come header, miniatura sotto.
+        self._col_current = QWidget()
+        cc = QVBoxLayout(self._col_current)
+        cc.setContentsMargins(0, 0, 0, 0)
+        cc.setSpacing(6)
+        self._cur_prev = QWidget()
+        cpp = QVBoxLayout(self._cur_prev)
+        cpp.setContentsMargins(0, 0, 0, 0)
+        cpp.setSpacing(6)
+        self._thumb_current = QLabel()
+        self._thumb_current.setObjectName("wizThumbBig")
+        self._thumb_current.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cap_current = QLabel("")
+        self._cap_current.setObjectName("wizHint")
+        self._cap_current.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cap_current.setWordWrap(True)
+        cpp.addWidget(self._thumb_current, 0, Qt.AlignmentFlag.AlignLeft)
+        cpp.addWidget(self._cap_current)
+        cc.addWidget(self._rad_current)
+        cc.addWidget(self._cur_prev)
+
+        # Colonna "Da pagina": radio intervallo + label + spin, miniatura sotto.
+        self._col_from = QWidget()
+        cf = QVBoxLayout(self._col_from)
+        cf.setContentsMargins(0, 0, 0, 0)
+        cf.setSpacing(6)
+        self._from_head = QWidget()
+        fh = QHBoxLayout(self._from_head)
+        fh.setContentsMargins(0, 0, 0, 0)
+        fh.setSpacing(8)
+        fh.addWidget(self._rad_range)
+        fh.addWidget(self._lbl_from)
+        fh.addWidget(self._from_spin)
+        fh.addWidget(self._from_label)
+        fh.addStretch(1)
+        self._from_prev = QWidget()
+        fp = QVBoxLayout(self._from_prev)
+        fp.setContentsMargins(0, 0, 0, 0)
+        fp.setSpacing(6)
+        self._thumb_first = QLabel()
+        self._thumb_first.setObjectName("wizThumbBig")
+        self._thumb_first.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cap_first = QLabel("")
+        self._cap_first.setObjectName("wizHint")
+        self._cap_first.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cap_first.setWordWrap(True)
+        fp.addWidget(self._thumb_first, 0, Qt.AlignmentFlag.AlignLeft)
+        fp.addWidget(self._cap_first)
+        cf.addWidget(self._from_head)
+        cf.addWidget(self._from_prev)
+
+        # Colonna "A pagina".
+        self._col_to = QWidget()
+        ct = QVBoxLayout(self._col_to)
+        ct.setContentsMargins(0, 0, 0, 0)
+        ct.setSpacing(6)
+        self._to_head = QWidget()
+        th = QHBoxLayout(self._to_head)
+        th.setContentsMargins(0, 0, 0, 0)
+        th.setSpacing(8)
+        th.addWidget(self._lbl_to)
+        th.addWidget(self._to_spin)
+        th.addWidget(self._to_label)
+        th.addStretch(1)
+        self._to_prev = QWidget()
+        tp = QVBoxLayout(self._to_prev)
+        tp.setContentsMargins(0, 0, 0, 0)
+        tp.setSpacing(6)
+        self._thumb_last = QLabel()
+        self._thumb_last.setObjectName("wizThumbBig")
+        self._thumb_last.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cap_last = QLabel("")
+        self._cap_last.setObjectName("wizHint")
+        self._cap_last.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._cap_last.setWordWrap(True)
+        tp.addWidget(self._thumb_last, 0, Qt.AlignmentFlag.AlignLeft)
+        tp.addWidget(self._cap_last)
+        ct.addWidget(self._to_head)
+        ct.addWidget(self._to_prev)
+
+        row.addWidget(self._col_current, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self._col_from, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self._col_to, 0, Qt.AlignmentFlag.AlignTop)
+        row.addStretch(1)
+        lay.addWidget(self._preview_row)
 
         self._ready_lbl = QLabel("")
-        self._ready_lbl.setStyleSheet("color: #999; font-size: 12px;")
-        self._ready_lbl.setContentsMargins(20, 0, 0, 0)
-        mode_lay.addWidget(self._ready_lbl)
+        self._ready_lbl.setObjectName("wizHint")
+        self._ready_lbl.setContentsMargins(2, 4, 0, 0)
+        self._ready_lbl.setWordWrap(True)
+        lay.addWidget(self._ready_lbl)
 
-        self._chk_translate = QCheckBox(T("export.translate_missing"))
-        self._chk_translate.setChecked(False)
-        self._chk_translate.setContentsMargins(20, 0, 0, 0)
-        # Finché l'utente non tocca la casella, viene attivata da sola quando
-        # l'intervallo scelto contiene pagine non ancora tradotte (altrimenti
-        # con range non in cache non partirebbe né salvataggio né traduzione).
-        self._translate_touched = False
-        self._chk_translate.toggled.connect(self._on_translate_toggled)
-        mode_lay.addWidget(self._chk_translate)
+        self._preview_note = QLabel("")
+        self._preview_note.setObjectName("wizHint")
+        self._preview_note.setWordWrap(True)
+        lay.addWidget(self._preview_note)
+        lay.addStretch(1)
 
-        root.addWidget(self._mode_box)
+        self._rad_range.toggled.connect(self._on_mode_changed)
+        self._from_spin.valueChanged.connect(self._on_pages_value_changed)
+        self._to_spin.valueChanged.connect(self._on_pages_value_changed)
 
-        # ── Traduzione: motore + lingua di uscita (solo per questo export) ──
-        self._trans_box = QGroupBox(T("export.group.translation"))
-        trans_form = QFormLayout(self._trans_box)
-        self._lbl_engine = QLabel(T("settings.translation.engine"))
-        self._engine_combo = QComboBox()
-        for code in CLONE_ENGINES:
-            self._engine_combo.addItem(T(f"engine.option.{code}"), code)
-        eidx = self._engine_combo.findData(engine_name)
-        self._engine_combo.setCurrentIndex(max(0, eidx))
-        trans_form.addRow(self._lbl_engine, self._engine_combo)
+        # Rete di sicurezza: su schermi bassi si scorre, ma ogni pagina resta
+        # INTERA (la miniatura ha l'aspetto reale della pagina).
+        scroll = QScrollArea()
+        scroll.setObjectName("wizScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        scroll.viewport().setObjectName("wizViewport")
+        scroll.setWidget(pane)
+        return scroll
 
-        self._lbl_dst = QLabel(T("settings.lang.target"))
+    def _build_step_langs(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(10)
+        title = QLabel(T("export.wizard.langs.title"))
+        title.setObjectName("wizH3")
+        hint = QLabel(T("export.wizard.langs.hint"))
+        hint.setObjectName("wizHint")
+        hint.setWordWrap(True)
+        lay.addWidget(title)
+        lay.addWidget(hint)
+
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        src_col = QVBoxLayout()
+        src_col.setSpacing(6)
+        src_col.addWidget(QLabel(T("settings.lang.source")))
+        self._src_combo = QComboBox()
+        for code, (flag, name) in TRANSLATION_LANGUAGES.items():
+            self._src_combo.addItem(f"{flag} {name}", code)
+        sidx = self._src_combo.findData(self._source_lang)
+        self._src_combo.setCurrentIndex(max(0, sidx))
+        src_col.addWidget(self._src_combo)
+        row.addLayout(src_col, 1)
+
+        dst_col = QVBoxLayout()
+        dst_col.setSpacing(6)
+        dst_col.addWidget(QLabel(T("settings.lang.target")))
         self._dst_combo = QComboBox()
         for code, (flag, name) in TRANSLATION_LANGUAGES.items():
             if code == "auto":
                 continue
             self._dst_combo.addItem(f"{flag} {name}", code)
-        didx = self._dst_combo.findData(target_lang)
+        didx = self._dst_combo.findData(self._target_lang)
         self._dst_combo.setCurrentIndex(max(0, didx))
-        trans_form.addRow(self._lbl_dst, self._dst_combo)
-        root.addWidget(self._trans_box)
+        dst_col.addWidget(self._dst_combo)
+        row.addLayout(dst_col, 1)
+        lay.addLayout(row)
+        lay.addStretch(1)
+        return w
 
-        # ── Formato di uscita: PDF unito o pagine singole in ZIP ───────────
-        self._format_box = QGroupBox(T("export.group.format"))
-        format_lay = QVBoxLayout(self._format_box)
-        self._rad_merged = QRadioButton(T("export.format.merged"))
-        self._rad_zip = QRadioButton(T("export.format.zip"))
-        self._rad_merged.setChecked(True)
-        for rb in (self._rad_merged, self._rad_zip):
-            rb.setCursor(Qt.CursorShape.PointingHandCursor)
+    def _build_step_engine(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(10)
+        title = QLabel(T("export.wizard.engine.title"))
+        title.setObjectName("wizH3")
+        hint = QLabel(T("export.wizard.engine.hint"))
+        hint.setObjectName("wizHint")
+        hint.setWordWrap(True)
+        lay.addWidget(title)
+        lay.addWidget(hint)
+
+        self._engine_group = QButtonGroup(self)
+        self._engine_group.setExclusive(True)
+        self._engine_buttons: dict[str, QPushButton] = {}
+        for code in CLONE_ENGINES:
+            btn = QPushButton(T(f"engine.option.{code}"))
+            btn.setObjectName("wizCardOpt")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setProperty("code", code)
+            if code == self._engine_name:
+                btn.setChecked(True)
+            self._engine_group.addButton(btn)
+            self._engine_buttons[code] = btn
+            lay.addWidget(btn)
+        if not any(b.isChecked() for b in self._engine_buttons.values()):
+            first = next(iter(self._engine_buttons.values()))
+            first.setChecked(True)
+
+        self._est_lbl = QLabel("")
+        self._est_lbl.setObjectName("wizEst")
+        self._est_lbl.setWordWrap(True)
+        lay.addWidget(self._est_lbl)
+
+        self._chk_translate = QCheckBox(T("export.translate_missing"))
+        self._chk_translate.setChecked(False)
+        # Finché l'utente non tocca la casella, viene attivata da sola quando
+        # le pagine scelte non sono tutte in cache.
+        self._translate_touched = False
+        self._chk_translate.toggled.connect(self._on_translate_toggled)
+        lay.addWidget(self._chk_translate)
+        lay.addStretch(1)
+        return w
+
+    def _build_step_output(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(10)
+        title = QLabel(T("export.wizard.output.title"))
+        title.setObjectName("wizH3")
+        hint = QLabel(T("export.wizard.output.hint"))
+        hint.setObjectName("wizHint")
+        hint.setWordWrap(True)
+        lay.addWidget(title)
+        lay.addWidget(hint)
+
+        fmt_lbl = QLabel(T("export.group.format"))
+        fmt_lbl.setObjectName("wizHint")
+        lay.addWidget(fmt_lbl)
+        seg = QHBoxLayout()
+        seg.setSpacing(8)
+        self._btn_merged = QPushButton(T("export.format.merged"))
+        self._btn_zip = QPushButton(T("export.format.zip"))
         self._format_group = QButtonGroup(self)
-        self._format_group.addButton(self._rad_merged)
-        self._format_group.addButton(self._rad_zip)
-        format_lay.addWidget(self._rad_merged)
-        format_lay.addWidget(self._rad_zip)
-        root.addWidget(self._format_box)
+        self._format_group.setExclusive(True)
+        for btn in (self._btn_merged, self._btn_zip):
+            btn.setObjectName("wizSeg")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._format_group.addButton(btn)
+            seg.addWidget(btn)
+        self._btn_merged.setChecked(True)
+        seg.addStretch(1)
+        lay.addLayout(seg)
 
-        btns = QHBoxLayout()
-        btns.addStretch(1)
-        self._btn_ok = QPushButton(T("settings.ok"))
-        self._btn_ok.clicked.connect(self.accept)
+        path_lbl = QLabel(T("export.wizard.output.path"))
+        path_lbl.setObjectName("wizHint")
+        lay.addWidget(path_lbl)
+        prow = QHBoxLayout()
+        prow.setSpacing(8)
+        self._path_edit = QLineEdit()
+        self._path_edit.textEdited.connect(self._on_path_edited)
+        browse = QPushButton(T("export.wizard.output.browse"))
+        browse.setObjectName("wizBtn")
+        browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        browse.clicked.connect(self._browse)
+        prow.addWidget(self._path_edit, 1)
+        prow.addWidget(browse)
+        lay.addLayout(prow)
+
+        self._summary = QLabel("")
+        self._summary.setObjectName("wizSum")
+        self._summary.setWordWrap(True)
+        self._summary.setTextFormat(Qt.TextFormat.RichText)
+        lay.addWidget(self._summary)
+        lay.addStretch(1)
+
+        self._btn_merged.toggled.connect(self._on_output_changed)
+        self._btn_zip.toggled.connect(self._on_output_changed)
+        self._update_path()
+        return w
+
+    def _build_footer(self) -> QWidget:
+        footer = QWidget()
+        footer.setObjectName("wizFooter")
+        lay = QHBoxLayout(footer)
+        lay.setContentsMargins(18, 12, 18, 12)
+        lay.setSpacing(10)
+        self._lbl_error = QLabel("")
+        self._lbl_error.setObjectName("wizError")
+        lay.addWidget(self._lbl_error)
+        lay.addStretch(1)
         self._btn_cancel = QPushButton(T("settings.cancel"))
+        self._btn_cancel.setObjectName("wizGhost")
         self._btn_cancel.clicked.connect(self.reject)
-        for b in (self._btn_ok, self._btn_cancel):
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            btns.addWidget(b)
-        root.addLayout(btns)
+        self._btn_back = QPushButton(T("export.wizard.back"))
+        self._btn_back.setObjectName("wizBtn")
+        self._btn_back.clicked.connect(self._go_back)
+        self._btn_next = QPushButton(T("export.wizard.next"))
+        self._btn_next.setObjectName("wizPrimary")
+        self._btn_next.clicked.connect(self._go_next)
+        for btn in (self._btn_cancel, self._btn_back, self._btn_next):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            lay.addWidget(btn)
+        return footer
 
-        self._rad_range.toggled.connect(self._update_mode)
-        self._from_spin.valueChanged.connect(self._on_spin_changed)
-        self._to_spin.valueChanged.connect(self._on_spin_changed)
-        self._engine_combo.currentIndexChanged.connect(self._update_ready)
-        self._dst_combo.currentIndexChanged.connect(self._update_ready)
-        self._update_mode()
+    # ── navigazione ───────────────────────────────────────────────────
 
-    # ── stato del dialogo ─────────────────────────────────────────────
+    def _set_step(self, step: int):
+        self._step = max(0, min(int(step), len(self.STEPS) - 1))
+        self._stack.setCurrentIndex(self._step)
+        self._render_steps()
+        self._lbl_error.setText("")
+        self._btn_back.setVisible(self._step > 0)
+        self._btn_next.setText(
+            T("export.wizard.start")
+            if self._step == len(self.STEPS) - 1
+            else T("export.wizard.next")
+        )
+        if self._step == 0:
+            self._refresh_file_step()
+        elif self._step == 1:
+            self._update_page_preview()
+        self._refresh_all()
 
-    def _update_mode(self):
-        range_on = self._rad_range.isChecked()
-        self._range_widget.setVisible(range_on)
-        self._ready_lbl.setVisible(range_on)
-        self._chk_translate.setVisible(range_on)
-        self._update_ready()
+    def _go_back(self):
+        self._set_step(self._step - 1)
 
-    def _on_spin_changed(self):
-        # I due campi sono indipendenti: NON si forza l'altro campo. Se
-        # l'utente inserisce "da" > "a" l'intervallo viene normalizzato in
-        # ``_range_pages`` (min/max) al momento dell'uso.
-        self._update_ready()
+    def _go_next(self):
+        if self._step == len(self.STEPS) - 1:
+            if not self._path_edit.text().strip():
+                self._path_edit.setText(self._default_path())
+            self.accept()
+            return
+        self._set_step(self._step + 1)
+
+    # ── stato / ricalcoli ─────────────────────────────────────────────
+
+    def _on_mode_changed(self, *_):
+        # La riga resta la stessa: cambia solo quale miniatura è visibile.
+        self._refresh_all()
+
+    def _on_pages_value_changed(self, *_):
+        # Toccare uno spin significa voler esportare un intervallo.
+        if not self._rad_range.isChecked():
+            self._rad_range.setChecked(True)  # → _on_mode_changed → refresh
+            return
+        self._refresh_all()
+
+    def _page_label(self, page: int) -> str:
+        """Etichetta stampata (/PageLabels) della pagina 0-based, o numero fisico."""
+        if 0 <= page < len(self._labels):
+            return self._labels[page]
+        return str(page + 1)
+
+    def _caption(self, page: int) -> str:
+        physical = page + 1
+        label = self._page_label(page)
+        if label and label != str(physical):
+            return T("export.wizard.preview.caption", n=physical, label=label)
+        return T("export.wizard.preview.caption_plain", n=physical)
+
+    def _set_thumb(self, label: QLabel, pix: QPixmap | None):
+        if pix is None:
+            label.clear()
+            return
+        label.setPixmap(
+            pix.scaled(
+                label.width(),
+                label.height(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def _update_numbering_hints(self):
+        """Etichette live accanto agli spin + nota quando la numerazione differisce."""
+        if not hasattr(self, "_from_label"):
+            return
+        pages = self.chosen_pages()
+        lo, hi = min(pages), max(pages)
+
+        def _note(page: int) -> str:
+            label = self._page_label(page)
+            if label and label != str(page + 1):
+                return T("export.wizard.preview.spin_label", label=label)
+            return ""
+
+        if self.is_current():
+            # In "Pagina corrente" gli spin non rappresentano la selezione.
+            self._from_label.setText("")
+            self._to_label.setText("")
+        else:
+            self._from_label.setText(_note(lo))
+            self._to_label.setText(_note(hi))
+        differs = any(
+            self._page_label(p) and self._page_label(p) != str(p + 1)
+            for p in pages
+        )
+        self._preview_note.setText(
+            T("export.wizard.preview.label_diff") if differs else ""
+        )
+
+    def _page_box(self, page: int) -> tuple[int, int]:
+        """Box miniatura (larghezza, altezza) con l'aspetto reale della pagina.
+
+        La larghezza deriva dall'altezza fissa ``_PREVIEW_H`` e dal rapporto
+        della pagina, così l'immagine riempie il box e resta **intera**.
+        """
+        height = _PREVIEW_H
+        doc = self._ensure_preview_doc()
+        width = int(round(height * 0.707))  # A4 di fallback
+        if doc is not None and len(doc) > 0:
+            try:
+                rect = doc[min(max(int(page), 0), len(doc) - 1)].rect
+                width = int(round(height * rect.width / max(rect.height, 1.0)))
+            except Exception:
+                pass
+        width = max(120, min(width, 430))
+        return (width, height)
+
+    def _paint_thumb(self, thumb: QLabel, cap: QLabel, page: int):
+        """Dimensiona il box sull'aspetto della pagina e disegna miniatura+didascalia."""
+        width, height = self._page_box(page)
+        thumb.setFixedSize(width, height)
+        cap.setFixedWidth(width)
+        self._set_thumb(
+            thumb, self._page_pixmap(page, width) if _has_pymupdf else None
+        )
+        cap.setText(
+            self._caption(page) if _has_pymupdf
+            else T("export.wizard.preview.none")
+        )
+
+    def _update_page_preview(self):
+        """Anteprime grandi: la corrente sotto il suo radio, Da/A sotto i box."""
+        if not hasattr(self, "_thumb_first"):
+            return
+        current = self._rad_current.isChecked()
+        self._cur_prev.setVisible(current)
+        self._from_prev.setVisible(not current)
+        self._to_prev.setVisible(not current)
+
+        if current:
+            self._paint_thumb(
+                self._thumb_current, self._cap_current, self._current_page
+            )
+            return
+
+        pages = self.chosen_pages()
+        first, last = min(pages), max(pages)
+        self._paint_thumb(self._thumb_first, self._cap_first, first)
+        self._paint_thumb(self._thumb_last, self._cap_last, last)
+
+    def _on_translate_toggled(self, _checked: bool):
+        self._translate_touched = True
+
+    def _on_path_edited(self, _text: str):
+        self._path_touched = True
+
+    def _on_output_changed(self, *_):
+        self._update_path()
+        self._refresh_all()
 
     def _range_pages(self) -> tuple[int, int]:
         a = self._from_spin.value() - 1
         b = self._to_spin.value() - 1
         return (min(a, b), max(a, b))
 
-    def _on_translate_toggled(self, _checked: bool):
-        self._translate_touched = True
+    def _chosen_langs(self) -> tuple[str, str]:
+        src = self._src_combo.currentData() if hasattr(self, "_src_combo") else None
+        dst = self._dst_combo.currentData() if hasattr(self, "_dst_combo") else None
+        return (src or self._source_lang, dst or self._target_lang)
 
-    def _update_ready(self):
-        if not self._rad_range.isChecked():
-            return
-        a, b = self._range_pages()
+    def _cache_counts(self) -> tuple[int, int, int]:
+        """(cached, total, missing) per le pagine e le lingue scelte."""
+        pages = self.chosen_pages()
+        lo, hi = min(pages), max(pages)
+        source, target = self._chosen_langs()
         cached = self._engine.cached_pages(
-            a, b, self.chosen_engine(), self._source_lang, self.chosen_target()
+            lo, hi, self.chosen_engine(), source, target
         )
-        total = b - a + 1
-        missing = total - len(cached)
-        self._ready_lbl.setText(
-            T(
-                "export.ready",
-                cached=len(cached),
-                total=total,
-                missing=missing,
+        total = hi - lo + 1
+        return len(cached), total, total - len(cached)
+
+    def _refresh_all(self, *_):
+        cached, total, missing = self._cache_counts()
+        if hasattr(self, "_ready_lbl"):
+            self._ready_lbl.setText(
+                T("export.ready", cached=cached, total=total, missing=missing)
             )
-        )
-        # L'opzione ha senso solo se manca qualcosa.
+        if hasattr(self, "_est_lbl"):
+            eta = _fmt_duration(missing * _EXPORT_EST_MS_PER_PAGE / 1000.0)
+            self._est_lbl.setText(
+                T(
+                    "export.wizard.est",
+                    cached=cached,
+                    total=total,
+                    missing=missing,
+                    time=eta,
+                )
+            )
+        self._update_translate_option(missing)
+        self._update_numbering_hints()
+        self._preview_timer.start()
+        self._update_path()
+        self._update_summary()
+
+    def _update_translate_option(self, missing: int):
+        if not hasattr(self, "_chk_translate"):
+            return
         self._chk_translate.setEnabled(missing > 0)
-        # Attiva da sola la traduzione quando ci sono pagine mancanti, finché
-        # l'utente non ha espresso una scelta esplicita.
         if missing > 0 and not self._translate_touched:
             self._chk_translate.blockSignals(True)
             self._chk_translate.setChecked(True)
             self._chk_translate.blockSignals(False)
+        elif missing == 0:
+            self._chk_translate.blockSignals(True)
+            self._chk_translate.setChecked(False)
+            self._chk_translate.blockSignals(False)
+
+    def _output_dir(self) -> Path:
+        if self._pdf_path is not None:
+            return self._pdf_path.parent
+        docs = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.DocumentsLocation
+        )
+        return Path(docs) if docs else Path.home()
+
+    def _default_filename(self) -> str:
+        stem = self._pdf_path.stem if self._pdf_path else "export"
+        ext = ".zip" if self.chosen_zip() else ".pdf"
+        return (
+            f"{stem}_pag{self.range_label()}_{self.chosen_engine()}"
+            f"_{self.chosen_target()}{ext}"
+        )
+
+    def _default_path(self) -> str:
+        return str(self._output_dir() / self._default_filename())
+
+    def _update_path(self):
+        if not hasattr(self, "_path_edit"):
+            return
+        if not self._path_touched:
+            self._path_edit.setText(self._default_path())
+
+    def _update_summary(self):
+        if not hasattr(self, "_summary"):
+            return
+        source, target = self._chosen_langs()
+        name = self._pdf_path.name if self._pdf_path else "—"
+        fmt = T("export.format.zip") if self.chosen_zip() else T("export.format.merged")
+        path = self._path_edit.text().strip() or self._default_path()
+        lines = [
+            (T("export.wizard.sum.file"), f"{name} · {self.range_label()}"),
+            (
+                T("export.wizard.sum.langs"),
+                f"{flag_endonym(source)} → {flag_endonym(target)}",
+            ),
+            (T("export.wizard.sum.engine"), T(f"engine.option.{self.chosen_engine()}")),
+            (T("export.wizard.sum.output"), f"{Path(path).name} · {fmt}"),
+        ]
+        self._summary.setText(
+            "<br>".join(
+                f"<span style='color:#93a0b4'>{_html.escape(k)}</span>"
+                f"&nbsp;&nbsp;&nbsp;{_html.escape(v)}"
+                for k, v in lines
+            )
+        )
+
+    def _browse(self):
+        current = self._path_edit.text().strip() or self._default_path()
+        filt = (
+            T("export.filter_zip") if self.chosen_zip() else T("export.filter")
+        )
+        dest, _ = QFileDialog.getSaveFileName(
+            self, T("export.wizard.output.path"), current, filt
+        )
+        if dest:
+            self._path_edit.setText(dest)
+            self._path_touched = True
+            self._update_summary()
 
     # ── API per MainWindow ────────────────────────────────────────────
 
@@ -4209,13 +5366,14 @@ class ExportDialog(QDialog):
         return self._rad_current.isChecked()
 
     def chosen_engine(self) -> str:
-        return self._engine_combo.currentData() or "google"
+        btn = self._engine_group.checkedButton()
+        return (btn.property("code") if btn is not None else None) or "google"
 
     def chosen_target(self) -> str:
-        return self._dst_combo.currentData() or self._target_lang
+        return self._chosen_langs()[1]
 
     def chosen_source(self) -> str:
-        return self._source_lang
+        return self._chosen_langs()[0]
 
     def chosen_pages(self) -> list[int]:
         if self.is_current():
@@ -4224,11 +5382,23 @@ class ExportDialog(QDialog):
         return list(range(a, b + 1))
 
     def translate_missing(self) -> bool:
-        return self._rad_range.isChecked() and self._chk_translate.isChecked()
+        return self._chk_translate.isChecked()
 
     def chosen_zip(self) -> bool:
         """True se l'utente vuole le pagine singole in un archivio ZIP."""
-        return self._rad_zip.isChecked()
+        return self._btn_zip.isChecked()
+
+    def chosen_path(self) -> str:
+        """Percorso di salvataggio con l'estensione del formato scelto."""
+        text = self._path_edit.text().strip() or self._default_path()
+        ext = ".zip" if self.chosen_zip() else ".pdf"
+        if not text.lower().endswith(ext):
+            for other in (".pdf", ".zip"):
+                if text.lower().endswith(other):
+                    text = text[: -len(other)]
+                    break
+            text += ext
+        return text
 
     def range_label(self) -> str:
         """Suffisso per il nome file: "156" oppure "156-159"."""
@@ -4273,11 +5443,12 @@ class ExportProgressDialog(QDialog):
         missing: int,
         cached: int,
         total: int,
+        pdf_path=None,
         parent=None,
     ):
         super().__init__(parent)
         self.setWindowTitle(T("export.progress.title"))
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(760)
         self.setStyleSheet(_SETTINGS_QSS)
         self._total = max(int(total), 1)
         self._start: float | None = None
@@ -4288,14 +5459,29 @@ class ExportProgressDialog(QDialog):
         self._current_page: int | None = None
         self._dots = 0
         self._dest: Path | None = None
+        self._last_folder: Path | None = None
+        self._page_from = int(page_from)
+        self._page_to = int(page_to)
+        self._pos: int | None = None
+        self._pdf_path = Path(pdf_path) if pdf_path else None
+        self._doc = None
+        self._labels: list[str] = []
+        if self._pdf_path is not None and _has_pymupdf:
+            with contextlib.suppress(Exception):
+                self._labels = clone_engine.CloneEngine.page_labels(self._pdf_path)
 
         root = QVBoxLayout(self)
         root.setSpacing(8)
 
+        body = QHBoxLayout()
+        body.setSpacing(14)
+        left = QVBoxLayout()
+        left.setSpacing(6)
+
         self._ctx_lbl = QLabel(
             T("export.progress.engine_lang", engine=engine_label, lang=lang_label)
         )
-        root.addWidget(self._ctx_lbl)
+        left.addWidget(self._ctx_lbl)
 
         self._range_lbl = QLabel(
             T(
@@ -4309,7 +5495,7 @@ class ExportProgressDialog(QDialog):
             )
         )
         self._range_lbl.setStyleSheet("color: #aaa; font-size: 12px;")
-        root.addWidget(self._range_lbl)
+        left.addWidget(self._range_lbl)
 
         # Riga di attività: sempre valorizzata, così la finestra non appare
         # mai "vuota" durante l'attesa.
@@ -4317,24 +5503,34 @@ class ExportProgressDialog(QDialog):
         self._activity_lbl.setStyleSheet(
             "color: #fff; font-size: 14px; font-weight: bold;"
         )
-        root.addWidget(self._activity_lbl)
+        self._activity_lbl.setWordWrap(True)
+        left.addWidget(self._activity_lbl)
 
         self._page_lbl = QLabel("")
         self._page_lbl.setStyleSheet("color: #ddd;")
-        root.addWidget(self._page_lbl)
+        left.addWidget(self._page_lbl)
 
         self._bar = QProgressBar()
         self._bar.setRange(0, self._total)
         self._bar.setValue(0)
-        root.addWidget(self._bar)
+        left.addWidget(self._bar)
 
         self._stats_lbl = QLabel("")
         self._stats_lbl.setStyleSheet("color: #999; font-size: 12px;")
-        root.addWidget(self._stats_lbl)
+        left.addWidget(self._stats_lbl)
 
         self._eta_lbl = QLabel("")
         self._eta_lbl.setStyleSheet("color: #999; font-size: 12px;")
-        root.addWidget(self._eta_lbl)
+        left.addWidget(self._eta_lbl)
+        left.addStretch(1)
+
+        body.addLayout(left, 1)
+
+        # Anteprima della pagina correntemente in lavorazione (liquido).
+        self._preview = LiquidOverlay(self)
+        self._preview.setFixedSize(220, 290)
+        body.addWidget(self._preview, 0, Qt.AlignmentFlag.AlignTop)
+        root.addLayout(body)
 
         self._path_lbl = QLabel("")
         self._path_lbl.setStyleSheet("color: #7fd67f; font-size: 12px;")
@@ -4353,6 +5549,11 @@ class ExportProgressDialog(QDialog):
 
         btns = QHBoxLayout()
         btns.addStretch(1)
+        self._btn_download = QPushButton(T("export.progress.save_download"))
+        self._btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_download.clicked.connect(self._save_to_download)
+        self._btn_download.setVisible(False)
+        btns.addWidget(self._btn_download)
         self._btn_open = QPushButton(T("export.progress.open_folder"))
         self._btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_open.clicked.connect(self._open_folder)
@@ -4378,31 +5579,97 @@ class ExportProgressDialog(QDialog):
     def begin(self, page_1based: int):
         """Avvia la fase di traduzione mostrando subito l'attività."""
         self._start = time.perf_counter()
-        self._current_page = page_1based
         self._phase = "translating"
-        self._log.appendPlainText(
-            T("export.progress.activity_page", page=page_1based)
-        )
-        self.set_translating(page_1based)
+        self.set_translating(page_1based, position=1)
         self._timer.start()
 
-    def set_translating(self, page_1based: int):
+    def _activity_text(self) -> str:
+        if not self._current_page:
+            return T("export.progress.activity_exporting")
+        if self._pos:
+            return T(
+                "export.progress.activity_page_pos",
+                page=self._current_page,
+                pos=self._pos,
+                total=self._total,
+            )
+        return T("export.progress.activity_page", page=self._current_page)
+
+    def set_translating(self, page_1based: int, position: int | None = None):
         self._current_page = page_1based
+        self._pos = position
         self._phase = "translating"
         self._bar.setRange(0, 0)  # busy/indeterminata
+        # Una riga di log per OGNI pagina (in lavorazione → poi ✓/✗), non solo
+        # per la prima: così il log riflette l'intera coda.
+        self._log.appendPlainText(
+            T("export.progress.activity_page_log", page=page_1based)
+        )
         self._page_lbl.setText(
             T(
                 "export.progress.label",
                 page=page_1based,
-                done=self._done,
+                pos=position or (self._done + 1),
                 total=self._total,
             )
         )
-        self._activity_lbl.setText(
-            T("export.progress.activity_page", page=page_1based)
-            + "." * self._dots
-        )
+        self._activity_lbl.setText(self._activity_text() + "." * self._dots)
         self._update_stats()
+        self._update_preview(page_1based)
+
+    def _doc_handle(self):
+        if self._doc is not None:
+            return self._doc
+        if not _has_pymupdf or self._pdf_path is None:
+            return None
+        try:
+            self._doc = pymupdf.open(str(self._pdf_path))
+        except Exception:
+            self._doc = None
+        return self._doc
+
+    def _update_preview(self, page_1based: int):
+        """Mostra nell'overlay la pagina sorgente correntemente in lavorazione."""
+        page0 = max(0, int(page_1based) - 1)
+        pix = None
+        doc = self._doc_handle()
+        if doc is not None and len(doc) > 0:
+            index = min(page0, len(doc) - 1)
+            try:
+                ratio = float(self.devicePixelRatioF())
+            except Exception:
+                ratio = 1.0
+            try:
+                pdf_page = doc[index]
+                width = int(self._preview.width() * ratio)
+                zoom = max(0.05, width / max(pdf_page.rect.width, 1.0))
+                pm = pdf_page.get_pixmap(
+                    matrix=pymupdf.Matrix(zoom, zoom), alpha=False
+                )
+                img = QImage(
+                    pm.samples, pm.width, pm.height, pm.stride,
+                    QImage.Format.Format_RGB888,
+                )
+                pix = QPixmap.fromImage(img)
+            except Exception:
+                pix = None
+        label = self._labels[page0] if 0 <= page0 < len(self._labels) else ""
+        if label and label != str(page_1based):
+            caption = T(
+                "export.wizard.preview.caption", n=page_1based, label=label
+            )
+        else:
+            caption = T(
+                "export.wizard.preview.caption_plain", n=page_1based
+            )
+        self._preview.start(pix, caption)
+
+    def closeEvent(self, event):  # noqa: N802 — override Qt
+        if self._doc is not None:
+            with contextlib.suppress(Exception):
+                self._doc.close()
+            self._doc = None
+        super().closeEvent(event)
 
     def log_ok(self, page: int):
         self._log.appendPlainText(T("export.progress.page_ok", page=page + 1))
@@ -4432,6 +5699,7 @@ class ExportProgressDialog(QDialog):
             self._timer.start()
         self._phase = "exporting"
         self._current_page = None
+        self._preview.stop()
         self._bar.setRange(0, 0)  # busy mentre si scrive il PDF
         self._page_lbl.setText("")
         self._activity_lbl.setText(T("export.progress.activity_exporting"))
@@ -4441,6 +5709,7 @@ class ExportProgressDialog(QDialog):
         self._finished = True
         self._timer.stop()
         self._phase = "done"
+        self._preview.stop()
         self._bar.setRange(0, self._total)
         self._bar.setValue(self._total)
         self._activity_lbl.setText(T("export.progress.completed_title"))
@@ -4455,6 +5724,18 @@ class ExportProgressDialog(QDialog):
         )
         self._eta_lbl.setText("")
         self._dest = Path(dest)
+        self._last_folder = self._dest.parent
+        self._range_lbl.setText(
+            T(
+                "export.progress.range_done",
+                **{
+                    "from": self._page_from,
+                    "to": self._page_to,
+                    "done": count,
+                    "failed": failed,
+                },
+            )
+        )
         self._path_lbl.setText(
             T("export.progress.saved_path", path=str(dest))
         )
@@ -4462,14 +5743,45 @@ class ExportProgressDialog(QDialog):
         self._log.appendPlainText(T("export.progress.completed_title"))
         self._btn_cancel.setVisible(False)
         self._btn_open.setVisible(True)
+        self._btn_open.setToolTip(str(self._last_folder))
+        self._btn_download.setVisible(True)
         self._btn_close.setVisible(True)
         self._btn_close.setFocus()
+
+    def _save_to_download(self):
+        """Copia il file prodotto nella cartella Download dell'utente."""
+        if self._dest is None or not self._dest.is_file():
+            return
+        downloads = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.DownloadLocation
+        )
+        target_dir = Path(downloads) if downloads else Path.home() / "Downloads"
+        with contextlib.suppress(OSError):
+            target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / self._dest.name
+        stem, suffix = self._dest.stem, self._dest.suffix
+        index = 1
+        while target.exists():
+            target = target_dir / f"{stem}_{index}{suffix}"
+            index += 1
+        try:
+            shutil.copy2(self._dest, target)
+        except OSError:
+            self._path_lbl.setText(T("export.progress.download_error"))
+            return
+        self._last_folder = target.parent
+        self._btn_open.setToolTip(str(target.parent))
+        self._path_lbl.setText(
+            T("export.progress.downloaded", path=str(target))
+        )
+        self._path_lbl.setVisible(True)
 
     def set_error(self, message: str):
         """Termina in errore mantenendo la finestra aperta (feedback)."""
         self._finished = True
         self._timer.stop()
         self._phase = "error"
+        self._preview.stop()
         self._bar.setRange(0, self._total)
         self._activity_lbl.setText(message)
         self._page_lbl.setText("")
@@ -4494,10 +5806,7 @@ class ExportProgressDialog(QDialog):
     def _tick(self):
         self._dots = (self._dots + 1) % 4
         if self._phase == "translating" and self._current_page:
-            self._activity_lbl.setText(
-                T("export.progress.activity_page", page=self._current_page)
-                + "." * self._dots
-            )
+            self._activity_lbl.setText(self._activity_text() + "." * self._dots)
         self._update_stats()
 
     def _update_stats(self):
@@ -4527,8 +5836,12 @@ class ExportProgressDialog(QDialog):
         self.cancelled.emit()
 
     def _open_folder(self):
-        if self._dest is not None:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._dest.parent)))
+        """Apre l'ULTIMA destinazione usata (Download dopo un salvataggio lì)."""
+        folder = self._last_folder
+        if folder is None and self._dest is not None:
+            folder = self._dest.parent
+        if folder is not None:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4600,6 +5913,8 @@ class MainWindow(QMainWindow):
         )
         self._clone_thread: CloneTranslateThread | None = None
         self._retired_clone_threads: list[CloneTranslateThread] = []
+        self._orig_pixmap: QPixmap | None = None
+        self._llm_key_prompted = False
         self._clone_generation: int = 0
         self._clone_run_start: dict[str, float] = {}
 
@@ -4650,6 +5965,12 @@ class MainWindow(QMainWindow):
         self.translated_panel = TranslatedPagePanel()
         self.translated_panel.engine_changed.connect(self._on_engine_selected)
         self.translated_panel.export_requested.connect(self._on_export_translated)
+        self.translated_panel.export_current_requested.connect(
+            self._on_export_current
+        )
+        self.translated_panel.translate_cancel_requested.connect(
+            self._on_cancel_translation
+        )
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
         # Ripristina lo stato collassato/espanso della barra motori (persistito).
@@ -5351,6 +6672,9 @@ class MainWindow(QMainWindow):
         # Sync TOC highlight
         self.toc_panel.select_page(page_num)
 
+        # Targhetta "in lavorazione" (eventuale pagina in traduzione non mostrata)
+        self._update_working_badge()
+
     def _remember_last_page(self, page_num: int):
         """Track the current page per document; persist with a 2 s debounce."""
         if not self._resume_last_page or not self._pdf_path:
@@ -5411,6 +6735,7 @@ class MainWindow(QMainWindow):
 
         if values.get("lang") in LANGUAGES:
             set_language(values["lang"])
+        self._apply_api_key(values.get("openrouter_api_key"))
         for key in ("zoom", "font_size", "render_md", "show_header",
                     "resume_last_page", "remember_tab", "save_edits",
                     "pdf2zh_bin"):
@@ -5603,6 +6928,7 @@ class MainWindow(QMainWindow):
         """Render + show a page, with an informative fallback message."""
         pix = self._render_page(page_num)
         if pix is not None:
+            self._orig_pixmap = pix
             self.pdf_view.show_page(pix)
             self.pdf_view.show_excluded_zones(self._scene_exclusions(page_num))
             self.pdf_view.show_inclusion_zones(self._scene_inclusions(page_num))
@@ -5624,6 +6950,46 @@ class MainWindow(QMainWindow):
         self._clone_engine.lang_out = dst
         self._clone_engine.set_pdf2zh_bin(get_setting("pdf2zh_bin", "") or None)
 
+    def _apply_api_key(self, key):
+        """Salva/rimuove la chiave OpenRouter (archivio per-utente + env)."""
+        if key is None:
+            return
+        key = str(key).strip()
+        store = keystore.KeyStore(_keystore_path())
+        if key:
+            store.set(key)
+            os.environ["OPENROUTER_API_KEY"] = key
+        else:
+            store.clear()
+            # Rimuove l'override solo se non proviene da un env esterno.
+            if _API_KEY_SOURCE != "env":
+                os.environ.pop("OPENROUTER_API_KEY", None)
+
+    def _prompt_api_key(self) -> bool:
+        """Chiede la chiave OpenRouter; True se dopo il dialogo è disponibile."""
+        store = keystore.KeyStore(_keystore_path())
+        dlg = ApiKeyDialog(self, initial=store.get())
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return bool(os.environ.get("OPENROUTER_API_KEY"))
+        key = dlg.value()
+        if not key:
+            return False
+        self._apply_api_key(key)
+        return True
+
+    def _ensure_llm_key(self, force: bool = False) -> bool:
+        """True se il motore LLM ha una chiave; altrimenti la chiede all'utente.
+
+        Il prompt automatico avviene una sola volta per sessione (``force=True``
+        quando l'utente sceglie esplicitamente LLM).
+        """
+        if os.environ.get("OPENROUTER_API_KEY"):
+            return True
+        if self._llm_key_prompted and not force:
+            return False
+        self._llm_key_prompted = True
+        return self._prompt_api_key()
+
     def _engine_display(self, engine: str) -> str:
         return T(f"engine.option.{engine}")
 
@@ -5633,6 +6999,13 @@ class MainWindow(QMainWindow):
             return
         self._configure_clone_engine()
         engine = get_translation_engine()
+
+        if engine == "llm" and not self._ensure_llm_key():
+            self.translated_panel.hide_liquid()
+            self.translated_panel.show_message(T("clone.no_key"))
+            self.translated_panel.set_status(T("clone.status_error"))
+            self.status_bar.showMessage(T("clone.no_key"), 6000)
+            return
 
         if self._clone_engine.is_cached(page_num, engine):
             self._display_translated_page(page_num)
@@ -5651,10 +7024,9 @@ class MainWindow(QMainWindow):
         self._clone_generation += 1
         self._clone_run_start[engine] = time.time()
         self._retire_clone_thread()
-        self.translated_panel.show_message(T("clone.page_pending"))
-        self.translated_panel.set_status(T("clone.status_running"))
-        self.translated_panel.show_spinner(
-            T("clone.spinner", engine=self._engine_display(engine))
+        self.translated_panel.show_translating(
+            self._orig_pixmap,
+            T("clone.spinner", engine=self._engine_display(engine)),
         )
         self.status_bar.showMessage(
             T(
@@ -5669,8 +7041,46 @@ class MainWindow(QMainWindow):
         )
         thread.done.connect(self._on_clone_done)
         thread.error.connect(self._on_clone_error)
+        thread.cancelled.connect(self._on_clone_cancelled)
         self._clone_thread = thread
         thread.start()
+        self._update_working_badge()
+
+    def _on_cancel_translation(self):
+        """Annulla la traduzione della pagina corrente (solo il thread attivo)."""
+        thread = self._clone_thread
+        if thread is not None and thread.isRunning():
+            thread.cancel()
+
+    def _on_clone_cancelled(self, generation: int, page_num: int, engine: str):
+        if generation != self._clone_generation:
+            return
+        self.translated_panel.hide_liquid()
+        self.translated_panel.set_status(T("clone.status_cancelled"))
+        self._update_working_badge()
+        if page_num != self._current_page:
+            return
+        self.translated_panel.show_message(T("clone.cancelled"))
+        self.status_bar.showMessage(T("clone.cancelled"), 5000)
+
+    def _update_working_badge(self):
+        """Targhetta con la pagina in traduzione se non è quella mostrata."""
+        pages = {
+            t.page()
+            for t in self._retired_clone_threads
+            if t.isRunning()
+        }
+        pages.discard(self._current_page)
+        if not pages:
+            self.translated_panel.set_working("")
+        elif len(pages) == 1:
+            self.translated_panel.set_working(
+                T("clone.working.badge", n=next(iter(pages)) + 1)
+            )
+        else:
+            self.translated_panel.set_working(
+                T("clone.working.many", n=len(pages))
+            )
 
     def _retire_clone_thread(self):
         """Detach the current clone thread; keep it alive until it finishes."""
@@ -5678,7 +7088,7 @@ class MainWindow(QMainWindow):
         self._clone_thread = None
         if old is None:
             return
-        for sig in (old.done, old.error):
+        for sig in (old.done, old.error, old.cancelled):
             try:
                 sig.disconnect()
             except TypeError:
@@ -5686,30 +7096,37 @@ class MainWindow(QMainWindow):
         if old.isRunning():
             self._retired_clone_threads.append(old)
             old.finished.connect(self._forget_retired_clone_thread)
+            self._update_working_badge()
 
     def _forget_retired_clone_thread(self):
         t = self.sender()
         if t in self._retired_clone_threads:
             self._retired_clone_threads.remove(t)
+        self._update_working_badge()
 
     def _on_clone_done(self, generation: int, page_num: int, engine: str, path: str):
         if generation != self._clone_generation:
             return
         if page_num != self._current_page or engine != get_translation_engine():
             return
+        self.translated_panel.finish_translating(True)
         self._display_translated_page(page_num)
         self.translated_panel.set_status(T("clone.status_done"))
         self.status_bar.showMessage(T("clone.done", page=page_num + 1))
+        self._update_working_badge()
 
     def _on_clone_error(self, generation: int, page_num: int, engine: str, message: str):
         if generation != self._clone_generation:
             return
         self.translated_panel.hide_spinner()
+        self.translated_panel.hide_liquid()
         self.translated_panel.set_status(T("clone.status_error"))
+        self._update_working_badge()
         if page_num != self._current_page:
             return
-        self.translated_panel.show_message(T("clone.failed", reason=message))
-        self.status_bar.showMessage(T("clone.failed", reason=message))
+        text = _friendly_reason(message)
+        self.translated_panel.show_message(text)
+        self.status_bar.showMessage(text)
 
     def _render_translated_pdf(self, page_num: int, engine: str) -> QPixmap | None:
         path = self._clone_engine.translated_path(page_num, engine)
@@ -5759,13 +7176,14 @@ class MainWindow(QMainWindow):
         self._configure_clone_engine()
         source = get_source_lang()
 
-        dlg = ExportDialog(
+        dlg = ExportWizardDialog(
             self._clone_engine,
             get_translation_engine(),
             get_target_lang(),
             source,
             self._current_page,
             self._page_count,
+            self._pdf_path,
             self,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
@@ -5773,9 +7191,14 @@ class MainWindow(QMainWindow):
 
         engine = dlg.chosen_engine()
         target = dlg.chosen_target()
+        source = dlg.chosen_source()
         pages = dlg.chosen_pages()
         want_translate = dlg.translate_missing()
         as_zip = dlg.chosen_zip()
+        dest = dlg.chosen_path()
+        if engine == "llm" and want_translate and not self._ensure_llm_key():
+            self.status_bar.showMessage(T("clone.no_key"), 6000)
+            return
         lo, hi = min(pages), max(pages)
         cached = self._clone_engine.cached_pages(lo, hi, engine, source, target)
         missing = [
@@ -5794,23 +7217,8 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(T("clone.no_engine"), 6000)
             return
 
-        # Destinazione scelta PRIMA della traduzione: l'attesa termina con il
-        # file già scritto, senza ulteriori interruzioni.
-        ext = ".zip" if as_zip else ".pdf"
-        default = (
-            f"{self._pdf_path.stem}_pag{dlg.range_label()}_{engine}_{target}{ext}"
-        )
-        dest, _ = QFileDialog.getSaveFileName(
-            self,
-            T("export.dialog_zip") if as_zip else T("export.dialog"),
-            default,
-            T("export.filter_zip") if as_zip else T("export.filter"),
-        )
-        if not dest:
-            return
-        if not dest.lower().endswith(ext):
-            dest += ext
-
+        # Destinazione scelta nello step "Output" del wizard, quindi già nota
+        # PRIMA della traduzione: l'attesa termina con il file già scritto.
         # Engine dedicato con motore/lingua scelti: non disturba l'engine
         # condiviso col pannello destro (che può avere un thread in corso).
         translate = bool(want_translate and missing)
@@ -5842,6 +7250,41 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(
             T("export.done", count=count, failed=failed), 6000
         )
+
+    def _on_export_current(self):
+        """Scorciatoia rapida: esporta subito la pagina corrente in PDF.
+
+        Salta il wizard e non traduce: se la pagina non è ancora in cache
+        avvisa e non fa nulla.
+        """
+        if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
+            self.status_bar.showMessage(T("export.need_doc"), 4000)
+            return
+        self._configure_clone_engine()
+        engine = get_translation_engine()
+        source = get_source_lang()
+        target = get_target_lang()
+        page = self._current_page
+        if not self._clone_engine.is_cached(page, engine, source, target):
+            self.status_bar.showMessage(T("export.not_ready"), 5000)
+            return
+        default = f"{self._pdf_path.stem}_pag{page + 1}_{engine}_{target}.pdf"
+        dest, _ = QFileDialog.getSaveFileName(
+            self, T("export.dialog"), default, T("export.filter")
+        )
+        if not dest:
+            return
+        if not dest.lower().endswith(".pdf"):
+            dest += ".pdf"
+        try:
+            count = self._clone_engine.export_pdf(
+                [page], engine, dest, source, target
+            )
+        except Exception:  # noqa: BLE001 — riportato nella status bar
+            log.exception("export pagina corrente fallito: %s", dest)
+            self.status_bar.showMessage(T("export.error"), 5000)
+            return
+        self.status_bar.showMessage(T("export.done", count=count, failed=0), 6000)
 
     def _run_export_with_progress(
         self,
@@ -5877,6 +7320,7 @@ class MainWindow(QMainWindow):
             missing=total,
             cached=cached_count,
             total=max(total, 1),
+            pdf_path=self._pdf_path,
             parent=self,
         )
         prog.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -5887,7 +7331,7 @@ class MainWindow(QMainWindow):
             thread = CloneExportThread(engine, missing, engine_name)
 
             def _on_page_error(page: int, reason: str):
-                state["failed"][page] = reason
+                state["failed"][page] = _friendly_reason(reason)
 
             def _on_progress(done: int, tot: int, page: int):
                 if page in state["failed"]:
@@ -5897,7 +7341,7 @@ class MainWindow(QMainWindow):
                 prog.set_stats(done, len(state["failed"]), tot)
                 next_page = missing[done] if done < tot else None
                 if next_page is not None:
-                    prog.set_translating(next_page + 1)
+                    prog.set_translating(next_page + 1, position=done + 1)
                 else:
                     prog.set_phase_exporting()
 
@@ -5982,6 +7426,8 @@ class MainWindow(QMainWindow):
             return
         set_translation_engine(engine)
         save_config()
+        if engine == "llm":
+            self._ensure_llm_key(force=True)
         self._clone_generation += 1
         self._retire_clone_thread()
         self.translated_panel.set_target_language(get_target_lang())
@@ -6082,6 +7528,10 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("noesis-pdf-cloner")
+
+    # Carica la chiave OpenRouter dall'archivio per-utente (se non già in env).
+    global _API_KEY_SOURCE
+    _API_KEY_SOURCE = keystore.load_into_env(_keystore_path())
 
     # Config v2: al primo avvio vengono scritti i default (lingua UI = lingua
     # dell'OS o italiano); le scelte persistono tra gli aggiornamenti (la
