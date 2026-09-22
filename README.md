@@ -97,6 +97,10 @@ powershell -ExecutionPolicy Bypass -File .\setup_engine.ps1   # Windows
 L'app rileva automaticamente `.venv2` accanto all'eseguibile; in alternativa si
 imposta il percorso in ⚙️ Impostazioni.
 
+Si può anche installare il motore **dall'app**: ⚙️ Impostazioni → *Motore di
+clonazione* → **Installa motore** (crea `.venv2` accanto all'eseguibile e vi
+installa `pdf2zh_next`; richiede `uv`, <https://docs.astral.sh/uv/>).
+
 ## Test
 
 ```bash

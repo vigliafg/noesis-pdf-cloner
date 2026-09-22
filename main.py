@@ -4111,6 +4111,120 @@ class ApiKeyDialog(QDialog):
             self._result.setStyleSheet("color: #ffcc66; font-size: 12px;")
 
 
+class EngineInstallThread(QThread):
+    """Installa ``pdf2zh_next`` in ``.venv2`` (via ``uv``) senza bloccare la GUI."""
+
+    log_line = pyqtSignal(str)
+    done = pyqtSignal(bool, str)  # successo, percorso oppure messaggio d'errore
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._cancel = threading.Event()
+
+    def cancel(self):
+        self._cancel.set()
+
+    def run(self):  # noqa: D102 — override QThread
+        try:
+            found = clone_engine.install_engine(
+                log_line=self.log_line.emit, cancel=self._cancel
+            )
+        except RuntimeError as exc:
+            code = str(exc)
+            if code == "cancelled":
+                msg = T("engine.install.cancelled")
+            elif code == "no_uv":
+                msg = T("engine.install.no_uv")
+            else:
+                msg = T("engine.install.failed")
+            self.done.emit(False, msg)
+            return
+        except Exception as exc:  # noqa: BLE001 — mostra l'errore, non crashare
+            self.done.emit(False, T("engine.install.failed_detail", e=exc))
+            return
+        self.done.emit(True, str(found))
+
+
+class EngineInstallDialog(QDialog):
+    """Stato dell'installazione del motore: log di ``uv`` + barra di avanzamento."""
+
+    installed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(T("engine.install.title"))
+        self.setMinimumSize(660, 440)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(18, 16, 18, 14)
+        lay.setSpacing(10)
+
+        intro = QLabel(T("engine.install.intro"))
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+
+        self._log = QPlainTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setPlaceholderText(T("engine.install.running"))
+        mono = QFont("monospace")
+        mono.setStyleHint(QFont.StyleHint.TypeWriter)
+        self._log.setFont(mono)
+        lay.addWidget(self._log, 1)
+
+        self._bar = QProgressBar()
+        self._bar.setRange(0, 0)  # indeterminata: uv non dà una percentuale
+        lay.addWidget(self._bar)
+
+        self._status = QLabel(T("engine.install.running"))
+        self._status.setWordWrap(True)
+        lay.addWidget(self._status)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        self._btn_cancel = QPushButton(T("engine.install.cancel"))
+        self._btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_cancel.clicked.connect(self._on_cancel)
+        self._btn_close = QPushButton(T("engine.install.close"))
+        self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_close.clicked.connect(self.accept)
+        self._btn_close.setEnabled(False)
+        buttons.addWidget(self._btn_cancel)
+        buttons.addWidget(self._btn_close)
+        lay.addLayout(buttons)
+
+        self._thread = EngineInstallThread(self)
+        self._thread.log_line.connect(self._append)
+        self._thread.done.connect(self._on_done)
+        self._thread.start()
+
+    def _append(self, line: str):
+        self._log.appendPlainText(line)
+        bar = self._log.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _on_cancel(self):
+        self._thread.cancel()
+        self._btn_cancel.setEnabled(False)
+        self._status.setText(T("engine.install.cancelling"))
+
+    def _on_done(self, ok: bool, info: str):
+        self._bar.setRange(0, 1)
+        self._bar.setValue(1 if ok else 0)
+        self._btn_cancel.setEnabled(False)
+        self._btn_close.setEnabled(True)
+        self._btn_close.setFocus()
+        if ok:
+            self._status.setText(T("engine.install.done", path=info))
+            self.installed.emit(info)
+        else:
+            self._status.setText(info)
+
+    def closeEvent(self, event):  # noqa: N802 — override Qt
+        if self._thread.isRunning():
+            self._thread.cancel()
+            self._thread.wait(3000)
+        super().closeEvent(event)
+
+
 class SettingsDialog(QDialog):
     """Menu di configurazione: lingua UI, lingue traduzione, preferenze.
 
@@ -4174,8 +4288,13 @@ class SettingsDialog(QDialog):
         self._btn_pdf2zh = QPushButton(T("settings.clone.browse"))
         self._btn_pdf2zh.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_pdf2zh.clicked.connect(self._on_browse_pdf2zh)
+        self._btn_install_engine = QPushButton(T("settings.clone.install"))
+        self._btn_install_engine.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_install_engine.setToolTip(T("settings.clone.install.tip"))
+        self._btn_install_engine.clicked.connect(self._on_install_engine)
         pdf2zh_row.addWidget(self._pdf2zh_edit)
         pdf2zh_row.addWidget(self._btn_pdf2zh)
+        pdf2zh_row.addWidget(self._btn_install_engine)
         clone_form.addRow(self._lbl_pdf2zh, pdf2zh_row)
 
         # Chiave OpenRouter: salvata nell'archivio per-utente (non in config.json).
@@ -4276,6 +4395,17 @@ class SettingsDialog(QDialog):
         if path_str:
             self._pdf2zh_edit.setText(path_str)
 
+    def _on_install_engine(self):
+        """Scarica e installa il motore pdf2zh_next in ``.venv2`` (via uv)."""
+        dlg = EngineInstallDialog(self)
+
+        def _installed(_path: str):
+            # Il motore è accanto all'app: basta l'auto-rilevamento.
+            self._pdf2zh_edit.setText("")
+
+        dlg.installed.connect(_installed)
+        dlg.exec()
+
     def _on_api_show_toggled(self, checked: bool):
         self._api_edit.setEchoMode(
             QLineEdit.EchoMode.Normal if checked
@@ -4362,6 +4492,8 @@ class SettingsDialog(QDialog):
         self._lbl_pdf2zh.setText(T("settings.clone.pdf2zh"))
         self._pdf2zh_edit.setPlaceholderText(T("settings.clone.pdf2zh.ph"))
         self._btn_pdf2zh.setText(T("settings.clone.browse"))
+        self._btn_install_engine.setText(T("settings.clone.install"))
+        self._btn_install_engine.setToolTip(T("settings.clone.install.tip"))
         self._lbl_clone_hint.setText(T("settings.clone.hint"))
         # Le etichette dei motori passano da T(): ricostruisci la combo
         # preservando la selezione corrente.

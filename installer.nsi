@@ -96,6 +96,9 @@ Section "$(NAME_App)" SectionApp
   ; Copy the PyInstaller-built executable from dist/
   File "dist\${APP_EXE}"
 
+  ; Script di setup del motore di clonazione (installa .venv2 accanto all'app).
+  File "setup_engine.ps1"
+
   ; Store install directory in registry for upgrade detection
   WriteRegStr HKLM "Software\${PRODUCT_NAME}" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "Software\${PRODUCT_NAME}" "Version"    "${VERSION}"
@@ -140,6 +143,7 @@ SectionEnd
 Section "Uninstall"
   ; Remove application files
   Delete "$INSTDIR\${APP_EXE}"
+  Delete "$INSTDIR\setup_engine.ps1"
   Delete "$INSTDIR\uninst.exe"
   RMDir  "$INSTDIR"
 

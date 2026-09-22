@@ -135,6 +135,12 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     bassi si scorre senza tagliare). Toccare uno spin passa da solo a
     "Intervallo". "Apri cartella" apre l'**ultima destinazione** (Download dopo
     "Salva in Download").
+14. **Installa motore dall'app**: in ⚙️ Impostazioni → *Motore di clonazione* il
+    pulsante **Installa motore** crea `.venv2` accanto all'app e vi installa
+    `pdf2zh_next` via `uv` (`clone_engine.engine_base_dir`/`install_engine`,
+    `EngineInstallThread`/`EngineInstallDialog`), con log e Annulla. L'installer
+    NSIS include `setup_engine.ps1`. Senza il binario del motore **nessun**
+    motore traduce (anche google/bing: sono traduttori *dentro* `pdf2zh_next`).
 
 ---
 

@@ -529,5 +529,95 @@ class AtomicWriteTests(unittest.TestCase):
         self.assertEqual(list(path.parent.glob("*.tmp")), [])
 
 
+class EngineInstallTests(unittest.TestCase):
+    """Installer del motore (.venv2) tramite uv: path e flusso, senza uv reale."""
+
+    def test_engine_base_dir_is_module_dir_in_development(self):
+        self.assertEqual(
+            clone_engine.engine_base_dir(),
+            Path(clone_engine.__file__).resolve().parent,
+        )
+
+    def test_engine_venv_dir_appends_venv2(self):
+        self.assertEqual(
+            clone_engine.engine_venv_dir("/tmp/base"),
+            Path("/tmp/base/.venv2"),
+        )
+
+    def test_engine_venv_python_layout(self):
+        py = clone_engine.engine_venv_python(Path("/base/.venv2"))
+        expected = (
+            Path("/base/.venv2/Scripts/python.exe")
+            if os.name == "nt"
+            else Path("/base/.venv2/bin/python")
+        )
+        self.assertEqual(py, expected)
+
+    def test_find_uv_prefers_env_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "uv"
+            fake.write_text("#!/bin/sh\n")
+            with mock.patch.dict(os.environ, {"UV": str(fake)}):
+                self.assertEqual(clone_engine.find_uv(), str(fake))
+
+    def test_find_uv_none_when_missing(self):
+        env = {k: v for k, v in os.environ.items() if k != "UV"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch.object(clone_engine.shutil, "which", return_value=None):
+                self.assertIsNone(clone_engine.find_uv())
+
+    def test_install_engine_without_uv_raises(self):
+        with mock.patch.object(clone_engine, "find_uv", return_value=None):
+            with self.assertRaises(RuntimeError) as ctx:
+                clone_engine.install_engine(base="/tmp/does-not-matter")
+        self.assertEqual(str(ctx.exception), "no_uv")
+
+    def test_install_engine_creates_venv_and_returns_binary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            calls = []
+
+            class _FakeProc:
+                def __init__(self, cmd, **_kw):
+                    calls.append(list(cmd))
+                    self.stdout = iter([f"fake: {' '.join(cmd[1:3])}\n"])
+
+                def wait(self, timeout=None):
+                    return 0
+
+                def terminate(self):
+                    pass
+
+                def kill(self):
+                    pass
+
+            def _fake_popen(cmd, **_kw):
+                # Simula l'effetto collaterale di uv: crea l'interprete del venv
+                # al primo comando, l'eseguibile del motore dopo il pip install.
+                if cmd[1] == "venv":
+                    py = clone_engine.engine_venv_python(Path(cmd[-1]))
+                    py.parent.mkdir(parents=True, exist_ok=True)
+                    py.write_text("")
+                elif cmd[1] == "pip":
+                    py = Path(cmd[cmd.index("--python") + 1])
+                    (py.parent / clone_engine._bin_name("pdf2zh_next")).write_text("")
+                return _FakeProc(cmd)
+
+            lines = []
+            with mock.patch.object(clone_engine, "find_uv", return_value="uv"), \
+                 mock.patch.object(clone_engine, "_is_windows", return_value=False), \
+                 mock.patch.object(
+                     clone_engine.subprocess, "Popen", side_effect=_fake_popen
+                 ):
+                found = clone_engine.install_engine(base=base, log_line=lines.append)
+
+            self.assertTrue(found.is_file())
+            self.assertEqual(found.name, clone_engine._bin_name("pdf2zh_next"))
+            self.assertTrue(any(c[1] == "venv" for c in calls))
+            self.assertTrue(any(c[1] == "pip" for c in calls))
+            self.assertTrue(any("pdf2zh_next" in c for c in calls))
+            self.assertTrue(lines)  # il log ha ricevuto le righe di uv
+
+
 if __name__ == "__main__":
     unittest.main()

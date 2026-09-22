@@ -148,6 +148,113 @@ def venv_python_for(pdf2zh_bin: Path) -> str:
     return sys.executable
 
 
+def engine_base_dir() -> Path:
+    """Cartella dove vive (o va installato) ``.venv2``.
+
+    Build congelato → cartella dell'eseguibile; sviluppo → radice del repo.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def engine_venv_dir(base: str | Path | None = None) -> Path:
+    """Percorso del venv del motore (``.venv2`` accanto all'app)."""
+    root = Path(base) if base else engine_base_dir()
+    return root / ".venv2"
+
+
+def engine_venv_python(venv_dir: str | Path) -> Path:
+    """Interprete Python dentro ``.venv2`` (Scripts su Windows, bin altrove)."""
+    venv = Path(venv_dir)
+    return (venv / "Scripts" / "python.exe") if _is_windows() else (venv / "bin" / "python")
+
+
+def find_uv() -> str | None:
+    """Eseguibile ``uv`` (env ``UV`` oppure PATH), o ``None`` se assente."""
+    env = os.environ.get("UV")
+    if env:
+        candidate = Path(env).expanduser()
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("uv")
+
+
+def _terminate_process(proc: subprocess.Popen) -> None:
+    """Termina un processo dell'installer (best effort, cross-platform)."""
+    with contextlib.suppress(Exception):
+        proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except Exception:  # noqa: BLE001
+        with contextlib.suppress(Exception):
+            proc.kill()
+
+
+def install_engine(
+    base: str | Path | None = None,
+    log_line=None,
+    cancel: threading.Event | None = None,
+) -> Path:
+    """Installa ``pdf2zh_next`` in ``.venv2`` accanto all'app usando ``uv``.
+
+    ``log_line`` riceve le righe di output; ``cancel`` interrompe. Ritorna il
+    percorso dell'eseguibile installato. Solleva ``RuntimeError`` con codice
+    macchina: ``"no_uv"`` (uv assente), ``"cancelled"``, ``"failed"``.
+    """
+    uv = find_uv()
+    if not uv:
+        raise RuntimeError("no_uv")
+
+    venv = engine_venv_dir(base)
+    workdir = venv.parent
+    python = engine_venv_python(venv)
+
+    def _emit(line: str) -> None:
+        if log_line is not None:
+            log_line(line.rstrip())
+
+    def _run(cmd: list[str]) -> None:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(workdir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                if cancel is not None and cancel.is_set():
+                    _terminate_process(proc)
+                    raise RuntimeError("cancelled")
+                _emit(line)
+        finally:
+            code = proc.wait()
+        if code != 0:
+            raise RuntimeError("failed")
+
+    if venv.exists() and not python.is_file():
+        # venv presente ma rotto/incompleto: lo si ricrea da zero.
+        _emit(f"(rimuovo il venv incompleto: {venv})")
+        shutil.rmtree(venv, ignore_errors=True)
+    if not python.is_file():
+        _emit(f"$ {uv} venv --python 3.12 {venv}")
+        _run([uv, "venv", "--python", "3.12", str(venv)])
+    _emit(f"$ {uv} pip install --python {python} pdf2zh_next")
+    _run([uv, "pip", "install", "--python", str(python), "pdf2zh_next"])
+
+    installed = engine_venv_dir(base) / ("Scripts" if _is_windows() else "bin")
+    installed = installed / _bin_name("pdf2zh_next")
+    if not installed.is_file():
+        found = find_pdf2zh_bin()
+        if found is None:
+            raise RuntimeError("failed")
+        return found
+    return installed
+
+
 def _gtranslate_cli_path() -> Path:
     """Percorso di ``gtranslate_cli.py`` (sorgente o bundle PyInstaller)."""
     here = Path(__file__).resolve().with_name("gtranslate_cli.py")
