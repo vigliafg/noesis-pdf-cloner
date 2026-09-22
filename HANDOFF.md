@@ -191,6 +191,10 @@ secondo worker sulla stessa pagina.
 ``<app-data>/logs/noesis-pdf-cloner.log`` (rotazione 2 MB × 3, ``clone_engine`` a
 DEBUG): utile per diagnosticare su Windows, dove non c'è console.
 
+**Serializzazione (v0.1.2).** Il motore condiviso dell'app usa
+``max_concurrent=1``: una sola ``pdf2zh_next`` alla volta (meno processi
+concorrenti su Windows). Le pagine in coda restano visibili con la targhetta.
+
 ---
 
 ## 7. Problemi noti / TODO

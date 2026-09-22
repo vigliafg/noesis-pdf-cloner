@@ -6066,9 +6066,13 @@ class MainWindow(QMainWindow):
 
         # ── Motore di clonazione (pdf2zh_next v2) ──────────────────────
         # Un'istanza per tutta l'app; cambia documento con ``set_document``.
+        # ``max_concurrent=1``: una sola traduzione alla volta (robustezza su
+        # Windows e niente processi concorrenti; la targhetta "in lavorazione"
+        # continua a mostrare le pagine in coda).
         self._clone_engine = clone_engine.CloneEngine(
             cache_root=_app_data_base() / "clones",
             pdf2zh_bin=get_setting("pdf2zh_bin", "") or None,
+            max_concurrent=1,
         )
         self._clone_thread: CloneTranslateThread | None = None
         self._retired_clone_threads: list[CloneTranslateThread] = []
