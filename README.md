@@ -12,9 +12,12 @@ lingua scelta con il layout preservato**. Il clone è prodotto da
 | **Bing** | traduttore Bing built-in di pdf2zh_next |
 | **LLM** | OpenRouter (`--openai`), richiede `OPENROUTER_API_KEY` |
 
-La traduzione è **on-demand pagina per pagina** (solo ciò che guardi) con
-**cache su disco** separata per motore e coppia linguistica: al secondo accesso
-la pagina è istantanea.
+La traduzione è **on-demand pagina per pagina** con **cache su disco** separata
+per motore e coppia linguistica: la pagina tradotta parte **solo** dal pulsante
+**▶ Traduci** (niente traduzione automatica al cambio pagina) e al secondo
+accesso è istantanea. Cambiando motore, se esiste già una traduzione in cache
+con un altro motore, l'app chiede conferma prima di eliminarla per lasciare il
+posto alla nuova.
 
 ## Cosa include
 
@@ -22,10 +25,12 @@ la pagina è istantanea.
 - Navigazione completa sul PDF: **numero di pagina**, **indice (TOC)**,
   **pagina precedente / successiva** e scorciatoie da tastiera.
 - Zoom sincronizzato sui due pannelli (`🔍+` / `🔍−`, Ctrl+±, Ctrl+0).
-- Radio dei motori (Google / Bing / LLM) nel pannello destro, con spinner e
-  avviso dei fallback (Microsoft/LLM) della catena gratuita. La barra dei
-  motori è **collassabile** (chevron in alto a destra): al collasso lo spazio
-  torna al viewport e la pagina si riadatta; lo stato è ricordato tra sessioni.
+- Radio dei motori (Google / Bing / LLM) e pulsante **▶ Traduci** nel pannello
+  destro: si sceglie il motore e si lancia la traduzione della pagina (nessuna
+  traduzione automatica navigando), con spinner e avviso dei fallback
+  (Microsoft/LLM) della catena gratuita. La barra dei motori è **collassabile**
+  (chevron in alto a destra): al collasso lo spazio torna al viewport e la
+  pagina si riadatta; lo stato è ricordato tra sessioni.
 - ⚙️ Impostazioni: lingua UI (it/en/fr/de/es), lingua del documento (origine) e
   della traduzione (destinazione), motore, zoom di avvio, "riprendi dall'ultima
   pagina" e percorso dell'eseguibile `pdf2zh_next`.

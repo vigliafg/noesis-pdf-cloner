@@ -144,6 +144,17 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     lo trova lo stesso. L'installer NSIS include `setup_engine.ps1`. Senza il
     binario del motore **nessun** motore traduce (anche google/bing: sono
     traduttori *dentro* `pdf2zh_next`).
+15. **Traduzione on demand**: al cambio pagina il pannello destro **non**
+    traduce più da solo: mostra il clone in cache del motore selezionato oppure
+    l'originale con l'invito *"Premi ▶ Traduci per tradurre questa pagina"*.
+    La traduzione parte solo dal pulsante **▶ Traduci** nella barra del
+    pannello destro (accanto alle radio google/bing/llm). Le radio cambiano solo
+    il motore selezionato e la vista.
+16. **Una traduzione per documento**: premendo ▶ Traduci con un motore diverso
+    da quello già in cache, un dialog di conferma (motore/i, pagine, MB) chiede
+    se eliminare la cache precedente; su conferma `CloneEngine.purge_engine_cache`
+    la rimuove (tutte le lingue del documento, senza toccare `split/` né gli
+    altri motori) e le traduzioni in background di quel motore vengono annullate.
 
 ---
 
@@ -151,7 +162,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **285 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **300 OK** (24 skip) |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
 | E2E reale pagina 156 di `ha22.pdf` | google 53.3 s · bing 44.1 s · openai 65.3 s — tutti `done` |
 | Contenuto clone pagina 156 | layout preservato, **figura MRI preservata**, `FIGURA 16-1`/`TABELLA 16-4` |

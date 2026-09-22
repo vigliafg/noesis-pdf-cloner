@@ -724,6 +724,71 @@ class EngineInstallTests(unittest.TestCase):
                 self.assertEqual(clone_engine.engine_base_dir(), user_dir)
 
 
+class EngineCacheManagementTests(unittest.TestCase):
+    """Purga/statistiche della cache per motore (una traduzione per documento)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        self.engine = clone_engine.CloneEngine(tmp / "cache")
+        self.src = tmp / "book.pdf"
+        self.src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(self.src)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _fake_cache(self, engine: str, page: int, size: int = 10) -> Path:
+        path = self.engine.translated_path(page, engine, "en", "it")
+        path.write_bytes(b"x" * size)
+        return path
+
+    def test_cached_engines_lists_only_engines_with_files(self):
+        self.assertEqual(self.engine.cached_engines(), [])
+        self._fake_cache("google", 0)
+        self._fake_cache("bing", 0)
+        # ordine ENGINES, stabile
+        self.assertEqual(self.engine.cached_engines(), ["google", "bing"])
+
+    def test_cached_engines_ignores_empty_dirs(self):
+        # translated_path crea la cartella: da sola non conta come cache.
+        self.engine.translated_path(0, "llm", "en", "it")
+        self.assertEqual(self.engine.cached_engines(), [])
+
+    def test_engine_cache_stats_counts_files_and_bytes(self):
+        self._fake_cache("google", 0, size=10)
+        self._fake_cache("google", 1, size=32)
+        self.assertEqual(self.engine.engine_cache_stats("google"), (2, 42))
+
+    def test_purge_removes_only_that_engine(self):
+        self._fake_cache("google", 0)
+        self._fake_cache("bing", 0)
+        files, size = self.engine.purge_engine_cache("google")
+        self.assertEqual((files, size), (1, 10))
+        self.assertFalse(self.engine.is_cached(0, "google"))
+        self.assertTrue(self.engine.is_cached(0, "bing"))
+        self.assertEqual(self.engine.cached_engines(), ["bing"])
+
+    def test_purge_all_languages_of_the_engine(self):
+        self._fake_cache("google", 0)
+        other = self.engine.translated_path(0, "google", "en", "fr")
+        other.write_bytes(b"x" * 5)
+        files, size = self.engine.purge_engine_cache("google")
+        self.assertEqual((files, size), (2, 15))
+        self.assertEqual(self.engine.cached_engines(), [])
+
+    def test_purge_unknown_engine_is_empty(self):
+        self.assertEqual(self.engine.purge_engine_cache("google"), (0, 0))
+
+    def test_purge_keeps_split_cache(self):
+        split = self.engine.split_path(0)
+        split.parent.mkdir(parents=True, exist_ok=True)
+        split.write_bytes(b"%PDF-1.4 split")
+        self._fake_cache("google", 0)
+        self.engine.purge_engine_cache("google")
+        self.assertTrue(split.is_file())
+
+
 class PageHasTextTests(unittest.TestCase):
     """``page_has_text`` distingue le pagine senza testo (fallback) dagli errori."""
 

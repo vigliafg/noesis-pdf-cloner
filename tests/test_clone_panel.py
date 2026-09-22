@@ -101,6 +101,24 @@ class CollapsibleBarTests(unittest.TestCase):
     def test_export_tooltip_is_translated(self):
         self.assertEqual(self.panel.btn_export.toolTip(), i18n.T("clone.export.tip"))
 
+    def test_translate_button_emits_request(self):
+        received = []
+        self.panel.translate_requested.connect(lambda: received.append(True))
+        self.panel.btn_translate.click()
+        self.assertEqual(received, [True])
+
+    def test_translate_button_is_translated(self):
+        self.assertIn(i18n.T("clone.translate"), self.panel.btn_translate.text())
+        self.assertEqual(
+            self.panel.btn_translate.toolTip(), i18n.T("clone.translate.tip")
+        )
+
+    def test_pending_shows_hint_over_original(self):
+        self.panel.show_pending(None, i18n.T("clone.pending_page"))
+        self.assertTrue(self.panel._spinner.isVisible())
+        self.assertEqual(self.panel._spinner.text(), i18n.T("clone.pending_page"))
+        self.assertEqual(self.panel._lbl_status.text(), i18n.T("clone.status_todo"))
+
 
 if __name__ == "__main__":
     unittest.main()

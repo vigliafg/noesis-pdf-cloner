@@ -911,5 +911,147 @@ class ExportTranslationWaitTests(unittest.TestCase):
         self.assertTrue(dest.is_file())
 
 
+@unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
+class OnDemandTranslationTests(unittest.TestCase):
+    """Traduzione on demand: si avvia solo col pulsante, non al cambio pagina.
+
+    Una traduzione per documento: se esiste la cache di un altro motore, la si
+    elimina solo dopo conferma dell'utente.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._app = QApplication.instance() or QApplication([])
+        cls._app.setApplicationName("noesis-pdf-cloner")
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        cfg = Path(self._tmp.name) / "config.json"
+        self._prev_lang = i18n.get_language()
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.set_language("it")
+        import main
+        self.main = main
+
+    def tearDown(self):
+        i18n.set_language(self._prev_lang)
+        self._tmp.cleanup()
+
+    class _Engine:
+        def __init__(self, cached=(), engines=()):
+            self.lang_in = "en"
+            self.lang_out = "it"
+            self._cached = set(cached)
+            self._engines = list(engines)
+            self.purged: list[str] = []
+
+        def set_pdf2zh_bin(self, *args, **kwargs):
+            pass
+
+        def is_cached(self, page, engine, *args, **kwargs):
+            return page in self._cached
+
+        def available(self):
+            return True
+
+        def cached_engines(self):
+            return list(self._engines)
+
+        def engine_cache_stats(self, engine):
+            return (3, 2048)
+
+        def purge_engine_cache(self, engine):
+            self.purged.append(engine)
+            return (3, 2048)
+
+        def status(self, page, engine):
+            return "done"
+
+        def translated_path(self, page, engine, *args, **kwargs):
+            return Path("/fake/none.pdf")
+
+    class _Doc:
+        def close(self):
+            pass
+
+    def _window(self, engine):
+        window = self.main.MainWindow()
+        window._pdf_path = Path(self._tmp.name) / "doc.pdf"
+        window._mupdf_doc = self._Doc()
+        window._page_count = 10
+        window._current_page = 0
+        window._clone_engine = engine
+        return window
+
+    def test_set_page_does_not_auto_translate(self):
+        engine = self._Engine()
+        i18n.set_translation_engine("google")
+        window = self._window(engine)
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        window._display_page = lambda page: None
+        window._remember_last_page = lambda page: None
+        window._show_clone_for_page = lambda page: calls.append(("show", page))
+        try:
+            window._set_page(0)
+        finally:
+            window.close()
+        self.assertEqual(calls, [("show", 0)])
+
+    def test_cached_page_is_shown_without_translating(self):
+        engine = self._Engine(cached=[0], engines=["google"])
+        i18n.set_translation_engine("google")
+        window = self._window(engine)
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        try:
+            window._on_translate_requested()
+        finally:
+            window.close()
+        self.assertEqual(calls, [])
+        self.assertEqual(engine.purged, [])
+
+    def test_other_engine_purged_after_confirm_then_translates(self):
+        engine = self._Engine(engines=["bing"])
+        i18n.set_translation_engine("google")
+        window = self._window(engine)
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        window._confirm_purge = lambda olds, new: True
+        try:
+            window._on_translate_requested()
+        finally:
+            window.close()
+        self.assertEqual(engine.purged, ["bing"])
+        self.assertEqual(calls, [0])
+
+    def test_cancelled_confirm_aborts_translation(self):
+        engine = self._Engine(engines=["bing"])
+        i18n.set_translation_engine("google")
+        window = self._window(engine)
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        window._confirm_purge = lambda olds, new: False
+        try:
+            window._on_translate_requested()
+        finally:
+            window.close()
+        self.assertEqual(engine.purged, [])
+        self.assertEqual(calls, [])
+
+    def test_engine_switch_does_not_translate(self):
+        engine = self._Engine(engines=["google"])
+        i18n.set_translation_engine("google")
+        window = self._window(engine)
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        try:
+            window._on_engine_selected("bing")
+        finally:
+            window.close()
+        self.assertEqual(calls, [])
+        self.assertEqual(i18n.get_translation_engine(), "bing")
+
+
 if __name__ == "__main__":
     unittest.main()

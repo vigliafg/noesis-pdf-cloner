@@ -548,6 +548,56 @@ class CloneEngine:
             ).is_file()
         ]
 
+    # ── gestione cache (per la UI: una traduzione per documento) ──────────
+
+    def _engine_cache_dir(self, engine: str) -> Path:
+        """Cartella di cache di un motore per il documento corrente."""
+        return self.translated_root / self._doc_key / normalize_engine(engine)
+
+    def cached_engines(self) -> list[str]:
+        """Motori con almeno una pagina tradotta in cache per il documento.
+
+        Ordine stabile (``ENGINES``); la cache di un motore esiste anche se i
+        file sono in una coppia linguistica diversa da quella corrente.
+        """
+        if not self._doc_key:
+            return []
+        result: list[str] = []
+        for engine in ENGINES:
+            base = self._engine_cache_dir(engine)
+            if base.is_dir() and any(p.is_file() for p in base.rglob("*.pdf")):
+                result.append(engine)
+        return result
+
+    def engine_cache_stats(self, engine: str) -> tuple[int, int]:
+        """``(numero di file, byte)`` della cache del motore per il documento."""
+        base = self._engine_cache_dir(engine)
+        files = 0
+        size = 0
+        if base.is_dir():
+            for path in base.rglob("*"):
+                if path.is_file():
+                    files += 1
+                    with contextlib.suppress(OSError):
+                        size += path.stat().st_size
+        return files, size
+
+    def purge_engine_cache(self, engine: str) -> tuple[int, int]:
+        """Elimina la cache del motore per il documento.
+
+        Ritorna ``(file rimossi, byte liberati)``. Non tocca le pagine
+        estratte (``split/``) né gli altri motori.
+        """
+        files, size = self.engine_cache_stats(engine)
+        base = self._engine_cache_dir(engine)
+        if base.is_dir():
+            shutil.rmtree(base, ignore_errors=True)
+        # Stato in memoria: le pagine di quel motore non sono più "done".
+        norm = normalize_engine(engine)
+        for key in [k for k in self._status if k[1] == norm]:
+            self._status.pop(key, None)
+        return files, size
+
     def export_pdf(
         self,
         pages,

@@ -557,6 +557,57 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "En attente de la traduction…", "de": "Warte auf Übersetzung…",
         "es": "Esperando la traducción…",
     },
+    "clone.translate": {
+        "it": "Traduci", "en": "Translate", "fr": "Traduire",
+        "de": "Übersetzen", "es": "Traducir",
+    },
+    "clone.translate.tip": {
+        "it": "Traduce la pagina corrente con il motore selezionato",
+        "en": "Translate the current page with the selected engine",
+        "fr": "Traduire la page courante avec le moteur sélectionné",
+        "de": "Die aktuelle Seite mit der gewählten Engine übersetzen",
+        "es": "Traduce la página actual con el motor seleccionado",
+    },
+    "clone.pending_page": {
+        "it": "Premi ▶ Traduci per tradurre questa pagina",
+        "en": "Press ▶ Translate to translate this page",
+        "fr": "Appuyez sur ▶ Traduire pour traduire cette page",
+        "de": "▶ Übersetzen drücken, um diese Seite zu übersetzen",
+        "es": "Pulsa ▶ Traducir para traducir esta página",
+    },
+    "clone.status_todo": {
+        "it": "Da tradurre", "en": "Not translated", "fr": "À traduire",
+        "de": "Zu übersetzen", "es": "Sin traducir",
+    },
+    "clone.purge.title": {
+        "it": "Eliminare la traduzione esistente?",
+        "en": "Delete the existing translation?",
+        "fr": "Supprimer la traduction existante ?",
+        "de": "Die vorhandene Übersetzung löschen?",
+        "es": "¿Eliminar la traducción existente?",
+    },
+    "clone.purge.body": {
+        "it": "Per tradurre con {new} verrà eliminata dalla cache la traduzione "
+              "fatta con {old} ({pages} pagine, {size}).\n\nContinuare?",
+        "en": "To translate with {new}, the cached translation made with "
+              "{old} ({pages} pages, {size}) will be deleted.\n\nContinue?",
+        "fr": "Pour traduire avec {new}, la traduction en cache faite avec "
+              "{old} ({pages} pages, {size}) sera supprimée.\n\nContinuer ?",
+        "de": "Um mit {new} zu übersetzen, wird die zwischengespeicherte "
+              "Übersetzung mit {old} ({pages} Seiten, {size}) gelöscht.\n\n"
+              "Fortfahren?",
+        "es": "Para traducir con {new}, se eliminará de la caché la traducción "
+              "hecha con {old} ({pages} páginas, {size}).\n\n¿Continuar?",
+    },
+    "clone.purge.confirm": {
+        "it": "Elimina e traduci", "en": "Delete and translate",
+        "fr": "Supprimer et traduire", "de": "Löschen und übersetzen",
+        "es": "Eliminar y traducir",
+    },
+    "clone.purge.cancel": {
+        "it": "Annulla", "en": "Cancel", "fr": "Annuler",
+        "de": "Abbrechen", "es": "Cancelar",
+    },
     "clone.status_running": {
         "it": "Traduzione…", "en": "Translating…", "fr": "Traduction…",
         "de": "Übersetzung…", "es": "Traduciendo…",

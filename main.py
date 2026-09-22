@@ -2388,6 +2388,10 @@ class CloneTranslateThread(QThread):
         """Indice 0-based della pagina in traduzione."""
         return self._page
 
+    def engine_name(self) -> str:
+        """Motore della traduzione in corso."""
+        return self._engine_name
+
     def _translate(self) -> Path | None:
         """Traduce la pagina; se un altro worker la sta già facendo, attende.
 
@@ -3656,6 +3660,7 @@ class TranslatedPagePanel(QWidget):
     export_requested = pyqtSignal()
     export_current_requested = pyqtSignal()
     translate_cancel_requested = pyqtSignal()
+    translate_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3710,6 +3715,21 @@ class TranslatedPagePanel(QWidget):
             self._engine_group.addButton(rb)
             self._radios[code] = rb
             bar.addWidget(rb)
+
+        # Pulsante di traduzione on demand: la traduzione parte SOLO da qui
+        # (nessuna auto-traduzione al cambio pagina).
+        self.btn_translate = QPushButton(f"▶ {T('clone.translate')}")
+        self.btn_translate.setToolTip(T("clone.translate.tip"))
+        self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_translate.setStyleSheet(
+            "QPushButton { background: #3a6bc5; color: #fff; border: none;"
+            " border-radius: 4px; padding: 3px 12px; font-size: 12px;"
+            " font-weight: bold; }"
+            "QPushButton:hover { background: #4a7bd5; }"
+            "QPushButton:disabled { background: #555; color: #999; }"
+        )
+        self.btn_translate.clicked.connect(self.translate_requested.emit)
+        bar.addWidget(self.btn_translate)
 
         bar.addStretch()
 
@@ -3860,6 +3880,13 @@ class TranslatedPagePanel(QWidget):
         self.view.show_page(pixmap)
         self._lbl_status.setText("")
 
+    def show_pending(self, pixmap: QPixmap | None, hint: str):
+        """Originale + invito a lanciare la traduzione (nessun processo attivo)."""
+        self._liquid.stop()
+        self.view.show_page(pixmap)
+        self._lbl_status.setText(T("clone.status_todo"))
+        self.show_spinner(hint)
+
     def show_translating(self, pixmap: QPixmap | None, caption: str,
                          cancelable: bool = True):
         """Mostra l'overlay liquido durante la traduzione della pagina."""
@@ -3877,6 +3904,7 @@ class TranslatedPagePanel(QWidget):
 
     def show_message(self, text: str):
         self._liquid.stop()
+        self.hide_spinner()
         self.view.show_message(text)
 
     def set_view_zoom(self, zoom: float):
@@ -3918,6 +3946,8 @@ class TranslatedPagePanel(QWidget):
         self.set_target_language(get_target_lang())
         for code, rb in self._radios.items():
             rb.setText(T(f"engine.short.{code}"))
+        self.btn_translate.setText(f"▶ {T('clone.translate')}")
+        self.btn_translate.setToolTip(T("clone.translate.tip"))
         self._collapse_btn.setToolTip(
             T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
         )
@@ -5577,6 +5607,18 @@ def _fmt_duration(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def _fmt_bytes(size: int) -> str:
+    """Formatta una dimensione in B/KB/MB/GB (base 1024)."""
+    value = float(max(0, int(size)))
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            if unit == "B":
+                return f"{int(value)} B"
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
+
+
 class ExportProgressDialog(QDialog):
     """Modal wait shown while the missing range pages are translated and the
     PDF is written.
@@ -6133,6 +6175,9 @@ class MainWindow(QMainWindow):
         )
         self.translated_panel.translate_cancel_requested.connect(
             self._on_cancel_translation
+        )
+        self.translated_panel.translate_requested.connect(
+            self._on_translate_requested
         )
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
@@ -6823,9 +6868,10 @@ class MainWindow(QMainWindow):
         # Render left
         self._display_page(page_num)
 
-        # Clone translation right (async: pdf2zh_next non blocca la UI)
+        # Clone a destra: si mostra solo la cache del motore selezionato.
+        # La traduzione è on demand (pulsante ▶ Traduci nel pannello destro).
         if self._pdf_path:
-            self._request_translation(page_num)
+            self._show_clone_for_page(page_num)
 
         # Update toolbar
         self.page_spin.blockSignals(True)
@@ -6928,7 +6974,8 @@ class MainWindow(QMainWindow):
         self.text_panel.set_translation_languages(src, dst, engine)
         self.text_panel.set_save_edits(bool(values.get("save_edits", True)))
 
-        # Pannello clone: allinea lingua/engine e rigenera se sono cambiati.
+        # Pannello clone: allinea lingua/engine e aggiorna la vista (on demand:
+        # cambiare motore/lingua NON avvia più una traduzione).
         self._configure_clone_engine()
         self.translated_panel.set_target_language(dst)
         self.translated_panel.set_engine(engine)
@@ -6936,7 +6983,7 @@ class MainWindow(QMainWindow):
             self._clone_generation += 1
             self._retire_clone_thread()
             if self._pdf_path:
-                self._request_translation(self._current_page)
+                self._show_clone_for_page(self._current_page)
 
         if ui_changed:
             self._retranslate_all()
@@ -7053,7 +7100,7 @@ class MainWindow(QMainWindow):
             self.pdf_view.set_view_zoom(self._view_zoom)
             self.translated_panel.set_view_zoom(self._view_zoom)
             self._display_page(self._current_page)
-            self._display_translated_page(self._current_page)
+            self._show_clone_for_page(self._current_page)
 
     # ── rendering engine ──────────────────────────────────────────────────
 
@@ -7155,6 +7202,102 @@ class MainWindow(QMainWindow):
 
     def _engine_display(self, engine: str) -> str:
         return T(f"engine.option.{engine}")
+
+    def _show_clone_for_page(self, page_num: int):
+        """Mostra il clone in cache del motore selezionato, o il segnaposto.
+
+        Nessuna traduzione automatica: si avvia solo col pulsante ▶ Traduci.
+        """
+        if not self._pdf_path:
+            return
+        self._configure_clone_engine()
+        engine = get_translation_engine()
+        if self._clone_engine.is_cached(page_num, engine):
+            self._display_translated_page(page_num)
+            if self._clone_engine.status(page_num, engine) == "empty":
+                self.translated_panel.set_status(T("clone.status_empty"))
+            else:
+                self.translated_panel.set_status(T("clone.status_done"))
+        else:
+            self.translated_panel.show_pending(
+                self._orig_pixmap, T("clone.pending_page")
+            )
+        self._update_working_badge()
+
+    def _on_translate_requested(self):
+        """Pulsante ▶ Traduci: avvia la traduzione della pagina corrente."""
+        if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
+            return
+        self._configure_clone_engine()
+        page = self._current_page
+        engine = get_translation_engine()
+
+        if self._clone_engine.is_cached(page, engine):
+            self._show_clone_for_page(page)
+            self.status_bar.showMessage(
+                T("clone.status_cached", page=page + 1)
+            )
+            return
+
+        if engine == "llm" and not self._ensure_llm_key(force=True):
+            self._request_translation(page)  # mostra clone.no_key
+            return
+
+        if not self._clone_engine.available():
+            self._request_translation(page)  # mostra clone.no_engine
+            return
+
+        # Una traduzione per documento: gli altri motori in cache lasciano il
+        # posto a quello scelto, dopo conferma dell'utente.
+        others = [
+            e for e in self._clone_engine.cached_engines() if e != engine
+        ]
+        if others:
+            if not self._confirm_purge(others, engine):
+                return
+            # Ferma le traduzioni in background di quei motori: altrimenti
+            # riscriverebbero la cache appena eliminata.
+            for thread in list(self._retired_clone_threads):
+                if thread.isRunning() and thread.engine_name() in others:
+                    thread.cancel()
+            if (
+                self._clone_thread is not None
+                and self._clone_thread.isRunning()
+                and self._clone_thread.engine_name() in others
+            ):
+                self._clone_thread.cancel()
+            for old in others:
+                self._clone_engine.purge_engine_cache(old)
+
+        self._request_translation(page)
+
+    def _confirm_purge(self, old_engines: list[str], new_engine: str) -> bool:
+        """Chiede conferma prima di eliminare la cache degli altri motori."""
+        pages = 0
+        size = 0
+        for eng in old_engines:
+            files, nbytes = self._clone_engine.engine_cache_stats(eng)
+            pages += files
+            size += nbytes
+        old_names = ", ".join(self._engine_display(e) for e in old_engines)
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(T("clone.purge.title"))
+        box.setText(
+            T(
+                "clone.purge.body",
+                old=old_names,
+                new=self._engine_display(new_engine),
+                pages=pages,
+                size=_fmt_bytes(size),
+            )
+        )
+        confirm = box.addButton(
+            T("clone.purge.confirm"), QMessageBox.ButtonRole.AcceptRole
+        )
+        box.addButton(T("clone.purge.cancel"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return box.clickedButton() is confirm
 
     def _request_translation(self, page_num: int):
         """Show the cached clone of ``page_num`` or start a background job."""
@@ -7606,7 +7749,12 @@ class MainWindow(QMainWindow):
             self._clone_thread.wait(5000)
 
     def _on_engine_selected(self, engine: str):
-        """Quick engine switch from the right-panel radios."""
+        """Selezione motore dal pannello destro: aggiorna la vista, non traduce.
+
+        La traduzione parte solo dal pulsante ▶ Traduci. La traduzione
+        eventualmente in corso resta attiva in background (va in cache) ma i
+        suoi aggiornamenti UI vengono invalidati (generation guard).
+        """
         if engine not in CLONE_ENGINES or engine == get_translation_engine():
             return
         set_translation_engine(engine)
@@ -7615,9 +7763,10 @@ class MainWindow(QMainWindow):
             self._ensure_llm_key(force=True)
         self._clone_generation += 1
         self._retire_clone_thread()
+        self._configure_clone_engine()
         self.translated_panel.set_target_language(get_target_lang())
         if self._pdf_path:
-            self._request_translation(self._current_page)
+            self._show_clone_for_page(self._current_page)
 
     # ── file open ─────────────────────────────────────────────────────────
 
