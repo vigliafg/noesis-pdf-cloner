@@ -260,6 +260,17 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
    ⚙️ Impostazioni → *Installa motore*, invece del solo messaggio
    *"pdf2zh_next non trovato"*. Oggi l'installazione è **manuale** (nessun
    prompt automatico) e richiede `uv` già presente (~1,1 GB da scaricare).
+   - **Bootstrap di `uv`** (valutare): se `find_uv()` è `None`, scaricare il
+     binario ufficiale `uv` per la piattaforma (asset GitHub, es.
+     `uv-x86_64-unknown-linux-gnu.tar.gz`, `uv-x86_64-pc-windows-msvc.zip`,
+     `uv-*-apple-darwin.tar.gz`) con **versione pinnata + verifica `.sha256`**,
+     scompattarlo in `<app-data>/tools/uv` e usarlo per `install_engine`. `uv`
+     gestisce da sé anche il download di Python 3.12 → "Installa motore"
+     diventerebbe davvero un click senza prerequisiti (a parte la rete).
+     Alternativa ancora più offline: **includere `uv` nel bundle PyInstaller**
+     (`--add-data`, +~25 MB per piattaforma, licenza MIT/Apache-2.0 da
+     includere). Attenzione a Proxy/offline, Gatekeeper (macOS) e
+     SmartScreen/AV (Windows).
 10. **Robustezza AppImage su Linux** (valutare): build su `ubuntu-22.04` per una
     glibc più vecchia (compatibilità distro); documentare `libfuse2` e
     `./NoesisPDFCloner-x86_64.AppImage --appimage-extract-and-run`; valutare in
