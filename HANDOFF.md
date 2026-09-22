@@ -195,6 +195,12 @@ DEBUG): utile per diagnosticare su Windows, dove non c'è console.
 ``max_concurrent=1``: una sola ``pdf2zh_next`` alla volta (meno processi
 concorrenti su Windows). Le pagine in coda restano visibili con la targhetta.
 
+**Pagine senza testo (v0.1.2).** Se ``pdf2zh_next`` esce 0 ma non produce il
+``.mono.pdf`` (copertina, pagine di sole immagini/scansioni) il motore **non è
+più un errore**: copia la pagina originale in cache e la marca ``empty``; la UI
+la mostra con la nota "nessun testo da tradurre". Allineato al servizio
+(``app/engine.py``).
+
 ---
 
 ## 7. Problemi noti / TODO
@@ -202,8 +208,10 @@ concorrenti su Windows). Le pagine in coda restano visibili con la targhetta.
 1. **Release non testate**: il workflow multipiattaforma è nuovo; il primo tag va
    verificato. Su macOS il `.app` cerca `.venv2` in `Contents/MacOS` e nelle cartelle
    superiori (euristica); da validare sul campo.
-2. **Pagine senza testo** (es. copertina, pagina 1): pdf2zh_next può non produrre il
-   `.mono.pdf` → status `error`. La UI mostra il messaggio senza bloccare la navigazione.
+2. ~~**Pagine senza testo** (es. copertina, pagina 1): pdf2zh_next può non produrre il
+   `.mono.pdf` → status `error`. La UI mostra il messaggio senza bloccare la navigazione.~~
+   **Risolto (v0.1.2)**: il motore copia l'originale in cache (`empty`) e la UI mostra
+   la nota "nessun testo da tradurre" (allineato al servizio).
 3. **`docs/help/`**: contenuti ancora orientati all'estrazione markdown di lite; da
    riscrivere per il flusso di clonazione.
 4. **`NEXT_STEPS-cattura-manuale.md`**: nota di lite (cattura manuale immagini); valutare

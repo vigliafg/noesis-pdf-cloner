@@ -391,6 +391,19 @@ class PipelineTests(unittest.TestCase):
             run.assert_not_called()
         self.assertTrue(again.is_file())
 
+    def test_no_mono_falls_back_to_original(self):
+        """Pagina senza testo: BabelDOC esce 0 senza produrre mono → originale."""
+        self.fake.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n")
+        self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
+        out = self.engine.translate_page(1, "google")
+        self.assertIsNotNone(out)
+        self.assertTrue(out.is_file())
+        self.assertEqual(
+            out.read_bytes(), self.engine.split_path(1).read_bytes()
+        )
+        self.assertEqual(self.engine.status(1, "google"), "empty")
+        self.assertTrue(self.engine.is_cached(1, "google"))
+
     def test_llm_without_key_reports_error(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("OPENROUTER_API_KEY", None)

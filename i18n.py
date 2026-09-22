@@ -565,6 +565,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Pronto", "en": "Ready", "fr": "Prêt", "de": "Fertig",
         "es": "Listo",
     },
+    "clone.status_empty": {
+        "it": "Nessun testo da tradurre", "en": "Nothing to translate",
+        "fr": "Aucun texte à traduire", "de": "Kein Text zu übersetzen",
+        "es": "Nada que traducir",
+    },
+    "clone.empty_page": {
+        "it": "Pagina {page}: nessun testo da tradurre, mostro l'originale.",
+        "en": "Page {page}: nothing to translate, showing the original.",
+        "fr": "Page {page} : aucun texte à traduire, affichage de l'original.",
+        "de": "Seite {page}: kein Text zu übersetzen, zeige das Original.",
+        "es": "Página {page}: nada que traducir, muestro el original.",
+    },
     "clone.status_cached": {
         "it": "Pagina {page} in cache", "en": "Page {page} cached",
         "fr": "Page {page} en cache", "de": "Seite {page} im Cache",

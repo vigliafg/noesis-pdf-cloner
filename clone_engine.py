@@ -783,7 +783,18 @@ class CloneEngine:
                     )
                 monos = glob.glob(str(out_dir / "*.mono.pdf"))
                 if not monos:
-                    raise RuntimeError("pdf2zh_next non ha prodotto il file mono")
+                    # BabelDOC non produce output quando la pagina non ha testo
+                    # da tradurre (copertina, pagina di sole immagini/scansione).
+                    # Non è un errore: il clone della pagina è la pagina stessa.
+                    log.info(
+                        "pagina %d (%s): nessun testo da tradurre, uso l'originale",
+                        page, engine,
+                    )
+                    tmp_out = out.with_name(out.name + ".tmp")
+                    shutil.copyfile(sp, tmp_out)
+                    os.replace(tmp_out, str(out))  # scrittura atomica in cache
+                    self._status[key] = "empty"
+                    return out
                 os.replace(monos[0], str(out))  # scrittura atomica in cache
                 self._status[key] = "done"
                 return out

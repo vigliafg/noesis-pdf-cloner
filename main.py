@@ -7172,9 +7172,15 @@ class MainWindow(QMainWindow):
 
         if self._clone_engine.is_cached(page_num, engine):
             self._display_translated_page(page_num)
-            self.status_bar.showMessage(
-                T("clone.status_cached", page=page_num + 1)
-            )
+            if self._clone_engine.status(page_num, engine) == "empty":
+                self.translated_panel.set_status(T("clone.status_empty"))
+                self.status_bar.showMessage(
+                    T("clone.empty_page", page=page_num + 1), 6000
+                )
+            else:
+                self.status_bar.showMessage(
+                    T("clone.status_cached", page=page_num + 1)
+                )
             return
 
         if not self._clone_engine.available():
@@ -7284,8 +7290,14 @@ class MainWindow(QMainWindow):
             return
         self.translated_panel.finish_translating(True)
         self._display_translated_page(page_num)
-        self.translated_panel.set_status(T("clone.status_done"))
-        self.status_bar.showMessage(T("clone.done", page=page_num + 1))
+        if self._clone_engine.status(page_num, engine) == "empty":
+            self.translated_panel.set_status(T("clone.status_empty"))
+            self.status_bar.showMessage(
+                T("clone.empty_page", page=page_num + 1), 6000
+            )
+        else:
+            self.translated_panel.set_status(T("clone.status_done"))
+            self.status_bar.showMessage(T("clone.done", page=page_num + 1))
         self._update_working_badge()
 
     def _on_clone_error(self, generation: int, page_num: int, engine: str, message: str):
