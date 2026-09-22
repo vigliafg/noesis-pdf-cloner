@@ -114,4 +114,4 @@ python3 -m unittest discover -s tests -v
 
 Le icone di release (`assets/noesispdf.ico` per Windows, `assets/noesispdf.icns`
 per macOS, `assets/noesispdf-256.png` per l'AppImage) sono generate dal logo
-`PDFCLONER.jpeg`.
+`assets/PDFCLONER.jpeg`.

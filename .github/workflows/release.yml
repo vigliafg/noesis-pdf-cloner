@@ -57,8 +57,8 @@ jobs:
             --noconfirm \
             --name NoesisPDFCloner \
             $ICON \
-            --collect-all pymupdf4llm \
             --collect-data pymupdf \
+            --add-data "assets${SEP}assets" \
             --add-data "gtranslate_cli.py${SEP}." \
             main.py
 
@@ -128,8 +128,8 @@ jobs:
             --clean \
             --noconfirm \
             --name NoesisPDFCloner \
-            --collect-all pymupdf4llm \
             --collect-data pymupdf \
+            --add-data "assets:assets" \
             --add-data "gtranslate_cli.py:." \
             main.py
 

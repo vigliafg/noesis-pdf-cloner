@@ -75,7 +75,7 @@ from PyQt6.QtCore import (
     QRect, QLocale, QEventLoop,
 )
 from PyQt6.QtGui import (
-    QImage, QPixmap, QFont, QKeySequence, QShortcut,
+    QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
     QPen, QBrush, QColor, QPainter, QDesktopServices, QLinearGradient,
 )
 from PyQt6.QtWidgets import (
@@ -7520,6 +7520,32 @@ class MainWindow(QMainWindow):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+def _bundled_asset(*parts: str) -> Path:
+    """Percorso di un asset: dal bundle PyInstaller o dalla cartella del repo."""
+    base = getattr(sys, "_MEIPASS", None)
+    root = Path(base) if base else Path(__file__).resolve().parent
+    return root.joinpath("assets", *parts)
+
+
+def _app_icon() -> QIcon:
+    """Icona dell'app dalle immagini di ``assets/`` (derivate dal logo).
+
+    Windows preferisce l'``.ico`` multi-risoluzione, gli altri l'immagine PNG.
+    """
+    names = (
+        ("noesispdf.ico", "noesispdf-256.png", "noesispdf.png")
+        if sys.platform == "win32"
+        else ("noesispdf-256.png", "noesispdf.png", "noesispdf.ico")
+    )
+    for name in names:
+        path = _bundled_asset(name)
+        if path.exists():
+            icon = QIcon(str(path))
+            if not icon.isNull():
+                return icon
+    return QIcon()
+
+
 def main():
     # Nei build congelati (PyInstaller) punta l'OCR di PyMuPDF al Tesseract
     # incluso nel bundle (binario + librerie + tessdata) invece di richiederlo
@@ -7528,6 +7554,9 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("noesis-pdf-cloner")
+    _icon = _app_icon()
+    if not _icon.isNull():
+        app.setWindowIcon(_icon)
 
     # Carica la chiave OpenRouter dall'archivio per-utente (se non già in env).
     global _API_KEY_SOURCE

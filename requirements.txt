@@ -6,7 +6,3 @@ pymupdf>=1.24
 
 # Markdown rendering — usato solo dal pannello testo dormiente (futura Docling)
 markdown>=3.5
-
-# Estrazione testo del pannello dormiente (futura integrazione Docling).
-# Non necessaria al percorso di clonazione (pdf2zh_next gira in .venv2).
-pymupdf4llm>=0.0.9

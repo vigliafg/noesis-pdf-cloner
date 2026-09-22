@@ -203,7 +203,7 @@ assente). Corretto in `clone_engine.py` (`from_page=page`) + test di regressione
 | `run.sh`, `setup_engine.sh`, `setup_engine.ps1` | Bootstrap venv / installazione motore |
 | `.github/workflows/release.yml` | Release multipiattaforma (PyInstaller + NSIS + AppImage) |
 | `.github/workflows/pages.yml` | Pubblica `docs/help/` su GitHub Pages |
-| `assets/` | Icone di release (`noesispdf.ico`/`.icns`/`-256.png`) generate da `PDFCLONER.jpeg` |
+| `assets/` | Logo sorgente `assets/PDFCLONER.jpeg` e icone di release (`noesispdf.ico`/`.icns`/`-256.png`) generate da esso; l'icona è usata anche a runtime (`app.setWindowIcon`) |
 | `installer.nsi` | Installer Windows (rebrandato) |
 | `ha22.pdf` | PDF di test (300 MB, **gitignored**, copyright McGraw-Hill) |
 
