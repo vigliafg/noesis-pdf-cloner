@@ -1006,10 +1006,20 @@ class OnDemandTranslationTests(unittest.TestCase):
         window._request_translation = lambda page: calls.append(page)
         try:
             window._on_translate_requested()
+            message = window.status_bar.currentMessage()
         finally:
             window.close()
         self.assertEqual(calls, [])
         self.assertEqual(engine.purged, [])
+        # Feedback esplicito: pagina già in cache per quel motore.
+        self.assertEqual(
+            message,
+            i18n.T(
+                "clone.already_cached",
+                page=1,
+                engine=window._engine_display("google"),
+            ),
+        )
 
     def test_other_engine_purged_after_confirm_then_translates(self):
         engine = self._Engine(engines=["bing"])

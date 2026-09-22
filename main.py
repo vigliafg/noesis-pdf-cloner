@@ -7234,8 +7234,16 @@ class MainWindow(QMainWindow):
 
         if self._clone_engine.is_cached(page, engine):
             self._show_clone_for_page(page)
-            self.status_bar.showMessage(
+            self.translated_panel.set_status(
                 T("clone.status_cached", page=page + 1)
+            )
+            self.status_bar.showMessage(
+                T(
+                    "clone.already_cached",
+                    page=page + 1,
+                    engine=self._engine_display(engine),
+                ),
+                6000,
             )
             return
 

@@ -149,7 +149,9 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     l'originale con l'invito *"Premi ▶ Traduci per tradurre questa pagina"*.
     La traduzione parte solo dal pulsante **▶ Traduci** nella barra del
     pannello destro (accanto alle radio google/bing/llm). Le radio cambiano solo
-    il motore selezionato e la vista.
+    il motore selezionato e la vista. Se la pagina è **già in cache** per il
+    motore scelto, ▶ Traduci non rilancia nulla e dà un feedback esplicito
+    (*"La pagina N tradotta da X è già in cache"*).
 16. **Una traduzione per pagina**: premendo ▶ Traduci con un motore diverso da
     quello con cui **quella pagina** è già in cache, un dialog di conferma
     (motore/i, pagina, MB) chiede se eliminare la cache precedente della sola

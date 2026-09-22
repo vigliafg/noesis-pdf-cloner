@@ -636,6 +636,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Page {page} en cache", "de": "Seite {page} im Cache",
         "es": "Página {page} en caché",
     },
+    "clone.already_cached": {
+        "it": "La pagina {page} tradotta da {engine} è già in cache.",
+        "en": "Page {page} translated by {engine} is already cached.",
+        "fr": "La page {page} traduite par {engine} est déjà en cache.",
+        "de": "Seite {page}, übersetzt mit {engine}, ist bereits im Cache.",
+        "es": "La página {page} traducida por {engine} ya está en caché.",
+    },
     "clone.status_error": {
         "it": "Errore", "en": "Error", "fr": "Erreur", "de": "Fehler",
         "es": "Error",
