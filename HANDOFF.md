@@ -227,9 +227,9 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
 
 ## 7. Problemi noti / TODO
 
-1. **Release non testate**: il workflow multipiattaforma è nuovo; il primo tag va
-   verificato. Su macOS il `.app` cerca `.venv2` in `Contents/MacOS` e nelle cartelle
-   superiori (euristica); da validare sul campo.
+1. **Release**: v0.1.2 e **v0.1.3** pubblicate e verificate (Windows + Linux
+   AppImage + macOS). Resta da validare **sul campo il `.app` macOS**: cerca
+   `.venv2` in `Contents/MacOS` e nelle cartelle superiori (euristica).
 2. ~~**Pagine senza testo** (es. copertina, pagina 1): pdf2zh_next può non produrre il
    `.mono.pdf` → status `error`. La UI mostra il messaggio senza bloccare la navigazione.~~
    **Risolto (v0.1.2)**: il motore copia l'originale in cache (`empty`) e la UI mostra
@@ -246,6 +246,24 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
    attendere la fine della pagina; i risultati obsoleti restano scartati dal
    generation guard.
 7. **Docling** e reintegrazione degli strumenti a zone: lavoro futuro previsto.
+8. **AppImage e motore `.venv2`** (da fare domani): l'AppImage gira da un mount
+   temporaneo in sola lettura, quindi il `.venv2` non può stare "accanto
+   all'eseguibile". Da fare:
+   - far cercare all'app anche `$APPIMAGE`/`$APPDIR`, così rileva un `.venv2`
+     accanto al file `.AppImage` (oggi `setup_engine.sh` lì non basta);
+   - nel README, spiegare che con l'AppImage conviene il pulsante **Installa
+     motore** (installa in `~/.local/share/noesis-pdf-cloner/engine/.venv2`,
+     già auto-rilevato) oppure impostare il percorso a mano in ⚙️ Impostazioni →
+     *Eseguibile pdf2zh_next*.
+9. **Avviso "motore non installato"** (da fare domani): all'avvio, o al primo
+   ▶ Traduci senza motore, mostrare un promemoria con scorciatoia a
+   ⚙️ Impostazioni → *Installa motore*, invece del solo messaggio
+   *"pdf2zh_next non trovato"*. Oggi l'installazione è **manuale** (nessun
+   prompt automatico) e richiede `uv` già presente (~1,1 GB da scaricare).
+10. **Robustezza AppImage su Linux** (valutare): build su `ubuntu-22.04` per una
+    glibc più vecchia (compatibilità distro); documentare `libfuse2` e
+    `./NoesisPDFCloner-x86_64.AppImage --appimage-extract-and-run`; valutare in
+    aggiunta un `.tar.gz` estraibile senza FUSE.
 
 ---
 
