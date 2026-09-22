@@ -3,7 +3,7 @@
 ;
 ; Usage:
 ;   makensis installer.nsi
-;   makensis /DVERSION=0.1.2 installer.nsi
+;   makensis /DVERSION=0.1.3 installer.nsi
 ;
 ; Produces: NoesisPDFCloner-${VERSION}-setup.exe
 ; -------------------------------------------------------------------
@@ -15,7 +15,7 @@
 ; Configurable defines (override with /D on the command line)
 ; -------------------------------------------------------------------
 !ifndef VERSION
-  !define VERSION "0.1.2"
+  !define VERSION "0.1.3"
 !endif
 
 !define PRODUCT_NAME      "Noesis PDF Cloner"

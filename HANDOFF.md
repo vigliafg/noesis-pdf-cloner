@@ -11,12 +11,12 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Commit di oggi: `63ce410` (app iniziale), `9ac52f8` (fix off-by-one), `337c90e` (barra collassabile).
+- Ultima release: **v0.1.2** (Windows x64 + macOS x64/arm64 + Linux AppImage); in
+  preparazione **v0.1.3** (traduzione on demand + purga della sola pagina).
 - Guida pubblicata su GitHub Pages (build da workflow): <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
-- Test: **164 OK** (17 skip, regressioni su PDF reali non versionati).
+- Test: **300 OK** (24 skip, regressioni su PDF reali non versionati).
 
 ### Cosa NON è ancora fatto
-- Nessuna release compilata (il workflow esiste ma non è mai stato eseguito: serve un tag `v*`).
 - I contenuti di `docs/help/` sono **rebrandati** ma descrivono ancora l'estrazione markdown di lite.
 - Il motore **Docling** e gli strumenti a zone (dormienti) non sono reintegrati.
 
@@ -42,8 +42,8 @@ cd /home/vigliafg/Documenti/GitHub/noesis-pdf-cloner
 - Rilevato automaticamente: override in ⚙️ Impostazioni → env `PDF2ZH_BIN` → `.venv2` accanto ad app/repo → `.venv2` di `../pdfcloner` (utile in sviluppo).
 - Chiave **`OPENROUTER_API_KEY`** necessaria solo per il motore **LLM** e per il fallback LLM della catena gratuita.
 
-### Release standalone (non ancora generate)
-`git tag v0.1.0 && git push --tags` → workflow `.github/workflows/release.yml` compila su
+### Release standalone
+`git tag v0.1.3 && git push origin v0.1.3` → workflow `.github/workflows/release.yml` compila su
 Windows x64, macOS x64/arm64 e Linux (AppImage) e allega anche `setup_engine.sh`/`.ps1`.
 Dopo il download, il motore si installa accanto all'eseguibile:
 ```bash
@@ -276,7 +276,9 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
 - Visibilità: **pubblica**.
 - GitHub Pages: abilitato con `build_type=workflow`; guida a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
-- Release: workflow pronto; eseguire con un tag `v*`.
+- Release: esistenti **v0.1.2** e (in preparazione) **v0.1.3**; per pubblicarne una nuova
+  creare un tag `v*` e pusharlo (`git tag v0.1.3 && git push origin v0.1.3`). Un
+  `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
 
