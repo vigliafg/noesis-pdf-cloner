@@ -302,6 +302,25 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     - attenzione a SmartScreen/Defender (installer non firmato) e ai tempi del
       download.
 
+### Ordine consigliato (Windows)
+
+1. **Punto 11 — `uv` incluso nel bundle** (mossa a più alto rendimento): un solo
+   lavoro che sistema **Windows + Linux AppImage + macOS**, elimina il
+   prerequisito `uv` e il download a runtime di un binario (meno problemi
+   AV/SmartScreen). `uv.exe` si aggiunge come già si fa per `gtranslate_cli.py`
+   (risolto via `sys._MEIPASS`); `find_uv()` lo preferisce a PATH.
+2. **Punto 9 — avviso "motore non installato"** al primo avvio, con scorciatoia
+   a ⚙️ Impostazioni → *Installa motore*: il motore resta scaricato **dalla
+   app**, che ha già progress/log/cancel. Costo basso, grande effetto UX.
+3. **Punto 12 versione leggera** — bootstrap di `uv` dentro `setup_engine.ps1`:
+   fallback per il portable / uso da script.
+4. **Punto 12 versione NSIS** (motore durante il setup): **opzionale e
+   skippabile**, o da rimandare. Non metterei il download di 1,1 GB dentro
+   l'installer come default: è lungo, fragile su rete instabile, scrive in
+   `C:\Program Files` (serve admin; altrimenti `%LOCALAPPDATA%`) e l'installer
+   non è firmato. Meglio: installer veloce → primo avvio → la app scarica il
+   motore.
+
 ---
 
 ## 8. File chiave
