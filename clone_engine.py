@@ -21,16 +21,19 @@ Flusso per ogni pagina ed engine:
 
 from __future__ import annotations
 
+import contextlib
 import glob
 import hashlib
 import json
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
 import time
+import zipfile
 from pathlib import Path
 
 log = logging.getLogger("clone_engine")
@@ -54,6 +57,10 @@ PAGE_TIMEOUT = 900  # secondi: pdf2zh_next + BabelDOC su una pagina densa
 # Versione dello schema di cache: incrementarla invalida la cache esistente
 # (evita di servire output prodotti da versioni diverse del motore).
 CACHE_SCHEMA_VERSION = "1"
+
+
+class TranslationCancelled(RuntimeError):
+    """Traduzione annullata dall'utente (subprocess terminato)."""
 
 
 def _is_windows() -> bool:
@@ -332,6 +339,41 @@ class CloneEngine:
             os.replace(tmp, dest)  # salvataggio atomico dell'export
         return merged
 
+    def export_zip(
+        self,
+        pages,
+        engine: str,
+        dest: str | Path,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+        stem: str | None = None,
+    ) -> int:
+        """Raccoglie i mono-PDF tradotti delle ``pages`` (0-based) in un ZIP.
+
+        Come nello "stile pagine singole" del servizio: ogni pagina diventa una
+        voce ``<stem>_pNNNN.pdf``. Le pagine non in cache sono saltate; ritorna
+        il numero di pagine scritte e solleva ``ValueError`` se nessuna è
+        disponibile.
+        """
+        dest = Path(dest)
+        prefix = stem or "page"
+        written = 0
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_suffix(dest.suffix + ".tmp")
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as archive:
+            for page in pages:
+                src = self.translated_path_for(page, engine, lang_in, lang_out)
+                if not src.is_file():
+                    continue
+                archive.write(src, arcname=f"{prefix}_p{page + 1:04d}.pdf")
+                written += 1
+        if written == 0:
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+            raise ValueError("nessuna pagina tradotta da esportare")
+        os.replace(tmp, dest)  # salvataggio atomico dell'export
+        return written
+
     # ── stato ─────────────────────────────────────────────────────────
 
     def _key(self, page: int, engine: str) -> tuple:
@@ -432,13 +474,26 @@ class CloneEngine:
             )
         return (["--bing", "--qps", str(self.qps_bing)], "bing")
 
-    def translate_page(self, page: int, engine: str) -> Path | None:
-        """Traduce la pagina se serve e ritorna il path del PDF tradotto."""
+    def translate_page(
+        self,
+        page: int,
+        engine: str,
+        cancel_event: threading.Event | None = None,
+    ) -> Path | None:
+        """Traduce la pagina se serve e ritorna il path del PDF tradotto.
+
+        ``cancel_event`` (opzionale) interrompe il ``pdf2zh_next`` in corso: il
+        subprocess è avviato in un *process group* e viene terminato, così
+        l'annullamento non attende la fine della pagina (come nel servizio).
+        """
         engine = normalize_engine(engine)
         if engine not in ENGINES:
             engine = "google"
         out = self.translated_path(page, engine)
         key = self._key(page, engine)
+        if cancel_event is not None and cancel_event.is_set():
+            self._status[key] = "cancelled"
+            return None
         with self._lock_for(key):
             if out.is_file():
                 self._status[key] = "done"
@@ -488,16 +543,18 @@ class CloneEngine:
             env["PDF_LANG_IN"] = self.lang_in
             env["PDF_LANG_OUT"] = self.lang_out
             env["CLONE_ENGINE_EVENTS"] = str(self.events_file)
+            # Il fallback LLM della catena gratuita usa gli stessi modello e
+            # base URL dell'engine, anche se cambiati via codice (come nel
+            # servizio).
+            env["PDF_LLM_MODEL"] = self.llm_model
+            env["PDF_LLM_BASE_URL"] = self.llm_base_url
             try:
                 log.info("traduzione pagina %d via %s...", page, t_name)
-                r = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=PAGE_TIMEOUT,
-                    env=env,
-                )
+                r = self._run_engine(cmd, env, cancel_event)
                 log.info("pdf2zh_next pagina %d: rc=%d", page, r.returncode)
                 if r.returncode != 0:
                     raise RuntimeError(
-                        f"pdf2zh_next exit {r.returncode}: {r.stderr[-400:]}"
+                        f"pdf2zh_next exit {r.returncode}: {(r.stderr or '')[-400:]}"
                     )
                 monos = glob.glob(str(out_dir / "*.mono.pdf"))
                 if not monos:
@@ -505,12 +562,90 @@ class CloneEngine:
                 os.replace(monos[0], str(out))  # scrittura atomica in cache
                 self._status[key] = "done"
                 return out
+            except TranslationCancelled:
+                log.info("traduzione annullata pagina %d (%s)", page, engine)
+                self._status[key] = "cancelled"
+                return None
             except Exception as e:  # noqa: BLE001 — riportato in UI
                 log.exception("traduzione fallita pagina %d (%s)", page, engine)
                 self._status[key] = f"error:{e}"
                 return None
             finally:
                 shutil.rmtree(out_dir, ignore_errors=True)
+
+    def _run_engine(
+        self,
+        cmd: list[str],
+        env: dict,
+        cancel_event: threading.Event | None = None,
+    ) -> subprocess.CompletedProcess:
+        """Esegue ``pdf2zh_next`` onorando timeout e annullamento.
+
+        Il processo è avviato in una nuova sessione (POSIX) così che alla
+        cancellazione si possa terminare l'intero albero con un segnale al
+        process group (su Windows: ``taskkill /T /F``).
+        """
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                start_new_session=not _is_windows(),
+            )
+        except OSError as exc:
+            raise RuntimeError(f"avvio pdf2zh_next fallito: {exc}") from exc
+
+        deadline = time.monotonic() + PAGE_TIMEOUT
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                self._kill(process)
+                self._close_pipes(process)
+                raise TranslationCancelled("traduzione annullata")
+            if time.monotonic() > deadline:
+                self._kill(process)
+                self._close_pipes(process)
+                raise RuntimeError("timeout della traduzione")
+            try:
+                stdout, stderr = process.communicate(timeout=1.0)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+
+    @staticmethod
+    def _close_pipes(process: subprocess.Popen) -> None:
+        """Chiude le pipe di un processo terminato senza ``communicate``."""
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                with contextlib.suppress(Exception):
+                    stream.close()
+
+    @staticmethod
+    def _kill(process: subprocess.Popen) -> None:
+        """Termina ``process`` e i suoi figli (process group / taskkill)."""
+        if process.poll() is not None:
+            return
+        try:
+            if not _is_windows():
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            else:  # pragma: no cover - Windows
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    capture_output=True,
+                    check=False,
+                )
+        except (ProcessLookupError, PermissionError):
+            return
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:  # pragma: no cover
+            with contextlib.suppress(Exception):
+                if not _is_windows():
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                else:
+                    process.kill()
 
     def start(self, page: int, engine: str) -> None:
         """Avvia la traduzione in un thread di background (no-op se in cache)."""

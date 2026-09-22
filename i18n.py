@@ -719,11 +719,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Página {page} — {done} de {total}",
     },
     "export.progress.cancelling": {
-        "it": "Interruzione… (attendo la pagina in corso)",
-        "en": "Cancelling… (waiting for the current page)",
-        "fr": "Annulation… (attente de la page en cours)",
-        "de": "Abbruch… (warte auf die aktuelle Seite)",
-        "es": "Cancelando… (esperando la página actual)",
+        "it": "Interruzione…", "en": "Cancelling…",
+        "fr": "Annulation…", "de": "Abbruch…",
+        "es": "Cancelando…",
     },
     "export.cancelled": {
         "it": "Esportazione annullata.", "en": "Export cancelled.",
@@ -739,6 +737,33 @@ _STRINGS: dict[str, dict[str, str]] = {
     "export.group.translation": {
         "it": "Traduzione", "en": "Translation", "fr": "Traduction",
         "de": "Übersetzung", "es": "Traducción",
+    },
+    "export.group.format": {
+        "it": "Formato di uscita", "en": "Output format",
+        "fr": "Format de sortie", "de": "Ausgabeformat",
+        "es": "Formato de salida",
+    },
+    "export.format.merged": {
+        "it": "Un unico PDF", "en": "A single PDF",
+        "fr": "Un seul PDF", "de": "Eine einzelne PDF",
+        "es": "Un único PDF",
+    },
+    "export.format.zip": {
+        "it": "Pagine singole (ZIP)", "en": "Single pages (ZIP)",
+        "fr": "Pages séparées (ZIP)", "de": "Einzelne Seiten (ZIP)",
+        "es": "Páginas sueltas (ZIP)",
+    },
+    "export.filter_zip": {
+        "it": "Archivio ZIP (*.zip)", "en": "ZIP archive (*.zip)",
+        "fr": "Archive ZIP (*.zip)", "de": "ZIP-Archiv (*.zip)",
+        "es": "Archivo ZIP (*.zip)",
+    },
+    "export.dialog_zip": {
+        "it": "Salva pagine tradotte (ZIP)",
+        "en": "Save translated pages (ZIP)",
+        "fr": "Enregistrer les pages traduites (ZIP)",
+        "de": "Übersetzte Seiten speichern (ZIP)",
+        "es": "Guardar páginas traducidas (ZIP)",
     },
     "export.progress.engine_lang": {
         "it": "Motore: {engine} · Lingua di uscita: {lang}",

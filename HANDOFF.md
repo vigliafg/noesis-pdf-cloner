@@ -145,8 +145,11 @@ assente). Corretto in `clone_engine.py` (`from_page=page`) + test di regressione
    se rimuoverla (la feature è dormiente).
 5. **Overlap residuo BabelDOC** in casi limite (noto da pdfcloner, es. pagina 449): bug
    upstream, non dipende dai motori.
-6. **Nessuna cancellazione di una traduzione in corso** (il subprocess non è interrompibile
-   dall'UI); i risultati obsoleti sono scartati dal generation guard.
+6. ~~**Nessuna cancellazione di una traduzione in corso** (il subprocess non è interrompibile
+   dall'UI)~~ → **risolto** (allineato al servizio): `pdf2zh_next` è avviato in un
+   *process group* e il cancel (export o chiusura app) lo termina subito, senza
+   attendere la fine della pagina; i risultati obsoleti restano scartati dal
+   generation guard.
 7. **Docling** e reintegrazione degli strumenti a zone: lavoro futuro previsto.
 
 ---

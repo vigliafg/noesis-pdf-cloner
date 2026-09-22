@@ -20,6 +20,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -2336,10 +2337,17 @@ class CloneTranslateThread(QThread):
         self._page = page
         self._engine_name = engine_name
         self._generation = generation
+        self._cancel_event = threading.Event()
+
+    def cancel(self):
+        """Chiede l'interruzione del ``pdf2zh_next`` in corso."""
+        self._cancel_event.set()
 
     def run(self):
         try:
-            path = self._engine.translate_page(self._page, self._engine_name)
+            path = self._engine.translate_page(
+                self._page, self._engine_name, self._cancel_event
+            )
         except Exception as exc:  # noqa: BLE001 — riportato in UI
             self.error.emit(
                 self._generation, self._page, self._engine_name, str(exc)
@@ -2362,8 +2370,8 @@ class CloneExportThread(QThread):
 
     Iterates ``pages`` (0-based) **sequentially** through
     ``CloneEngine.translate_page`` (cache-aware, per-page serialised) and emits
-    progress after each page. ``cancel`` stops after the page in flight: the
-    running ``pdf2zh_next`` subprocess cannot be interrupted (see HANDOFF §7).
+    progress after each page. ``cancel`` interrompe subito il ``pdf2zh_next``
+    in corso (process group), non solo la pagina successiva.
     """
 
     progress = pyqtSignal(int, int, int)        # done, total, page
@@ -2381,9 +2389,11 @@ class CloneExportThread(QThread):
         self._pages = list(pages)
         self._engine_name = engine_name
         self._cancelled = False
+        self._cancel_event = threading.Event()
 
     def cancel(self):
         self._cancelled = True
+        self._cancel_event.set()
 
     def is_cancelled(self) -> bool:
         return self._cancelled
@@ -2397,7 +2407,9 @@ class CloneExportThread(QThread):
         compaia invece di segnarla come errore.
         """
         for _ in range(600):  # ~5 minuti al massimo
-            path = self._engine.translate_page(page, self._engine_name)
+            path = self._engine.translate_page(
+                page, self._engine_name, self._cancel_event
+            )
             if path is not None or self._cancelled:
                 return path, ""
             status = self._engine.status(page, self._engine_name)
@@ -4109,6 +4121,21 @@ class ExportDialog(QDialog):
         trans_form.addRow(self._lbl_dst, self._dst_combo)
         root.addWidget(self._trans_box)
 
+        # ── Formato di uscita: PDF unito o pagine singole in ZIP ───────────
+        self._format_box = QGroupBox(T("export.group.format"))
+        format_lay = QVBoxLayout(self._format_box)
+        self._rad_merged = QRadioButton(T("export.format.merged"))
+        self._rad_zip = QRadioButton(T("export.format.zip"))
+        self._rad_merged.setChecked(True)
+        for rb in (self._rad_merged, self._rad_zip):
+            rb.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._format_group = QButtonGroup(self)
+        self._format_group.addButton(self._rad_merged)
+        self._format_group.addButton(self._rad_zip)
+        format_lay.addWidget(self._rad_merged)
+        format_lay.addWidget(self._rad_zip)
+        root.addWidget(self._format_box)
+
         btns = QHBoxLayout()
         btns.addStretch(1)
         self._btn_ok = QPushButton(T("settings.ok"))
@@ -4198,6 +4225,10 @@ class ExportDialog(QDialog):
 
     def translate_missing(self) -> bool:
         return self._rad_range.isChecked() and self._chk_translate.isChecked()
+
+    def chosen_zip(self) -> bool:
+        """True se l'utente vuole le pagine singole in un archivio ZIP."""
+        return self._rad_zip.isChecked()
 
     def range_label(self) -> str:
         """Suffisso per il nome file: "156" oppure "156-159"."""
@@ -5744,6 +5775,7 @@ class MainWindow(QMainWindow):
         target = dlg.chosen_target()
         pages = dlg.chosen_pages()
         want_translate = dlg.translate_missing()
+        as_zip = dlg.chosen_zip()
         lo, hi = min(pages), max(pages)
         cached = self._clone_engine.cached_pages(lo, hi, engine, source, target)
         missing = [
@@ -5764,16 +5796,20 @@ class MainWindow(QMainWindow):
 
         # Destinazione scelta PRIMA della traduzione: l'attesa termina con il
         # file già scritto, senza ulteriori interruzioni.
+        ext = ".zip" if as_zip else ".pdf"
         default = (
-            f"{self._pdf_path.stem}_pag{dlg.range_label()}_{engine}_{target}.pdf"
+            f"{self._pdf_path.stem}_pag{dlg.range_label()}_{engine}_{target}{ext}"
         )
         dest, _ = QFileDialog.getSaveFileName(
-            self, T("export.dialog"), default, T("export.filter")
+            self,
+            T("export.dialog_zip") if as_zip else T("export.dialog"),
+            default,
+            T("export.filter_zip") if as_zip else T("export.filter"),
         )
         if not dest:
             return
-        if not dest.lower().endswith(".pdf"):
-            dest += ".pdf"
+        if not dest.lower().endswith(ext):
+            dest += ext
 
         # Engine dedicato con motore/lingua scelti: non disturba l'engine
         # condiviso col pannello destro (che può avere un thread in corso).
@@ -5799,6 +5835,7 @@ class MainWindow(QMainWindow):
             hi,
             len(cached),
             dest,
+            as_zip,
         )
         if not ok:
             return
@@ -5818,6 +5855,7 @@ class MainWindow(QMainWindow):
         page_to: int,
         cached_count: int,
         dest: str,
+        as_zip: bool = False,
     ) -> tuple[bool, int, int]:
         """Translate (optionally), merge and save, with a modal progress dialog.
 
@@ -5899,7 +5937,17 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(T("export.none_ready"), 5000)
             return (False, 0, 0)
         try:
-            count = engine.export_pdf(ready, engine_name, dest, source, target)
+            if as_zip:
+                count = engine.export_zip(
+                    ready,
+                    engine_name,
+                    dest,
+                    source,
+                    target,
+                    stem=self._pdf_path.stem if self._pdf_path else None,
+                )
+            else:
+                count = engine.export_pdf(ready, engine_name, dest, source, target)
         except Exception:  # noqa: BLE001 — riportato nella finestra
             log.exception("export PDF fallito: %s", dest)
             prog.set_error(T("export.error"))
@@ -5916,7 +5964,11 @@ class MainWindow(QMainWindow):
         return (True, count, failed)
 
     def _wait_clone_threads(self):
-        """Wait for in-flight clone translations before the app closes."""
+        """Cancel and wait for in-flight clone translations before closing."""
+        for t in list(self._retired_clone_threads):
+            t.cancel()
+        if self._clone_thread is not None:
+            self._clone_thread.cancel()
         for t in self._retired_clone_threads:
             if t.isRunning():
                 t.wait(3000)

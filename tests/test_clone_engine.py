@@ -12,6 +12,8 @@ import os
 import stat
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -26,6 +28,24 @@ _FAKE_PDF2ZH = """#!/usr/bin/env python3
 import os
 import sys
 
+args = sys.argv[1:]
+out = None
+for i, a in enumerate(args):
+    if a == "--output":
+        out = args[i + 1]
+os.makedirs(out, exist_ok=True)
+with open(os.path.join(out, "page.mono.pdf"), "wb") as f:
+    f.write(b"%PDF-1.4 fake translated")
+"""
+
+# pdf2zh_next fittizio che "appende": serve a verificare che il cancel termini
+# davvero il subprocess invece di attendere la fine della pagina.
+_FAKE_PDF2ZH_SLOW = """#!/usr/bin/env python3
+import os
+import sys
+import time
+
+time.sleep(60)
 args = sys.argv[1:]
 out = None
 for i, a in enumerate(args):
@@ -279,6 +299,25 @@ class ExportPdfTests(unittest.TestCase):
         with pymupdf.open(str(self.dest)) as merged:
             self.assertIn("FRENCH", merged[0].get_text())
 
+    def test_export_zip_collects_single_pages(self):
+        import zipfile
+        self._page_pdf(0, "ZERO")
+        self._page_pdf(1, "ONE")
+        dest = Path(self._tmp.name) / "out.zip"
+        count = self.engine.export_zip([0, 1], "google", dest, stem="book")
+        self.assertEqual(count, 2)
+        with zipfile.ZipFile(dest) as archive:
+            self.assertEqual(
+                sorted(archive.namelist()),
+                ["book_p0001.pdf", "book_p0002.pdf"],
+            )
+
+    def test_export_zip_skips_missing_and_raises_when_empty(self):
+        dest = Path(self._tmp.name) / "empty.zip"
+        with self.assertRaises(ValueError):
+            self.engine.export_zip([0, 1], "google", dest)
+        self.assertFalse(dest.exists())
+
 
 class SplitIndexTests(unittest.TestCase):
     """ensure_split must use the same 0-based index as the rest of the app."""
@@ -373,6 +412,52 @@ class PipelineTests(unittest.TestCase):
             out = engine.translate_page(1, "bing")
         self.assertIsNone(out)
         self.assertIn("pdf2zh_next non trovato", engine.status(1, "bing"))
+
+
+class CancelTests(unittest.TestCase):
+    """Il cancel deve terminare il subprocess, non attendere la pagina."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        self.fake = tmp / "pdf2zh_next"
+        self.fake.write_text(_FAKE_PDF2ZH_SLOW)
+        self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
+        self.engine = clone_engine.CloneEngine(tmp / "cache", pdf2zh_bin=self.fake)
+        self.src = tmp / "book.pdf"
+        self.src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(self.src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+        split = self.engine.split_path(1)
+        split.parent.mkdir(parents=True, exist_ok=True)
+        split.write_bytes(b"%PDF-1.4 page 1")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_cancel_interrupts_running_subprocess(self):
+        cancel = threading.Event()
+        timer = threading.Timer(0.5, cancel.set)
+        timer.start()
+        try:
+            t0 = time.perf_counter()
+            out = self.engine.translate_page(1, "bing", cancel)
+            elapsed = time.perf_counter() - t0
+        finally:
+            timer.cancel()
+        self.assertIsNone(out)
+        self.assertEqual(self.engine.status(1, "bing"), "cancelled")
+        self.assertLess(elapsed, 15)  # il subprocess fittizio dorme 60 s
+        self.assertFalse(self.engine.is_cached(1, "bing"))
+
+    def test_pre_set_cancel_does_not_start_subprocess(self):
+        cancel = threading.Event()
+        cancel.set()
+        with mock.patch("clone_engine.subprocess.Popen") as popen:
+            out = self.engine.translate_page(1, "bing", cancel)
+            popen.assert_not_called()
+        self.assertIsNone(out)
+        self.assertEqual(self.engine.status(1, "bing"), "cancelled")
 
 
 class AtomicWriteTests(unittest.TestCase):

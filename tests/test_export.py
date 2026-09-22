@@ -55,7 +55,7 @@ class _FakeEngine:
     ) -> Path:
         return Path(f"/fake/page_{page:06d}.pdf")
 
-    def translate_page(self, page: int, engine: str):
+    def translate_page(self, page: int, engine: str, cancel_event=None):
         self.calls.append(page)
         if page in self._running_once:
             self._running_once.discard(page)
@@ -73,6 +73,18 @@ class _FakeEngine:
 
     def export_pdf(self, pages, engine, dest, lang_in=None, lang_out=None):
         Path(dest).write_bytes(b"%PDF-1.4 fake merged")
+        return len(list(pages))
+
+    def export_zip(
+        self, pages, engine, dest, lang_in=None, lang_out=None, stem=None
+    ):
+        import zipfile
+
+        with zipfile.ZipFile(dest, "w") as archive:
+            for page in pages:
+                archive.writestr(
+                    f"{stem or 'page'}_p{page + 1:04d}.pdf", b"%PDF-1.4 fake"
+                )
         return len(list(pages))
 
 
@@ -255,6 +267,15 @@ class ExportDialogTests(unittest.TestCase):
         # sfondo scuro (label invisibili).
         self.assertIn("QRadioButton", self.main._SETTINGS_QSS)
 
+    def test_default_output_format_is_merged_pdf(self):
+        dlg = self._dialog()
+        self.assertFalse(dlg.chosen_zip())
+
+    def test_zip_output_format_can_be_chosen(self):
+        dlg = self._dialog()
+        dlg._rad_zip.setChecked(True)
+        self.assertTrue(dlg.chosen_zip())
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class CloneExportThreadTests(unittest.TestCase):
@@ -314,7 +335,7 @@ class CloneExportThreadTests(unittest.TestCase):
         # mentre la coda è in corso.
         orig = engine.translate_page
 
-        def _translate(page, eng):
+        def _translate(page, eng, cancel_event=None):
             res = orig(page, eng)
             if page == 0:
                 thread.cancel()
@@ -500,7 +521,9 @@ class ExportTranslationWaitTests(unittest.TestCase):
         orig = engine.translate_page
         # Traduzione "lenta" per lasciare il tempo al loop annidato di
         # mostrare il dialog di attesa.
-        engine.translate_page = lambda p, e: (time.sleep(0.2), orig(p, e))[1]
+        engine.translate_page = lambda p, e, cancel_event=None: (
+            time.sleep(0.2), orig(p, e)
+        )[1]
 
         seen: list = []
         timer = QTimer()
@@ -531,6 +554,25 @@ class ExportTranslationWaitTests(unittest.TestCase):
             window.close()
         self.assertTrue(ok)
         self.assertTrue(any(seen), "il dialog di attesa non è mai stato visibile")
+
+    def test_zip_export_writes_archive(self):
+        window = self.main.MainWindow()
+        engine = _FakeEngine(cached=[0, 1])
+        dest = Path(self._tmp.name) / "out.zip"
+        original = self.main.ExportProgressDialog.exec
+        self.main.ExportProgressDialog.exec = (
+            lambda self_: QDialog.DialogCode.Accepted
+        )
+        try:
+            ok, count, failed = window._run_export_with_progress(
+                engine, [], False, "google", "auto", "it", 0, 1, 2, str(dest), True
+            )
+        finally:
+            self.main.ExportProgressDialog.exec = original
+            window.close()
+        self.assertTrue(ok)
+        self.assertEqual((count, failed), (2, 0))
+        self.assertTrue(dest.is_file())
 
 
 if __name__ == "__main__":

@@ -29,6 +29,9 @@ la pagina è istantanea.
 - ⚙️ Impostazioni: lingua UI (it/en/fr/de/es), lingua del documento (origine) e
   della traduzione (destinazione), motore, zoom di avvio, "riprendi dall'ultima
   pagina" e percorso dell'eseguibile `pdf2zh_next`.
+- 💾 **Esporta** le pagine tradotte (corrente o intervallo) come **un unico PDF**
+  oppure come **pagine singole in un archivio ZIP**; le pagine non ancora in
+  cache possono essere tradotte prima, con annullamento immediato.
 - ❓ Guida online (`docs/help/`, pubblicata su GitHub Pages).
 
 > Il codice di estrazione testo/markdown e gli strumenti a zone di lite sono
