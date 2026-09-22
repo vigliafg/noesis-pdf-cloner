@@ -84,6 +84,27 @@ def _bin_name(base: str) -> str:
     return f"{base}.exe" if _is_windows() else base
 
 
+def _no_window_kwargs() -> dict:
+    """Kwargs extra per ``Popen``/``run``: niente console su Windows.
+
+    L'app è GUI (``--windowed``): senza ``CREATE_NO_WINDOW`` ogni subprocess
+    (``uv``, ``pdf2zh_next``, ``taskkill``) farebbe comparire una finestra
+    console davanti all'app. Vengono creati anche i figli senza finestra.
+    """
+    if not _is_windows():
+        return {}
+    kwargs: dict = {}
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if flags:
+        kwargs["creationflags"] = flags
+    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_cls is not None:
+        startupinfo = startupinfo_cls()
+        startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 def _candidate_pdf2zh() -> list[Path]:
     """Percorsi candidati per l'eseguibile pdf2zh_next, in ordine di priorità.
 
@@ -286,6 +307,7 @@ def install_engine(
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            **_no_window_kwargs(),
         )
         try:
             assert proc.stdout is not None
@@ -796,6 +818,7 @@ class CloneEngine:
                 text=True,
                 env=env,
                 start_new_session=not _is_windows(),
+                **_no_window_kwargs(),
             )
         except OSError as exc:
             raise RuntimeError(f"avvio pdf2zh_next fallito: {exc}") from exc
@@ -838,6 +861,7 @@ class CloneEngine:
                     ["taskkill", "/PID", str(process.pid), "/T", "/F"],
                     capture_output=True,
                     check=False,
+                    **_no_window_kwargs(),
                 )
         except (ProcessLookupError, PermissionError):
             return

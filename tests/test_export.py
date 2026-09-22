@@ -503,6 +503,21 @@ class PreviewAndLiquidTests(unittest.TestCase):
         thread = self.main.CloneTranslateThread(self.engine, 41, "google", 1)
         self.assertEqual(thread.page(), 41)
 
+    def test_translate_thread_waits_for_concurrent_running(self):
+        """Un worker già attivo sulla stessa pagina non è un errore."""
+        from unittest import mock
+
+        engine = _FakeEngine(running_once=[0])
+        thread = self.main.CloneTranslateThread(engine, 0, "google", 1)
+        done, error = [], []
+        thread.done.connect(lambda *a: done.append(a))
+        thread.error.connect(lambda *a: error.append(a))
+        with mock.patch.object(self.main.time, "sleep", return_value=None):
+            thread.run()
+        self.assertEqual(error, [])
+        self.assertEqual(len(done), 1)
+        self.assertEqual(done[0][:3], (1, 0, "google"))
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class CloneExportThreadTests(unittest.TestCase):

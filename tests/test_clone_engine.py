@@ -686,5 +686,71 @@ class EngineInstallTests(unittest.TestCase):
                 self.assertEqual(clone_engine.engine_base_dir(), user_dir)
 
 
+class NoWindowTests(unittest.TestCase):
+    """I subprocess dell'app GUI non devono aprire console su Windows."""
+
+    class _StartupInfo:
+        def __init__(self):
+            self.dwFlags = 0
+
+    def test_empty_off_windows(self):
+        with mock.patch.object(clone_engine, "_is_windows", return_value=False):
+            self.assertEqual(clone_engine._no_window_kwargs(), {})
+
+    def test_creationflags_and_startupinfo_on_windows(self):
+        with mock.patch.object(clone_engine, "_is_windows", return_value=True), \
+             mock.patch.object(
+                 clone_engine.subprocess, "CREATE_NO_WINDOW", 0x08000000,
+                 create=True,
+             ), \
+             mock.patch.object(
+                 clone_engine.subprocess, "STARTUPINFO", self._StartupInfo,
+                 create=True,
+             ), \
+             mock.patch.object(
+                 clone_engine.subprocess, "STARTF_USESHOWWINDOW", 1, create=True
+             ):
+            kwargs = clone_engine._no_window_kwargs()
+        self.assertEqual(kwargs["creationflags"], 0x08000000)
+        self.assertTrue(kwargs["startupinfo"].dwFlags & 1)
+
+    def test_popen_receives_no_window_flags(self):
+        """``install_engine`` avvia ``uv`` senza finestra console."""
+        captured = {}
+
+        class _FakeProc:
+            returncode = 0
+            stdout = []
+
+            def wait(self, timeout=None):
+                return 0
+
+        def _fake_popen(cmd, **kwargs):
+            captured.update(kwargs)
+            return _FakeProc()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(clone_engine, "find_uv", return_value="/fake/uv"), \
+                 mock.patch.object(clone_engine, "_is_windows", return_value=True), \
+                 mock.patch.object(clone_engine.subprocess, "Popen", _fake_popen), \
+                 mock.patch.object(
+                     clone_engine.subprocess, "CREATE_NO_WINDOW", 0x08000000,
+                     create=True,
+                 ), \
+                 mock.patch.object(
+                     clone_engine.subprocess, "STARTUPINFO", self._StartupInfo,
+                     create=True,
+                 ), \
+                 mock.patch.object(
+                     clone_engine.subprocess, "STARTF_USESHOWWINDOW", 1, create=True
+                 ):
+                try:
+                    clone_engine.install_engine(base=tmp)
+                except RuntimeError:
+                    pass
+        self.assertEqual(captured.get("creationflags"), 0x08000000)
+        self.assertIn("startupinfo", captured)
+
+
 if __name__ == "__main__":
     unittest.main()

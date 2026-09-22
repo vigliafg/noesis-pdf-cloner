@@ -151,7 +151,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **164 OK** (17 skip) |
+| Suite `unittest discover -s tests` | **279 OK** (24 skip) |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
 | E2E reale pagina 156 di `ha22.pdf` | google 53.3 s · bing 44.1 s · openai 65.3 s — tutti `done` |
 | Contenuto clone pagina 156 | layout preservato, **figura MRI preservata**, `FIGURA 16-1`/`TABELLA 16-4` |
@@ -172,6 +172,24 @@ Google ha usato gli endpoint gratuiti).
 pannello destro mostrava la traduzione della **155** (pannelli disallineati, figura
 assente). Corretto in `clone_engine.py` (`from_page=page`) + test di regressione
 `tests/test_clone_engine.py::SplitIndexTests`. Commit `9ac52f8`.
+
+**Finestre console su Windows (v0.1.2).** Essendo l'app GUI (`--windowed`), ogni
+subprocess console (``uv``, ``pdf2zh_next``, ``taskkill``) apriva una finestra
+davanti all'app: una durante *Installa motore* e una per **ogni pagina** durante
+export/traduzione. Risolto con ``clone_engine._no_window_kwargs()``
+(``CREATE_NO_WINDOW`` + ``STARTUPINFO``/``STARTF_USESHOWWINDOW``) su tutti i
+lanci. È un dettaglio GUI: nel servizio (headless) non serve.
+
+**Cambio pagina durante una traduzione (v0.1.2).** Al cambio pagina la traduzione
+precedente resta viva in background: se si torna/ricade sulla stessa pagina,
+``translate_page`` ritorna ``None`` con stato ``running`` e il vecchio
+``CloneTranslateThread`` lo trattava come **errore**. Ora attende che il worker
+concorrente finisca (come fa l'export) e ``_request_translation`` non avvia un
+secondo worker sulla stessa pagina.
+
+**Log su file (v0.1.2).** ``main._setup_logging()`` scrive in
+``<app-data>/logs/noesis-pdf-cloner.log`` (rotazione 2 MB × 3, ``clone_engine`` a
+DEBUG): utile per diagnosticare su Windows, dove non c'è console.
 
 ---
 

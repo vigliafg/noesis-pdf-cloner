@@ -18,6 +18,8 @@ import contextlib
 import hashlib
 import html as _html
 import json
+import logging
+import logging.handlers
 import math
 import os
 import re
@@ -2362,6 +2364,11 @@ class CloneTranslateThread(QThread):
     error = pyqtSignal(int, int, str, str)  # generation, page, engine, message
     cancelled = pyqtSignal(int, int, str)   # generation, page, engine
 
+    # Attesa di un worker concorrente sulla stessa pagina (es. la traduzione
+    # rimasta attiva dopo un cambio pagina): ~10 minuti a passi di 0,5 s.
+    _WAIT_SLICE = 0.5
+    _WAIT_SLICES = 1200
+
     def __init__(
         self, engine: clone_engine.CloneEngine, page: int, engine_name: str,
         generation: int,
@@ -2381,11 +2388,31 @@ class CloneTranslateThread(QThread):
         """Indice 0-based della pagina in traduzione."""
         return self._page
 
-    def run(self):
-        try:
+    def _translate(self) -> Path | None:
+        """Traduce la pagina; se un altro worker la sta già facendo, attende.
+
+        Su un cambio pagina rapido la traduzione precedente resta viva in
+        background (``retire``): la nuova richiesta sulla **stessa** pagina
+        riceve ``None`` con stato ``running``. Non è un errore — si attende che
+        il worker finisca e la cache compaia (come fa l'export).
+        """
+        path = self._engine.translate_page(
+            self._page, self._engine_name, self._cancel_event
+        )
+        for _ in range(self._WAIT_SLICES):
+            if path is not None or self._cancel_event.is_set():
+                return path
+            if self._engine.status(self._page, self._engine_name) != "running":
+                return path
+            time.sleep(self._WAIT_SLICE)
             path = self._engine.translate_page(
                 self._page, self._engine_name, self._cancel_event
             )
+        return path
+
+    def run(self):
+        try:
+            path = self._translate()
         except Exception as exc:  # noqa: BLE001 — riportato in UI
             self.error.emit(
                 self._generation, self._page, self._engine_name, str(exc)
@@ -7153,6 +7180,16 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(T("clone.no_engine"))
             return
 
+        current = self._clone_thread
+        if (
+            current is not None
+            and current.isRunning()
+            and current.page() == page_num
+        ):
+            # Stessa pagina già in traduzione (es. richiesta duplicata al
+            # cambio pagina): non avviare un secondo worker, lascia lo spinner.
+            return
+
         self._clone_generation += 1
         self._clone_run_start[engine] = time.time()
         self._retire_clone_thread()
@@ -7678,6 +7715,32 @@ def _app_icon() -> QIcon:
     return QIcon()
 
 
+def _setup_logging() -> None:
+    """Log su file in app-data, utile per diagnosticare su Windows (no console).
+
+    Ruota a 2 MB × 3 file. Non solleva mai: se la cartella non è scrivibile
+    l'app parte comunque senza log.
+    """
+    try:
+        log_dir = _app_data_base() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = logging.handlers.RotatingFileHandler(
+            log_dir / "noesis-pdf-cloner.log",
+            maxBytes=2_000_000,
+            backupCount=3,
+            encoding="utf-8",
+        )
+    except OSError:
+        return
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+    logging.getLogger("clone_engine").setLevel(logging.DEBUG)
+
+
 def main():
     # Nei build congelati (PyInstaller) punta l'OCR di PyMuPDF al Tesseract
     # incluso nel bundle (binario + librerie + tessdata) invece di richiederlo
@@ -7689,6 +7752,11 @@ def main():
     # L'engine (Qt-free) usa la stessa cartella dati per-utente della GUI, così
     # il fallback del motore e l'auto-rilevamento restano coerenti.
     clone_engine.set_app_data_dir(_app_data_base())
+    _setup_logging()
+    logging.getLogger("main").info(
+        "avvio Noesis PDF Cloner (python=%s, frozen=%s, platform=%s)",
+        sys.version.split()[0], getattr(sys, "frozen", False), sys.platform,
+    )
     _icon = _app_icon()
     if not _icon.isNull():
         app.setWindowIcon(_icon)

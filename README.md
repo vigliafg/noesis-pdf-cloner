@@ -103,6 +103,12 @@ installa `pdf2zh_next`; richiede `uv`, <https://docs.astral.sh/uv/>). Se la
 cartella dell'app non è scrivibile (es. `C:\Program Files`), il motore viene
 installato nella cartella dati per-utente e l'app lo rileva comunque.
 
+In caso di problemi, l'app scrive un log in
+`<cartella dati>/logs/noesis-pdf-cloner.log` (Windows:
+`%APPDATA%\noesis-pdf-cloner\logs\`, macOS:
+`~/Library/Application Support/noesis-pdf-cloner/logs/`, Linux:
+`~/.local/share/noesis-pdf-cloner/logs/`).
+
 ## Test
 
 ```bash
