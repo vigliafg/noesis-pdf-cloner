@@ -7247,37 +7247,44 @@ class MainWindow(QMainWindow):
             self._request_translation(page)  # mostra clone.no_engine
             return
 
-        # Una traduzione per documento: gli altri motori in cache lasciano il
-        # posto a quello scelto, dopo conferma dell'utente.
+        # Una traduzione per pagina: la cache della pagina con un altro motore
+        # lascia il posto a quello scelto, dopo conferma dell'utente.
         others = [
-            e for e in self._clone_engine.cached_engines() if e != engine
+            e
+            for e in self._clone_engine.cached_engines_for_page(page)
+            if e != engine
         ]
         if others:
-            if not self._confirm_purge(others, engine):
+            if not self._confirm_purge(others, engine, page):
                 return
-            # Ferma le traduzioni in background di quei motori: altrimenti
-            # riscriverebbero la cache appena eliminata.
+            # Ferma le traduzioni in background **di questa pagina** con quei
+            # motori: altrimenti riscriverebbero la cache appena eliminata.
             for thread in list(self._retired_clone_threads):
-                if thread.isRunning() and thread.engine_name() in others:
+                if (
+                    thread.isRunning()
+                    and thread.page() == page
+                    and thread.engine_name() in others
+                ):
                     thread.cancel()
             if (
                 self._clone_thread is not None
                 and self._clone_thread.isRunning()
+                and self._clone_thread.page() == page
                 and self._clone_thread.engine_name() in others
             ):
                 self._clone_thread.cancel()
             for old in others:
-                self._clone_engine.purge_engine_cache(old)
+                self._clone_engine.purge_page_cache(old, page)
 
         self._request_translation(page)
 
-    def _confirm_purge(self, old_engines: list[str], new_engine: str) -> bool:
-        """Chiede conferma prima di eliminare la cache degli altri motori."""
-        pages = 0
+    def _confirm_purge(self, old_engines: list[str], new_engine: str, page: int) -> bool:
+        """Chiede conferma prima di eliminare la pagina in cache di altri motori."""
+        files = 0
         size = 0
         for eng in old_engines:
-            files, nbytes = self._clone_engine.engine_cache_stats(eng)
-            pages += files
+            nfiles, nbytes = self._clone_engine.page_cache_stats(eng, page)
+            files += nfiles
             size += nbytes
         old_names = ", ".join(self._engine_display(e) for e in old_engines)
         box = QMessageBox(self)
@@ -7288,7 +7295,7 @@ class MainWindow(QMainWindow):
                 "clone.purge.body",
                 old=old_names,
                 new=self._engine_display(new_engine),
-                pages=pages,
+                page=page + 1,
                 size=_fmt_bytes(size),
             )
         )

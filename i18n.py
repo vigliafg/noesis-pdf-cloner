@@ -587,17 +587,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "¿Eliminar la traducción existente?",
     },
     "clone.purge.body": {
-        "it": "Per tradurre con {new} verrà eliminata dalla cache la traduzione "
-              "fatta con {old} ({pages} pagine, {size}).\n\nContinuare?",
-        "en": "To translate with {new}, the cached translation made with "
-              "{old} ({pages} pages, {size}) will be deleted.\n\nContinue?",
-        "fr": "Pour traduire avec {new}, la traduction en cache faite avec "
-              "{old} ({pages} pages, {size}) sera supprimée.\n\nContinuer ?",
-        "de": "Um mit {new} zu übersetzen, wird die zwischengespeicherte "
-              "Übersetzung mit {old} ({pages} Seiten, {size}) gelöscht.\n\n"
-              "Fortfahren?",
-        "es": "Para traducir con {new}, se eliminará de la caché la traducción "
-              "hecha con {old} ({pages} páginas, {size}).\n\n¿Continuar?",
+        "it": "Per tradurre la pagina {page} con {new} verrà eliminata dalla "
+              "cache la traduzione della stessa pagina fatta con {old} "
+              "({size}).\n\nContinuare?",
+        "en": "To translate page {page} with {new}, the cached translation of "
+              "this page made with {old} ({size}) will be deleted.\n\nContinue?",
+        "fr": "Pour traduire la page {page} avec {new}, la traduction en cache "
+              "de cette page faite avec {old} ({size}) sera supprimée.\n\n"
+              "Continuer ?",
+        "de": "Um Seite {page} mit {new} zu übersetzen, wird die "
+              "zwischengespeicherte Übersetzung dieser Seite mit {old} "
+              "({size}) gelöscht.\n\nFortfahren?",
+        "es": "Para traducir la página {page} con {new}, se eliminará de la "
+              "caché la traducción de esta página hecha con {old} "
+              "({size}).\n\n¿Continuar?",
     },
     "clone.purge.confirm": {
         "it": "Elimina e traduci", "en": "Delete and translate",

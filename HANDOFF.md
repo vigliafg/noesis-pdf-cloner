@@ -150,11 +150,12 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     La traduzione parte solo dal pulsante **▶ Traduci** nella barra del
     pannello destro (accanto alle radio google/bing/llm). Le radio cambiano solo
     il motore selezionato e la vista.
-16. **Una traduzione per documento**: premendo ▶ Traduci con un motore diverso
-    da quello già in cache, un dialog di conferma (motore/i, pagine, MB) chiede
-    se eliminare la cache precedente; su conferma `CloneEngine.purge_engine_cache`
-    la rimuove (tutte le lingue del documento, senza toccare `split/` né gli
-    altri motori) e le traduzioni in background di quel motore vengono annullate.
+16. **Una traduzione per pagina**: premendo ▶ Traduci con un motore diverso da
+    quello con cui **quella pagina** è già in cache, un dialog di conferma
+    (motore/i, pagina, MB) chiede se eliminare la cache precedente della sola
+    pagina; su conferma `CloneEngine.purge_page_cache` la rimuove (tutte le
+    lingue di quella pagina, senza toccare le altre pagine, `split/` o gli altri
+    motori) e annulla le traduzioni in background di quella pagina/motore.
 
 ---
 

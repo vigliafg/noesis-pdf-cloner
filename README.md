@@ -15,9 +15,9 @@ lingua scelta con il layout preservato**. Il clone è prodotto da
 La traduzione è **on-demand pagina per pagina** con **cache su disco** separata
 per motore e coppia linguistica: la pagina tradotta parte **solo** dal pulsante
 **▶ Traduci** (niente traduzione automatica al cambio pagina) e al secondo
-accesso è istantanea. Cambiando motore, se esiste già una traduzione in cache
-con un altro motore, l'app chiede conferma prima di eliminarla per lasciare il
-posto alla nuova.
+accesso è istantanea. Cambiando motore, se **quella pagina** è già tradotta in
+cache con un altro motore, l'app chiede conferma prima di eliminarla per
+lasciare il posto alla nuova traduzione.
 
 ## Cosa include
 

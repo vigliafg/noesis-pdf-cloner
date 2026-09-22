@@ -725,7 +725,7 @@ class EngineInstallTests(unittest.TestCase):
 
 
 class EngineCacheManagementTests(unittest.TestCase):
-    """Purga/statistiche della cache per motore (una traduzione per documento)."""
+    """Purga/statistiche della cache per pagina e motore (una traduzione per pagina)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -738,54 +738,65 @@ class EngineCacheManagementTests(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _fake_cache(self, engine: str, page: int, size: int = 10) -> Path:
-        path = self.engine.translated_path(page, engine, "en", "it")
+    def _fake_cache(
+        self, engine: str, page: int, lang_in: str = "en",
+        lang_out: str = "it", size: int = 10,
+    ) -> Path:
+        path = self.engine.translated_path(page, engine, lang_in, lang_out)
         path.write_bytes(b"x" * size)
         return path
 
-    def test_cached_engines_lists_only_engines_with_files(self):
-        self.assertEqual(self.engine.cached_engines(), [])
+    def test_cached_engines_for_page_lists_only_that_page(self):
+        self.assertEqual(self.engine.cached_engines_for_page(0), [])
         self._fake_cache("google", 0)
         self._fake_cache("bing", 0)
-        # ordine ENGINES, stabile
-        self.assertEqual(self.engine.cached_engines(), ["google", "bing"])
+        self._fake_cache("google", 1)  # altra pagina: non conta per la 0
+        self.assertEqual(
+            self.engine.cached_engines_for_page(0), ["google", "bing"]
+        )
+        self.assertEqual(self.engine.cached_engines_for_page(1), ["google"])
+        self.assertEqual(self.engine.cached_engines_for_page(2), [])
 
-    def test_cached_engines_ignores_empty_dirs(self):
+    def test_cached_engines_for_page_ignores_empty_dirs(self):
         # translated_path crea la cartella: da sola non conta come cache.
         self.engine.translated_path(0, "llm", "en", "it")
-        self.assertEqual(self.engine.cached_engines(), [])
+        self.assertEqual(self.engine.cached_engines_for_page(0), [])
 
-    def test_engine_cache_stats_counts_files_and_bytes(self):
+    def test_page_cache_stats_counts_files_and_bytes(self):
         self._fake_cache("google", 0, size=10)
-        self._fake_cache("google", 1, size=32)
-        self.assertEqual(self.engine.engine_cache_stats("google"), (2, 42))
-
-    def test_purge_removes_only_that_engine(self):
-        self._fake_cache("google", 0)
-        self._fake_cache("bing", 0)
-        files, size = self.engine.purge_engine_cache("google")
-        self.assertEqual((files, size), (1, 10))
-        self.assertFalse(self.engine.is_cached(0, "google"))
-        self.assertTrue(self.engine.is_cached(0, "bing"))
-        self.assertEqual(self.engine.cached_engines(), ["bing"])
-
-    def test_purge_all_languages_of_the_engine(self):
-        self._fake_cache("google", 0)
         other = self.engine.translated_path(0, "google", "en", "fr")
         other.write_bytes(b"x" * 5)
-        files, size = self.engine.purge_engine_cache("google")
-        self.assertEqual((files, size), (2, 15))
-        self.assertEqual(self.engine.cached_engines(), [])
+        self.assertEqual(self.engine.page_cache_stats("google", 0), (2, 15))
+        self.assertEqual(self.engine.page_cache_stats("google", 1), (0, 0))
 
-    def test_purge_unknown_engine_is_empty(self):
-        self.assertEqual(self.engine.purge_engine_cache("google"), (0, 0))
+    def test_purge_removes_only_that_page_and_engine(self):
+        self._fake_cache("google", 0)
+        self._fake_cache("google", 1)
+        self._fake_cache("bing", 0)
+        files, size = self.engine.purge_page_cache("google", 0)
+        self.assertEqual((files, size), (1, 10))
+        self.assertFalse(self.engine.is_cached(0, "google"))
+        self.assertTrue(self.engine.is_cached(1, "google"))  # altra pagina resta
+        self.assertTrue(self.engine.is_cached(0, "bing"))     # altro motore resta
+        self.assertEqual(self.engine.cached_engines_for_page(0), ["bing"])
+
+    def test_purge_all_languages_of_that_page(self):
+        self._fake_cache("google", 0, "en", "it")
+        other = self.engine.translated_path(0, "google", "en", "fr")
+        other.write_bytes(b"x" * 5)
+        files, size = self.engine.purge_page_cache("google", 0)
+        self.assertEqual((files, size), (2, 15))
+        self.assertEqual(self.engine.cached_engines_for_page(0), [])
+
+    def test_purge_unknown_page_is_empty(self):
+        self.assertEqual(self.engine.purge_page_cache("google", 3), (0, 0))
 
     def test_purge_keeps_split_cache(self):
         split = self.engine.split_path(0)
         split.parent.mkdir(parents=True, exist_ok=True)
         split.write_bytes(b"%PDF-1.4 split")
         self._fake_cache("google", 0)
-        self.engine.purge_engine_cache("google")
+        self.engine.purge_page_cache("google", 0)
         self.assertTrue(split.is_file())
 
 

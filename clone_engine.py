@@ -548,53 +548,56 @@ class CloneEngine:
             ).is_file()
         ]
 
-    # ── gestione cache (per la UI: una traduzione per documento) ──────────
+    # ── gestione cache (per la UI: una traduzione per pagina) ─────────────
 
     def _engine_cache_dir(self, engine: str) -> Path:
         """Cartella di cache di un motore per il documento corrente."""
         return self.translated_root / self._doc_key / normalize_engine(engine)
 
-    def cached_engines(self) -> list[str]:
-        """Motori con almeno una pagina tradotta in cache per il documento.
-
-        Ordine stabile (``ENGINES``); la cache di un motore esiste anche se i
-        file sono in una coppia linguistica diversa da quella corrente.
-        """
+    def _page_cache_files(self, engine: str, page: int) -> list[Path]:
+        """File di cache della pagina per il motore, in ogni lingua/versione."""
         if not self._doc_key:
             return []
-        result: list[str] = []
-        for engine in ENGINES:
-            base = self._engine_cache_dir(engine)
-            if base.is_dir() and any(p.is_file() for p in base.rglob("*.pdf")):
-                result.append(engine)
-        return result
-
-    def engine_cache_stats(self, engine: str) -> tuple[int, int]:
-        """``(numero di file, byte)`` della cache del motore per il documento."""
         base = self._engine_cache_dir(engine)
-        files = 0
-        size = 0
-        if base.is_dir():
-            for path in base.rglob("*"):
-                if path.is_file():
-                    files += 1
-                    with contextlib.suppress(OSError):
-                        size += path.stat().st_size
-        return files, size
+        if not base.is_dir():
+            return []
+        name = f"page_{page:06d}.pdf"
+        return [p for p in base.rglob(name) if p.is_file()]
 
-    def purge_engine_cache(self, engine: str) -> tuple[int, int]:
-        """Elimina la cache del motore per il documento.
+    def cached_engines_for_page(self, page: int) -> list[str]:
+        """Motori che hanno **questa pagina** in cache per il documento.
 
-        Ritorna ``(file rimossi, byte liberati)``. Non tocca le pagine
-        estratte (``split/``) né gli altri motori.
+        Ordine stabile (``ENGINES``); conta anche coppie linguistiche diverse
+        da quella corrente.
         """
-        files, size = self.engine_cache_stats(engine)
-        base = self._engine_cache_dir(engine)
-        if base.is_dir():
-            shutil.rmtree(base, ignore_errors=True)
-        # Stato in memoria: le pagine di quel motore non sono più "done".
+        return [
+            engine
+            for engine in ENGINES
+            if self._page_cache_files(engine, page)
+        ]
+
+    def page_cache_stats(self, engine: str, page: int) -> tuple[int, int]:
+        """``(numero di file, byte)`` della pagina in cache per il motore."""
+        files = self._page_cache_files(engine, page)
+        size = 0
+        for path in files:
+            with contextlib.suppress(OSError):
+                size += path.stat().st_size
+        return len(files), size
+
+    def purge_page_cache(self, engine: str, page: int) -> tuple[int, int]:
+        """Elimina dalla cache **solo questa pagina** del motore.
+
+        Ritorna ``(file rimossi, byte liberati)``. Le altre pagine dello stesso
+        motore, le pagine estratte (``split/``) e gli altri motori restano.
+        """
+        files, size = self.page_cache_stats(engine, page)
+        for path in self._page_cache_files(engine, page):
+            with contextlib.suppress(OSError):
+                path.unlink()
+        # Stato in memoria: quella pagina di quel motore non è più "done".
         norm = normalize_engine(engine)
-        for key in [k for k in self._status if k[1] == norm]:
+        for key in [k for k in self._status if k[1] == norm and k[0] == page]:
             self._status.pop(key, None)
         return files, size
 

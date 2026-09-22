@@ -954,15 +954,15 @@ class OnDemandTranslationTests(unittest.TestCase):
         def available(self):
             return True
 
-        def cached_engines(self):
+        def cached_engines_for_page(self, page):
             return list(self._engines)
 
-        def engine_cache_stats(self, engine):
-            return (3, 2048)
+        def page_cache_stats(self, engine, page):
+            return (1, 1024)
 
-        def purge_engine_cache(self, engine):
-            self.purged.append(engine)
-            return (3, 2048)
+        def purge_page_cache(self, engine, page):
+            self.purged.append((engine, page))
+            return (1, 1024)
 
         def status(self, page, engine):
             return "done"
@@ -1017,12 +1017,12 @@ class OnDemandTranslationTests(unittest.TestCase):
         window = self._window(engine)
         calls: list = []
         window._request_translation = lambda page: calls.append(page)
-        window._confirm_purge = lambda olds, new: True
+        window._confirm_purge = lambda olds, new, page: True
         try:
             window._on_translate_requested()
         finally:
             window.close()
-        self.assertEqual(engine.purged, ["bing"])
+        self.assertEqual(engine.purged, [("bing", 0)])
         self.assertEqual(calls, [0])
 
     def test_cancelled_confirm_aborts_translation(self):
@@ -1031,7 +1031,7 @@ class OnDemandTranslationTests(unittest.TestCase):
         window = self._window(engine)
         calls: list = []
         window._request_translation = lambda page: calls.append(page)
-        window._confirm_purge = lambda olds, new: False
+        window._confirm_purge = lambda olds, new, page: False
         try:
             window._on_translate_requested()
         finally:
