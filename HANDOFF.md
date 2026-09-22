@@ -267,14 +267,21 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
      scompattarlo in `<app-data>/tools/uv` e usarlo per `install_engine`. `uv`
      gestisce da sé anche il download di Python 3.12 → "Installa motore"
      diventerebbe davvero un click senza prerequisiti (a parte la rete).
-     Alternativa ancora più offline: **includere `uv` nel bundle PyInstaller**
-     (`--add-data`, +~25 MB per piattaforma, licenza MIT/Apache-2.0 da
-     includere). Attenzione a Proxy/offline, Gatekeeper (macOS) e
-     SmartScreen/AV (Windows).
+     Attenzione a Proxy/offline, Gatekeeper (macOS) e SmartScreen/AV (Windows).
 10. **Robustezza AppImage su Linux** (valutare): build su `ubuntu-22.04` per una
     glibc più vecchia (compatibilità distro); documentare `libfuse2` e
     `./NoesisPDFCloner-x86_64.AppImage --appimage-extract-and-run`; valutare in
     aggiunta un `.tar.gz` estraibile senza FUSE.
+11. **Alternativa robusta: `uv` incluso nel bundle** (da fare domani): invece di
+    scaricare `uv` a runtime, includerlo nel bundle PyInstaller con
+    `--add-data` (binario per piattaforma, da `astral-sh/uv`), così la parte
+    installer funziona **anche offline e senza download del tool**; resta da
+    scaricare solo il motore (~1,1 GB). Da valutare:
+    - dimensioni: +~25 MB per build (una tantum, trascurabile);
+    - aggiornare il binario `uv` a ogni release dell'app;
+    - includere le licenze **MIT/Apache-2.0** di `uv`;
+    - precedenza: `uv` di sistema/PATH (per aggiornamenti) → `uv` incluso nel
+      bundle → (fallback) download a runtime del punto 9.
 
 ---
 
