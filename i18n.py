@@ -648,11 +648,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Instalar motor de clonación",
     },
     "engine.install.intro": {
-        "it": "Verrà creata la cartella .venv2 accanto all'app e installato pdf2zh_next. Richiede «uv» e una connessione; il download può richiedere qualche minuto.",
-        "en": "A .venv2 folder will be created next to the app and pdf2zh_next installed. Requires “uv” and a connection; the download may take a few minutes.",
-        "fr": "Un dossier .venv2 sera créé à côté de l'app et pdf2zh_next installé. Nécessite « uv » et une connexion ; le téléchargement peut prendre quelques minutes.",
-        "de": "Neben der App wird der Ordner .venv2 erstellt und pdf2zh_next installiert. Erfordert „uv“ und eine Verbindung; der Download kann einige Minuten dauern.",
-        "es": "Se creará la carpeta .venv2 junto a la app y se instalará pdf2zh_next. Requiere «uv» y conexión; la descarga puede tardar unos minutos.",
+        "it": "Verrà creata la cartella .venv2 accanto all'app e installato pdf2zh_next. Richiede «uv» e una connessione; il download può richiedere qualche minuto. Se la cartella dell'app non è scrivibile, viene usata la cartella dati per-utente.",
+        "en": "A .venv2 folder will be created next to the app and pdf2zh_next installed. Requires “uv” and a connection; the download may take a few minutes. If the app folder is not writable, the per-user data folder is used.",
+        "fr": "Un dossier .venv2 sera créé à côté de l'app et pdf2zh_next installé. Nécessite « uv » et une connexion ; le téléchargement peut prendre quelques minutes. Si le dossier de l'app n'est pas accessible en écriture, le dossier de données par utilisateur est utilisé.",
+        "de": "Neben der App wird der Ordner .venv2 erstellt und pdf2zh_next installiert. Erfordert „uv“ und eine Verbindung; der Download kann einige Minuten dauern. Ist der App-Ordner nicht beschreibbar, wird der Benutzer-Datenordner verwendet.",
+        "es": "Se creará la carpeta .venv2 junto a la app y se instalará pdf2zh_next. Requiere «uv» y conexión; la descarga puede tardar unos minutos. Si la carpeta de la app no es escribible, se usa la carpeta de datos del usuario.",
     },
     "engine.install.running": {
         "it": "Installazione in corso…", "en": "Installing…",

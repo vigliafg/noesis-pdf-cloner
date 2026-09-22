@@ -618,6 +618,73 @@ class EngineInstallTests(unittest.TestCase):
             self.assertTrue(any("pdf2zh_next" in c for c in calls))
             self.assertTrue(lines)  # il log ha ricevuto le righe di uv
 
+    def test_app_data_dir_honours_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clone_engine.set_app_data_dir(tmp)
+            try:
+                self.assertEqual(clone_engine.app_data_dir(), Path(tmp))
+                self.assertEqual(
+                    clone_engine.user_engine_base(), Path(tmp) / "engine"
+                )
+            finally:
+                clone_engine.set_app_data_dir(None)
+
+    def test_candidate_paths_include_user_engine_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clone_engine.set_app_data_dir(tmp)
+            try:
+                expected = (
+                    Path(tmp) / "engine" / ".venv2" / "bin"
+                    / clone_engine._bin_name("pdf2zh_next")
+                )
+                self.assertIn(expected, clone_engine._candidate_pdf2zh())
+            finally:
+                clone_engine.set_app_data_dir(None)
+
+    def test_engine_base_dir_falls_back_when_app_dir_unwritable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / "not-a-dir"
+            blocker.write_text("x")  # un file: mkdir sotto di esso fallisce
+            with mock.patch.object(
+                clone_engine,
+                "_engine_roots",
+                return_value=[blocker / "sub", Path(tmp)],
+            ):
+                self.assertEqual(clone_engine.engine_base_dir(), Path(tmp))
+
+    def test_is_writable_detects_unwritable_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / "file"
+            blocker.write_text("x")
+            self.assertFalse(clone_engine._is_writable(blocker / "sub"))
+            self.assertTrue(clone_engine._is_writable(Path(tmp)))
+
+    def test_engine_base_dir_frozen_uses_exe_dir_when_writable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "App.exe"
+            exe.write_text("")
+            with mock.patch.object(clone_engine.sys, "frozen", True, create=True), \
+                 mock.patch.object(clone_engine.sys, "executable", str(exe)):
+                self.assertEqual(clone_engine.engine_base_dir(), Path(tmp))
+                self.assertIn(
+                    Path(tmp) / ".venv2" / "bin"
+                    / clone_engine._bin_name("pdf2zh_next"),
+                    clone_engine._candidate_pdf2zh(),
+                )
+
+    def test_engine_base_dir_frozen_falls_back_to_user_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / "file"
+            blocker.write_text("x")  # la "cartella" dell'exe è sotto un file
+            exe = blocker / "sub" / "App.exe"
+            user_dir = Path(tmp) / "engine"
+            with mock.patch.object(clone_engine.sys, "frozen", True, create=True), \
+                 mock.patch.object(clone_engine.sys, "executable", str(exe)), \
+                 mock.patch.object(
+                     clone_engine, "user_engine_base", return_value=user_dir
+                 ):
+                self.assertEqual(clone_engine.engine_base_dir(), user_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

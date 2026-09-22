@@ -99,7 +99,9 @@ imposta il percorso in ⚙️ Impostazioni.
 
 Si può anche installare il motore **dall'app**: ⚙️ Impostazioni → *Motore di
 clonazione* → **Installa motore** (crea `.venv2` accanto all'eseguibile e vi
-installa `pdf2zh_next`; richiede `uv`, <https://docs.astral.sh/uv/>).
+installa `pdf2zh_next`; richiede `uv`, <https://docs.astral.sh/uv/>). Se la
+cartella dell'app non è scrivibile (es. `C:\Program Files`), il motore viene
+installato nella cartella dati per-utente e l'app lo rileva comunque.
 
 ## Test
 

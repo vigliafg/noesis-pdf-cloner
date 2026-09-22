@@ -7686,6 +7686,9 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("noesis-pdf-cloner")
+    # L'engine (Qt-free) usa la stessa cartella dati per-utente della GUI, così
+    # il fallback del motore e l'auto-rilevamento restano coerenti.
+    clone_engine.set_app_data_dir(_app_data_base())
     _icon = _app_icon()
     if not _icon.isNull():
         app.setWindowIcon(_icon)

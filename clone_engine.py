@@ -101,7 +101,8 @@ def _candidate_pdf2zh() -> list[Path]:
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
             roots.append(Path(meipass))
-    # vicini utili in sviluppo (repo sorelli)
+    # basi preferite (accanto all'app oppure per-utente) + vicini di sviluppo
+    roots.extend(_engine_roots())
     roots.extend([here.parent / "pdfcloner", here.parent / "noesis-pdf-cloner"])
 
     exe = _bin_name("pdf2zh_next")
@@ -148,14 +149,75 @@ def venv_python_for(pdf2zh_bin: Path) -> str:
     return sys.executable
 
 
-def engine_base_dir() -> Path:
-    """Cartella dove vive (o va installato) ``.venv2``.
+_APP_DATA_OVERRIDE: Path | None = None
 
-    Build congelato → cartella dell'eseguibile; sviluppo → radice del repo.
+
+def set_app_data_dir(path: str | Path | None) -> None:
+    """Imposta la cartella dati per-utente (la GUI passa ``QStandardPaths``)."""
+    global _APP_DATA_OVERRIDE
+    _APP_DATA_OVERRIDE = Path(path) if path else None
+
+
+def app_data_dir() -> Path:
+    """Cartella dati per-utente, coerente con ``QStandardPaths.AppDataLocation``.
+
+    Senza Qt: su Windows ``%APPDATA%`` (Roaming), su macOS
+    ``~/Library/Application Support``, su Linux ``$XDG_DATA_HOME``/``~/.local/share``.
     """
+    if _APP_DATA_OVERRIDE is not None:
+        return _APP_DATA_OVERRIDE
+    if _is_windows():
+        base = os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
+    return Path(base) / "noesis-pdf-cloner"
+
+
+def user_engine_base() -> Path:
+    """Base per-utente del motore (fallback se la cartella dell'app non è scrivibile)."""
+    return app_data_dir() / "engine"
+
+
+def _is_writable(path: Path) -> bool:
+    """True se ``path`` esiste (o è creabile) ed è scrivibile."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".noesis-write-test"
+        probe.write_text("")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def _engine_roots() -> list[Path]:
+    """Basi candidate per l'installazione del motore, in ordine di preferenza."""
+    roots: list[Path] = []
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
+        exe_dir = Path(sys.executable).resolve().parent
+        if sys.platform == "darwin":
+            # Dentro un .app non si scrive: la cartella che contiene il bundle.
+            roots.append(exe_dir.parent.parent)
+        else:
+            roots.append(exe_dir)
+    else:
+        roots.append(Path(__file__).resolve().parent)
+    roots.append(user_engine_base())
+    return roots
+
+
+def engine_base_dir() -> Path:
+    """Cartella dove installare ``.venv2``: la prima scrivibile tra quelle note.
+
+    Build congelato → accanto all'eseguibile se scrivibile, altrimenti la
+    cartella dati per-utente; sviluppo → radice del repo.
+    """
+    for root in _engine_roots():
+        if _is_writable(root):
+            return root
+    return user_engine_base()
 
 
 def engine_venv_dir(base: str | Path | None = None) -> Path:
@@ -213,6 +275,8 @@ def install_engine(
     def _emit(line: str) -> None:
         if log_line is not None:
             log_line(line.rstrip())
+
+    _emit(f"(cartella del motore: {workdir})")
 
     def _run(cmd: list[str]) -> None:
         proc = subprocess.Popen(

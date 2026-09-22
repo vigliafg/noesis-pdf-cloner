@@ -138,9 +138,12 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 14. **Installa motore dall'app**: in ⚙️ Impostazioni → *Motore di clonazione* il
     pulsante **Installa motore** crea `.venv2` accanto all'app e vi installa
     `pdf2zh_next` via `uv` (`clone_engine.engine_base_dir`/`install_engine`,
-    `EngineInstallThread`/`EngineInstallDialog`), con log e Annulla. L'installer
-    NSIS include `setup_engine.ps1`. Senza il binario del motore **nessun**
-    motore traduce (anche google/bing: sono traduttori *dentro* `pdf2zh_next`).
+    `EngineInstallThread`/`EngineInstallDialog`), con log e Annulla. Se la
+    cartella dell'app non è scrivibile (es. Program Files) il motore va nella
+    cartella dati per-utente (`clone_engine.app_data_dir`) e l'auto-rilevamento
+    lo trova lo stesso. L'installer NSIS include `setup_engine.ps1`. Senza il
+    binario del motore **nessun** motore traduce (anche google/bing: sono
+    traduttori *dentro* `pdf2zh_next`).
 
 ---
 
