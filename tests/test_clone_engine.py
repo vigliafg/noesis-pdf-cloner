@@ -9,6 +9,7 @@ Covered without requiring pdf2zh_next or PyQt:
 """
 
 import os
+import shlex
 import stat
 import sys
 import tempfile
@@ -123,6 +124,20 @@ class FlagsTests(unittest.TestCase):
         self.assertIn("--clitranslator-command", flags)
         self.assertIn("gtranslate_cli.py", " ".join(flags))
         self.assertIn("google", name)
+
+    def test_google_clitranslator_command_roundtrips_windows_paths(self):
+        """Il comando è interpretato da pdf2zh con shlex.split: deve reggere i
+        percorsi Windows con backslash e spazi (bug delle finestre 'mono')."""
+        win_py = r"C:\Users\mario rossi\.venv2\Scripts\python.exe"
+        win_cli = r"C:\Users\mario rossi\AppData\Local\Temp\_MEI1\gtranslate_cli.py"
+        with mock.patch.object(
+            clone_engine, "venv_python_for", return_value=win_py
+        ), mock.patch.object(
+            clone_engine, "_gtranslate_cli_path", return_value=win_cli
+        ):
+            flags, _ = self.engine._translator_flags("google")
+        command = flags[flags.index("--clitranslator-command") + 1]
+        self.assertEqual(shlex.split(command), [win_py, win_cli])
 
 
 class CachePathTests(unittest.TestCase):
@@ -391,11 +406,12 @@ class PipelineTests(unittest.TestCase):
             run.assert_not_called()
         self.assertTrue(again.is_file())
 
-    def test_no_mono_falls_back_to_original(self):
-        """Pagina senza testo: BabelDOC esce 0 senza produrre mono → originale."""
+    def test_no_mono_without_text_falls_back_to_original(self):
+        """Pagina senza testo: BabelDOC esce 0 senza mono → originale."""
         self.fake.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n")
         self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
-        out = self.engine.translate_page(1, "google")
+        with mock.patch.object(clone_engine, "page_has_text", return_value=False):
+            out = self.engine.translate_page(1, "google")
         self.assertIsNotNone(out)
         self.assertTrue(out.is_file())
         self.assertEqual(
@@ -403,6 +419,15 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(self.engine.status(1, "google"), "empty")
         self.assertTrue(self.engine.is_cached(1, "google"))
+
+    def test_no_mono_with_text_is_a_real_error(self):
+        """Pagina con testo ma nessun output: errore vero, non fallback."""
+        self.fake.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n")
+        self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
+        with mock.patch.object(clone_engine, "page_has_text", return_value=True):
+            out = self.engine.translate_page(1, "google")
+        self.assertIsNone(out)
+        self.assertIn("non ha tradotto", self.engine.status(1, "google"))
 
     def test_llm_without_key_reports_error(self):
         with mock.patch.dict(os.environ, {}, clear=False):
@@ -697,6 +722,43 @@ class EngineInstallTests(unittest.TestCase):
                      clone_engine, "user_engine_base", return_value=user_dir
                  ):
                 self.assertEqual(clone_engine.engine_base_dir(), user_dir)
+
+
+class PageHasTextTests(unittest.TestCase):
+    """``page_has_text`` distingue le pagine senza testo (fallback) dagli errori."""
+
+    def setUp(self):
+        try:
+            import pymupdf
+        except ImportError:  # pragma: no cover
+            self.skipTest("pymupdf non disponibile")
+        self.pymupdf = pymupdf
+        self._tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _pdf(self, name: str, text: str) -> Path:
+        path = Path(self._tmp.name) / name
+        doc = self.pymupdf.open()
+        page = doc.new_page()
+        if text:
+            page.insert_text((72, 72), text)
+        doc.save(str(path))
+        doc.close()
+        return path
+
+    def test_text_page_is_detected(self):
+        self.assertTrue(clone_engine.page_has_text(self._pdf("t.pdf", "hello")))
+
+    def test_empty_page_is_detected(self):
+        self.assertFalse(clone_engine.page_has_text(self._pdf("e.pdf", "")))
+
+    def test_unreadable_path_defaults_to_true(self):
+        # In dubbio non si maschera un possibile errore di traduzione.
+        self.assertTrue(
+            clone_engine.page_has_text(Path(self._tmp.name) / "missing.pdf")
+        )
 
 
 class NoWindowTests(unittest.TestCase):

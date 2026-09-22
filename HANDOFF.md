@@ -151,7 +151,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **279 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **285 OK** (24 skip) |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
 | E2E reale pagina 156 di `ha22.pdf` | google 53.3 s · bing 44.1 s · openai 65.3 s — tutti `done` |
 | Contenuto clone pagina 156 | layout preservato, **figura MRI preservata**, `FIGURA 16-1`/`TABELLA 16-4` |
@@ -195,11 +195,19 @@ DEBUG): utile per diagnosticare su Windows, dove non c'è console.
 ``max_concurrent=1``: una sola ``pdf2zh_next`` alla volta (meno processi
 concorrenti su Windows). Le pagine in coda restano visibili con la targhetta.
 
-**Pagine senza testo (v0.1.2).** Se ``pdf2zh_next`` esce 0 ma non produce il
-``.mono.pdf`` (copertina, pagine di sole immagini/scansioni) il motore **non è
-più un errore**: copia la pagina originale in cache e la marca ``empty``; la UI
-la mostra con la nota "nessun testo da tradurre". Allineato al servizio
-(``app/engine.py``).
+**Pagine senza testo (v0.1.2).** Se ``pdf2zh_next`` esce 0 senza produrre il
+``.mono.pdf`` **e la pagina non ha testo estraibile** (copertina, scansione) il
+motore copia l'originale in cache e lo marca ``empty``; la UI mostra la nota
+"nessun testo da tradurre". Se invece la pagina **ha testo**, resta un errore
+vero (messaggio "il motore non ha tradotto la pagina: …"), così un guasto della
+catena non viene mascherato. Allineato al servizio.
+
+**Catena Google su Windows (v0.1.2).** Sintomo: *"pdf2zh_next non ha prodotto il
+file mono"* — google falliva, bing no. Causa: `--clitranslator-command` è una
+stringa che BabelDOC rilegge con `shlex.split`, che sui **percorsi Windows**
+(`C:\Users\…`) toglie i backslash → comando ineseguibile → nessuna traduzione →
+nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
+(desktop + servizio). Test: round-trip di `shlex.split` su percorsi Windows.
 
 ---
 
