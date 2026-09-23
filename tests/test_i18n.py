@@ -104,6 +104,17 @@ class TFunctionTests(unittest.TestCase):
         self.assertIsInstance(out, str)
         self.assertTrue(out)
 
+    def test_status_strings_do_not_advertise_dormant_backend(self):
+        # Il pannello testo/PyMuPDF4LLM è dormiente e non installato: la status
+        # bar non deve pubblicizzarlo (residuo del progetto reader-lite).
+        for lang in i18n.LANGUAGES:
+            i18n.set_language(lang)
+            self.assertNotIn("PyMuPDF4LLM", i18n.T("status.ready"))
+            self.assertNotIn(
+                "PyMuPDF4LLM",
+                i18n.T("status.page", page=1, total=2, name="x.pdf", ms="10"),
+            )
+
     def test_italian_fallback_when_current_missing(self):
         # If the active language lacks a key (shouldn't happen, but guard),
         # T() falls back to Italian rather than crashing.

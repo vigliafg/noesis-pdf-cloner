@@ -430,11 +430,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Inhaltsverzeichnis", "es": "Índice",
     },
     "status.ready": {
-        "it": "Pronto — apri un file PDF con 📂 Apri PDF  |  Backend testo: PyMuPDF4LLM ⚡",
-        "en": "Ready — open a PDF with 📂 Open PDF  |  Text backend: PyMuPDF4LLM ⚡",
-        "fr": "Prêt — ouvrez un PDF avec 📂 Ouvrir un PDF  |  Backend texte : PyMuPDF4LLM ⚡",
-        "de": "Bereit — öffnen Sie ein PDF mit 📂 PDF öffnen  |  Text-Backend: PyMuPDF4LLM ⚡",
-        "es": "Listo — abre un PDF con 📂 Abrir PDF  |  Backend de texto: PyMuPDF4LLM ⚡",
+        "it": "Pronto — apri un file PDF con 📂 Apri PDF",
+        "en": "Ready — open a PDF with 📂 Open PDF",
+        "fr": "Prêt — ouvrez un PDF avec 📂 Ouvrir un PDF",
+        "de": "Bereit — öffnen Sie ein PDF mit 📂 PDF öffnen",
+        "es": "Listo — abre un PDF con 📂 Abrir PDF",
     },
     "status.no_image": {
         "it": "Nessuna immagine estraibile dalla zona selezionata",
@@ -479,11 +479,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Zonas eliminadas para esta página",
     },
     "status.page": {
-        "it": "Pagina {page} di {total}  —  {name}  |  Testo: PyMuPDF4LLM ⚡ ({ms} ms)",
-        "en": "Page {page} of {total}  —  {name}  |  Text: PyMuPDF4LLM ⚡ ({ms} ms)",
-        "fr": "Page {page} sur {total}  —  {name}  |  Texte : PyMuPDF4LLM ⚡ ({ms} ms)",
-        "de": "Seite {page} von {total}  —  {name}  |  Text: PyMuPDF4LLM ⚡ ({ms} ms)",
-        "es": "Página {page} de {total}  —  {name}  |  Texto: PyMuPDF4LLM ⚡ ({ms} ms)",
+        "it": "Pagina {page} di {total}  —  {name}",
+        "en": "Page {page} of {total}  —  {name}",
+        "fr": "Page {page} sur {total}  —  {name}",
+        "de": "Seite {page} von {total}  —  {name}",
+        "es": "Página {page} de {total}  —  {name}",
     },
     "status.empty_pdf": {
         "it": "PDF senza pagine", "en": "PDF with no pages",
