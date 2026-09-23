@@ -290,6 +290,53 @@
           <strong>einzelne Seiten in einem ZIP-Archiv</strong> und der Speicherpfad.</li>
       </ol>
 
+      <h3 id="export-pages">Seiten wählen (aktuell, Bereich, Liste)</h3>
+      <p>Im Schritt <strong>Seiten</strong> des Assistenten wählen Sie mit
+      <strong>drei Modi</strong>, was exportiert wird – alle im selben Fenster wie
+      die Vorschauen: Die Bedienelemente stehen oben, daher
+      <strong>verkleinert</strong> das freie Feld die Miniaturen nicht.</p>
+
+      <div class="pagemock">
+        <div class="pagemock-modes">
+          <span class="pmode on">◉ Aktuelle Seite</span>
+          <span class="pmode">○ Bereich · Von <b>156</b> bis <b>159</b></span>
+          <span class="pmode">○ Seiten · <span class="pinput">1,3,7-9</span></span>
+        </div>
+        <div class="pgrid">
+          <span class="pg on">1</span><span class="pg off">2</span><span class="pg on">3</span>
+          <span class="pg off">4</span><span class="pg off">5</span><span class="pg off">6</span>
+          <span class="pg on">7</span><span class="pg on">8</span><span class="pg on">9</span>
+          <span class="pg off">10</span>
+        </div>
+        <div class="pcap">Auswahl: <b>5 Seiten</b> · Bezeichnung
+        <code>1,3,7-9</code></div>
+      </div>
+
+      <table>
+        <tr><th>Eingabe im Feld</th><th>Exportierte Seiten</th></tr>
+        <tr><td><code>7</code></td><td>Seite 7</td></tr>
+        <tr><td><code>5-20</code></td><td>Seite 5 bis 20 (auch <code>20-5</code>)</td></tr>
+        <tr><td><code>1,3,7-9</code></td><td>1, 3, 7, 8 und 9</td></tr>
+        <tr><td><code>3, 5 , 10-12, 3</code></td><td>3, 5, 10, 11, 12 (Leerzeichen und Doppelte ignoriert)</td></tr>
+        <tr><td><code>all</code> (oder <code>*</code>)</td><td>alle Seiten</td></tr>
+      </table>
+
+      <ul>
+        <li>Die Vorschauen zeigen die <strong>erste</strong> und
+          <strong>letzte</strong> Seite der Auswahl, mit der Zeile
+          „N Seiten · Bezeichnung“.</li>
+        <li>Die Zählung <em>im Cache / zu übersetzen</em> und die Schätzung
+          berücksichtigen <strong>nur</strong> die gewählten Seiten.</li>
+        <li>Der Dateiname nutzt die kompakte Form:
+          <code>buch_pag1,3,7-9_google_it.pdf</code>.</li>
+        <li>Ist die Liste ungültig, wird das Feld markiert und
+          <strong>Weiter</strong> bleibt gesperrt, bis Sie sie korrigieren.</li>
+      </ul>
+
+      <div class="note"><strong>Schematische Miniaturen</strong> Die kleinen Seiten
+        oben sind keine echte Vorschau: Sie zeigen nur, welche Seiten die Auswahl
+        enthält.</div>
+
       <h3>Vorabübersetzung und Fortschritt</h3>
       <p>Seiten, die noch nicht im Cache sind, können vor dem Export übersetzt werden,
       mit sofortigem Abbruch. Das Fortschrittsfenster zeigt die

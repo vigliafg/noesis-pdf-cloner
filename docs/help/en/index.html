@@ -292,6 +292,51 @@
           path.</li>
       </ol>
 
+      <h3 id="export-pages">Choosing pages (current, range, list)</h3>
+      <p>In the <strong>Pages</strong> step of the wizard you choose what to export
+      with <strong>three modes</strong>, all in the same preview screen: the controls
+      sit at the top, so the free field <strong>does not shrink</strong> the
+      thumbnails.</p>
+
+      <div class="pagemock">
+        <div class="pagemock-modes">
+          <span class="pmode on">◉ Current page</span>
+          <span class="pmode">○ Range · From <b>156</b> to <b>159</b></span>
+          <span class="pmode">○ Pages · <span class="pinput">1,3,7-9</span></span>
+        </div>
+        <div class="pgrid">
+          <span class="pg on">1</span><span class="pg off">2</span><span class="pg on">3</span>
+          <span class="pg off">4</span><span class="pg off">5</span><span class="pg off">6</span>
+          <span class="pg on">7</span><span class="pg on">8</span><span class="pg on">9</span>
+          <span class="pg off">10</span>
+        </div>
+        <div class="pcap">Selection: <b>5 pages</b> · label
+        <code>1,3,7-9</code></div>
+      </div>
+
+      <table>
+        <tr><th>Type in the field</th><th>Pages exported</th></tr>
+        <tr><td><code>7</code></td><td>page 7</td></tr>
+        <tr><td><code>5-20</code></td><td>pages 5 to 20 (also <code>20-5</code>)</td></tr>
+        <tr><td><code>1,3,7-9</code></td><td>1, 3, 7, 8 and 9</td></tr>
+        <tr><td><code>3, 5 , 10-12, 3</code></td><td>3, 5, 10, 11, 12 (spaces and duplicates ignored)</td></tr>
+        <tr><td><code>all</code> (or <code>*</code>)</td><td>every page</td></tr>
+      </table>
+
+      <ul>
+        <li>The previews show the <strong>first</strong> and <strong>last</strong>
+          page of the selection, with the line “N pages · label”.</li>
+        <li>The <em>cached / to translate</em> count and the estimate consider
+          <strong>only</strong> the selected pages.</li>
+        <li>The file name uses the compact form:
+          <code>book_pag1,3,7-9_google_it.pdf</code>.</li>
+        <li>If the list is invalid, the field is flagged and <strong>Next</strong>
+          stays disabled until you fix it.</li>
+      </ul>
+
+      <div class="note"><strong>Schematic thumbnails</strong> The little pages above
+        are not a real preview: they only show which pages the selection includes.</div>
+
       <h3>Pre-translation and progress</h3>
       <p>Pages not yet in the cache can be translated before export,
       with immediate cancellation. The progress window shows the page

@@ -291,6 +291,52 @@
           salvataggio.</li>
       </ol>
 
+      <h3 id="export-pages">Scegliere le pagine (corrente, intervallo, elenco)</h3>
+      <p>Nel passo <strong>Pagine</strong> del wizard scegli cosa esportare con
+      <strong>tre modi</strong>, tutti nella stessa schermata delle anteprime: i
+      comandi stanno in alto, così il campo libero <strong>non rimpicciolisce</strong>
+      le miniature.</p>
+
+      <div class="pagemock">
+        <div class="pagemock-modes">
+          <span class="pmode on">◉ Pagina corrente</span>
+          <span class="pmode">○ Intervallo · Da <b>156</b> A <b>159</b></span>
+          <span class="pmode">○ Pagine · <span class="pinput">1,3,7-9</span></span>
+        </div>
+        <div class="pgrid">
+          <span class="pg on">1</span><span class="pg off">2</span><span class="pg on">3</span>
+          <span class="pg off">4</span><span class="pg off">5</span><span class="pg off">6</span>
+          <span class="pg on">7</span><span class="pg on">8</span><span class="pg on">9</span>
+          <span class="pg off">10</span>
+        </div>
+        <div class="pcap">Selezione: <b>5 pagine</b> · etichetta
+        <code>1,3,7-9</code></div>
+      </div>
+
+      <table>
+        <tr><th>Scrivi nel campo</th><th>Pagine esportate</th></tr>
+        <tr><td><code>7</code></td><td>la pagina 7</td></tr>
+        <tr><td><code>5-20</code></td><td>dalla 5 alla 20 (anche <code>20-5</code>)</td></tr>
+        <tr><td><code>1,3,7-9</code></td><td>1, 3, 7, 8 e 9</td></tr>
+        <tr><td><code>3, 5 , 10-12, 3</code></td><td>3, 5, 10, 11, 12 (spazi e doppioni ignorati)</td></tr>
+        <tr><td><code>all</code> (o <code>*</code>)</td><td>tutte le pagine</td></tr>
+      </table>
+
+      <ul>
+        <li>Le anteprime mostrano la <strong>prima</strong> e l'<strong>ultima</strong>
+          pagina della selezione, con la riga «N pagine · etichetta».</li>
+        <li>Il conteggio <em>in cache / da tradurre</em> e la stima tengono conto
+          <strong>solo</strong> delle pagine scelte.</li>
+        <li>Il nome file usa la forma compatta:
+          <code>libro_pag1,3,7-9_google_it.pdf</code>.</li>
+        <li>Se l'elenco non è valido, il campo si segnala e <strong>Avanti</strong>
+          resta bloccato finché non lo correggi.</li>
+      </ul>
+
+      <div class="note"><strong>Miniature schematiche</strong> Le paginette qui
+        sopra non sono un'anteprima reale: mostrano soltanto quali pagine vengono
+        incluse dalla selezione.</div>
+
       <h3>Traduzione preventiva e avanzamento</h3>
       <p>Le pagine non ancora in cache possono essere tradotte prima dell'export,
       con annullamento immediato. La finestra di avanzamento mostra la pagina

@@ -234,6 +234,60 @@ footer {
   text-align: center;
 }
 
+/* ── pagine: mockup semigrafico (guida Esportazione) ─── */
+
+.pagemock {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 16px 0;
+}
+.pagemock-modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.pmode {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.pmode.on {
+  color: #fff;
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+}
+.pinput {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--text);
+}
+.pgrid { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.pg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 46px;
+  font-size: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: #2f2f2f;
+  color: #888;
+}
+.pg.on {
+  background: #1e3a24;
+  border-color: var(--green);
+  color: #bfe8c4;
+  font-weight: 700;
+}
+.pg.off { opacity: 0.55; }
+.pcap { margin-top: 10px; font-size: 13px; color: var(--text-dim); }
+.pcap code { font-size: 12px; }
+
 /* responsive */
 @media (max-width: 900px) {
   .wrap { flex-direction: column; padding: 0 16px; }

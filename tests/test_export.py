@@ -37,6 +37,8 @@ class _FakeEngine:
         self._status: dict[tuple, str] = {}
         # (engine, lang_in, lang_out, page) seen by cache queries.
         self.query_langs: list[tuple] = []
+        # Pagine passate a export_pdf/export_zip (per verificare la selezione).
+        self.exported: list[list[int]] = []
 
     def is_cached(self, page, engine, lang_in=None, lang_out=None):
         self.query_langs.append((engine, lang_in, lang_out, page))
@@ -72,6 +74,7 @@ class _FakeEngine:
         return self._status.get((page, engine), "none")
 
     def export_pdf(self, pages, engine, dest, lang_in=None, lang_out=None):
+        self.exported.append(list(pages))
         Path(dest).write_bytes(b"%PDF-1.4 fake merged")
         return len(list(pages))
 
@@ -80,6 +83,7 @@ class _FakeEngine:
     ):
         import zipfile
 
+        self.exported.append(list(pages))
         with zipfile.ZipFile(dest, "w") as archive:
             for page in pages:
                 archive.writestr(
@@ -295,6 +299,73 @@ class ExportWizardDialogTests(unittest.TestCase):
         dlg._path_touched = True
         self.assertEqual(dlg.chosen_path(), custom)
 
+    def test_free_mode_parses_mixed_list(self):
+        dlg = self._dialog()
+        dlg._rad_free.setChecked(True)
+        dlg._free_edit.setText("1,3,7-9")
+        self._app.processEvents()
+        self.assertTrue(dlg.is_free())
+        self.assertFalse(dlg.is_current())
+        self.assertEqual(dlg.chosen_pages(), [0, 2, 6, 7, 8])
+        self.assertEqual(dlg.range_label(), "1,3,7-9")
+
+    def test_free_mode_all_pages(self):
+        dlg = self._dialog(total=5)
+        dlg._rad_free.setChecked(True)
+        dlg._free_edit.setText("all")
+        self._app.processEvents()
+        self.assertEqual(dlg.chosen_pages(), [0, 1, 2, 3, 4])
+
+    def test_free_mode_typing_selects_free(self):
+        dlg = self._dialog()
+        self.assertTrue(dlg.is_current())
+        dlg._free_edit.setText("2-4")
+        self._app.processEvents()
+        self.assertTrue(dlg.is_free())
+        self.assertEqual(dlg.chosen_pages(), [1, 2, 3])
+
+    def test_free_mode_invalid_blocks_next(self):
+        dlg = self._dialog()
+        dlg._set_step(1)
+        dlg._rad_free.setChecked(True)
+        dlg._free_edit.setText("abc")
+        self._app.processEvents()
+        self.assertTrue(dlg._free_error_key)
+        self.assertIn("abc", dlg._free_error.text())
+        self.assertFalse(dlg._btn_next.isEnabled())
+        dlg._go_next()
+        self.assertEqual(dlg._step, 1)  # non avanza
+        self.assertTrue(dlg._lbl_error.text())
+
+    def test_free_mode_counts_only_selected_pages(self):
+        engine = _FakeEngine(cached=[0, 2, 99])
+        dlg = self._dialog(engine=engine)
+        dlg._rad_free.setChecked(True)
+        dlg._free_edit.setText("1,3,7-9")
+        self._app.processEvents()
+        self.assertEqual(
+            dlg._ready_lbl.text(),
+            i18n.T("export.ready", cached=2, total=5, missing=3),
+        )
+
+    def test_free_mode_out_of_range_shows_error(self):
+        dlg = self._dialog(total=10)
+        dlg._rad_free.setChecked(True)
+        dlg._free_edit.setText("11")
+        self._app.processEvents()
+        self.assertEqual(dlg._free_error_key, "export.free.err.bounds")
+        self.assertIn("10", dlg._free_error.text())
+
+    def test_default_path_uses_free_label(self):
+        dlg = self._dialog(engine_name="google", target="it")
+        dlg._rad_free.setChecked(True)
+        dlg._free_edit.setText("1,3,7-9")
+        self._app.processEvents()
+        self.assertTrue(
+            dlg.chosen_path().endswith("_pag1,3,7-9_google_it.pdf"),
+            dlg.chosen_path(),
+        )
+
     def test_qss_styles_the_wizard_controls(self):
         # Lo stile è ricalcato dal wizard del servizio: radio e schede motore
         # devono avere le regole dedicate (altrimenti testo scuro su scuro).
@@ -341,39 +412,37 @@ class PreviewAndLiquidTests(unittest.TestCase):
             self.engine, "google", "it", "auto", current, total, pdf
         )
 
-    def test_spin_sits_above_its_own_thumbnail(self):
+    def test_range_inputs_live_in_mode_row(self):
         pdf = self._make_pdf(5)
         try:
             import pymupdf  # noqa: F401
         except ImportError:  # pragma: no cover
             self.skipTest("pymupdf non disponibile")
         dlg = self._wizard(pdf)
-        # Lo spin "Da" sta nella colonna sinistra, lo spin "A" nella destra.
-        self.assertTrue(dlg._col_from.isAncestorOf(dlg._from_spin))
-        self.assertTrue(dlg._col_to.isAncestorOf(dlg._to_spin))
-        # Nelle colonne l'header (spin) precede il riquadro della miniatura.
-        for col, head, prev, thumb in (
-            (dlg._col_from, dlg._from_head, dlg._from_prev, dlg._thumb_first),
-            (dlg._col_to, dlg._to_head, dlg._to_prev, dlg._thumb_last),
+        # I controlli dei modi stanno nella riga in alto, non nelle anteprime.
+        for widget in (
+            dlg._rad_current, dlg._rad_range, dlg._rad_free,
+            dlg._from_spin, dlg._to_spin, dlg._free_edit,
         ):
-            self.assertTrue(col.isAncestorOf(thumb))
-            self.assertTrue(prev.isAncestorOf(thumb))
-            lay = col.layout()
-            self.assertLess(lay.indexOf(head), lay.indexOf(prev))
+            self.assertTrue(dlg._mode_row.isAncestorOf(widget), widget)
+        # Le anteprime (colonne) stanno nella riga sotto.
+        for col in (dlg._col_current, dlg._col_first, dlg._col_last):
+            self.assertTrue(dlg._preview_row.isAncestorOf(col))
         dlg.done(0)
 
-    def test_current_and_range_boxes_share_one_row(self):
+    def test_mode_choices_share_one_row(self):
         pdf = self._make_pdf(5)
         dlg = self._wizard(pdf)
-        # Radio "Pagina corrente" e i due box Da/A sono sulla stessa riga.
-        for widget in (dlg._rad_current, dlg._from_head, dlg._to_head):
-            self.assertTrue(dlg._preview_row.isAncestorOf(widget))
-        # E ognuno ha la propria miniatura sotto l'header.
+        # I tre radio e i loro input sono sulla stessa riga.
+        for widget in (
+            dlg._rad_current, dlg._rad_range, dlg._rad_free,
+            dlg._from_spin, dlg._to_spin, dlg._free_edit,
+        ):
+            self.assertTrue(dlg._mode_row.isAncestorOf(widget))
+        # Ogni colonna anteprima contiene la sua miniatura.
         self.assertTrue(dlg._col_current.isAncestorOf(dlg._thumb_current))
-        self.assertLess(
-            dlg._col_current.layout().indexOf(dlg._rad_current),
-            dlg._col_current.layout().indexOf(dlg._cur_prev),
-        )
+        self.assertTrue(dlg._col_first.isAncestorOf(dlg._thumb_first))
+        self.assertTrue(dlg._col_last.isAncestorOf(dlg._thumb_last))
         dlg.done(0)
 
     def test_thumbnail_box_matches_page_aspect(self):
@@ -405,8 +474,8 @@ class PreviewAndLiquidTests(unittest.TestCase):
         dlg._to_spin.setValue(4)
         dlg._update_page_preview()
         self.assertFalse(dlg._thumb_first.pixmap().isNull())
-        self.assertFalse(dlg._from_prev.isHidden())
-        self.assertFalse(dlg._to_prev.isHidden())
+        self.assertFalse(dlg._col_first.isHidden())
+        self.assertFalse(dlg._col_last.isHidden())
         self.assertIn("2", dlg._cap_first.text())
         self.assertIn("4", dlg._cap_last.text())
         dlg.done(0)
@@ -420,9 +489,9 @@ class PreviewAndLiquidTests(unittest.TestCase):
         dlg = self._wizard(pdf)
         dlg._rad_current.setChecked(True)
         dlg._update_page_preview()
-        self.assertTrue(dlg._from_prev.isHidden())
-        self.assertTrue(dlg._to_prev.isHidden())
-        self.assertFalse(dlg._cur_prev.isHidden())
+        self.assertTrue(dlg._col_first.isHidden())
+        self.assertTrue(dlg._col_last.isHidden())
+        self.assertFalse(dlg._col_current.isHidden())
         dlg.done(0)
 
     def test_preview_caption_reports_printed_label(self):
@@ -821,7 +890,7 @@ class ExportTranslationWaitTests(unittest.TestCase):
         )
         try:
             ok, count, failed = window._run_export_with_progress(
-                engine, [0], True, "google", "auto", "it", 0, 0, 0, str(dest)
+                engine, [0], [0], True, "google", "auto", "it", 0, str(dest)
             )
         finally:
             self.main.ExportProgressDialog.exec = original
@@ -840,7 +909,7 @@ class ExportTranslationWaitTests(unittest.TestCase):
         )
         try:
             ok, count, failed = window._run_export_with_progress(
-                engine, [], False, "google", "auto", "it", 0, 1, 2, str(dest)
+                engine, [0, 1], [], False, "google", "auto", "it", 2, str(dest)
             )
         finally:
             self.main.ExportProgressDialog.exec = original
@@ -882,7 +951,7 @@ class ExportTranslationWaitTests(unittest.TestCase):
         )
         try:
             ok, _, _ = window._run_export_with_progress(
-                engine, [0], True, "google", "auto", "it", 0, 0, 0, str(dest)
+                engine, [0], [0], True, "google", "auto", "it", 0, str(dest)
             )
         finally:
             self.main.ExportProgressDialog.exec = original
@@ -901,7 +970,7 @@ class ExportTranslationWaitTests(unittest.TestCase):
         )
         try:
             ok, count, failed = window._run_export_with_progress(
-                engine, [], False, "google", "auto", "it", 0, 1, 2, str(dest), True
+                engine, [0, 1], [], False, "google", "auto", "it", 2, str(dest), True
             )
         finally:
             self.main.ExportProgressDialog.exec = original
@@ -909,6 +978,26 @@ class ExportTranslationWaitTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual((count, failed), (2, 0))
         self.assertTrue(dest.is_file())
+
+    def test_non_contiguous_export_uses_exact_selection(self):
+        """La selezione libera esporta SOLO le pagine scelte, non le intermedie."""
+        window = self.main.MainWindow()
+        engine = _FakeEngine(cached=[0, 1, 2])
+        dest = Path(self._tmp.name) / "noncontig.pdf"
+        original = self.main.ExportProgressDialog.exec
+        self.main.ExportProgressDialog.exec = (
+            lambda self_: QDialog.DialogCode.Accepted
+        )
+        try:
+            ok, count, failed = window._run_export_with_progress(
+                engine, [0, 2], [], False, "google", "auto", "it", 2, str(dest)
+            )
+        finally:
+            self.main.ExportProgressDialog.exec = original
+            window.close()
+        self.assertTrue(ok)
+        self.assertEqual((count, failed), (2, 0))
+        self.assertEqual(engine.exported, [[0, 2]])  # la pagina 1 NON è inclusa
 
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")

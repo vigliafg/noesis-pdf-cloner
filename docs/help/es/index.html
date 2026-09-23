@@ -293,6 +293,53 @@
           guardado.</li>
       </ol>
 
+      <h3 id="export-pages">Elegir páginas (actual, intervalo, lista)</h3>
+      <p>En el paso <strong>Páginas</strong> del asistente eliges qué exportar con
+      <strong>tres modos</strong>, todos en la misma pantalla que las vistas previas:
+      los controles están arriba, así que el campo libre <strong>no reduce</strong>
+      las miniaturas.</p>
+
+      <div class="pagemock">
+        <div class="pagemock-modes">
+          <span class="pmode on">◉ Página actual</span>
+          <span class="pmode">○ Intervalo · De <b>156</b> a <b>159</b></span>
+          <span class="pmode">○ Páginas · <span class="pinput">1,3,7-9</span></span>
+        </div>
+        <div class="pgrid">
+          <span class="pg on">1</span><span class="pg off">2</span><span class="pg on">3</span>
+          <span class="pg off">4</span><span class="pg off">5</span><span class="pg off">6</span>
+          <span class="pg on">7</span><span class="pg on">8</span><span class="pg on">9</span>
+          <span class="pg off">10</span>
+        </div>
+        <div class="pcap">Selección: <b>5 páginas</b> · etiqueta
+        <code>1,3,7-9</code></div>
+      </div>
+
+      <table>
+        <tr><th>Escribe en el campo</th><th>Páginas exportadas</th></tr>
+        <tr><td><code>7</code></td><td>la página 7</td></tr>
+        <tr><td><code>5-20</code></td><td>de la 5 a la 20 (también <code>20-5</code>)</td></tr>
+        <tr><td><code>1,3,7-9</code></td><td>1, 3, 7, 8 y 9</td></tr>
+        <tr><td><code>3, 5 , 10-12, 3</code></td><td>3, 5, 10, 11, 12 (espacios y duplicados ignorados)</td></tr>
+        <tr><td><code>all</code> (o <code>*</code>)</td><td>todas las páginas</td></tr>
+      </table>
+
+      <ul>
+        <li>Las vistas previas muestran la <strong>primera</strong> y la
+          <strong>última</strong> página de la selección, con la línea
+          «N páginas · etiqueta».</li>
+        <li>El recuento <em>en caché / por traducir</em> y la estimación tienen en
+          cuenta <strong>solo</strong> las páginas elegidas.</li>
+        <li>El nombre de archivo usa la forma compacta:
+          <code>libro_pag1,3,7-9_google_it.pdf</code>.</li>
+        <li>Si la lista no es válida, el campo se señala y <strong>Siguiente</strong>
+          queda bloqueado hasta que la corrijas.</li>
+      </ul>
+
+      <div class="note"><strong>Miniaturas esquemáticas</strong> Las paginitas de
+        arriba no son una vista previa real: solo muestran qué páginas incluye la
+        selección.</div>
+
       <h3>Traducción previa y avance</h3>
       <p>Las páginas que aún no están en caché pueden traducirse antes de la exportación,
       con cancelación inmediata. La ventana de avance muestra la página

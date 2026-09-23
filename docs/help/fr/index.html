@@ -302,6 +302,53 @@
           chemin d'enregistrement.</li>
       </ol>
 
+      <h3 id="export-pages">Choisir les pages (courante, plage, liste)</h3>
+      <p>À l'étape <strong>Pages</strong> de l'assistant, vous choisissez quoi
+      exporter avec <strong>trois modes</strong>, tous dans le même écran que les
+      aperçus : les commandes sont en haut, donc le champ libre
+      <strong>ne réduit pas</strong> les miniatures.</p>
+
+      <div class="pagemock">
+        <div class="pagemock-modes">
+          <span class="pmode on">◉ Page actuelle</span>
+          <span class="pmode">○ Plage · De <b>156</b> à <b>159</b></span>
+          <span class="pmode">○ Pages · <span class="pinput">1,3,7-9</span></span>
+        </div>
+        <div class="pgrid">
+          <span class="pg on">1</span><span class="pg off">2</span><span class="pg on">3</span>
+          <span class="pg off">4</span><span class="pg off">5</span><span class="pg off">6</span>
+          <span class="pg on">7</span><span class="pg on">8</span><span class="pg on">9</span>
+          <span class="pg off">10</span>
+        </div>
+        <div class="pcap">Sélection : <b>5 pages</b> · étiquette
+        <code>1,3,7-9</code></div>
+      </div>
+
+      <table>
+        <tr><th>Saisie dans le champ</th><th>Pages exportées</th></tr>
+        <tr><td><code>7</code></td><td>la page 7</td></tr>
+        <tr><td><code>5-20</code></td><td>de la page 5 à la 20 (aussi <code>20-5</code>)</td></tr>
+        <tr><td><code>1,3,7-9</code></td><td>1, 3, 7, 8 et 9</td></tr>
+        <tr><td><code>3, 5 , 10-12, 3</code></td><td>3, 5, 10, 11, 12 (espaces et doublons ignorés)</td></tr>
+        <tr><td><code>all</code> (ou <code>*</code>)</td><td>toutes les pages</td></tr>
+      </table>
+
+      <ul>
+        <li>Les aperçus montrent la <strong>première</strong> et la
+          <strong>dernière</strong> page de la sélection, avec la ligne
+          « N pages · étiquette ».</li>
+        <li>Le décompte <em>en cache / à traduire</em> et l'estimation ne tiennent
+          compte que des pages choisies.</li>
+        <li>Le nom de fichier utilise la forme compacte :
+          <code>livre_pag1,3,7-9_google_it.pdf</code>.</li>
+        <li>Si la liste n'est pas valide, le champ est signalé et
+          <strong>Suivant</strong> reste bloqué jusqu'à correction.</li>
+      </ul>
+
+      <div class="note"><strong>Miniatures schématiques</strong> Les petites pages
+        ci-dessus ne sont pas un aperçu réel : elles montrent seulement quelles
+        pages la sélection inclut.</div>
+
       <h3>Traduction préalable et progression</h3>
       <p>Les pages pas encore en cache peuvent être traduites avant l'export,
       avec annulation immédiate. La fenêtre de progression montre la page en

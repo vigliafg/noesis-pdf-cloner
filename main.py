@@ -55,6 +55,7 @@ from i18n import (
     flag_endonym, get_config, get_setting, set_setting,
     init_config, save_config,
 )
+import pages as page_spec
 
 _MD_EXTENSIONS = ["tables", "fenced_code", "codehilite"]
 
@@ -5103,6 +5104,23 @@ class ExportWizardDialog(QDialog):
         self._close_preview_doc()
         super().done(result)
 
+    def _build_preview_column(self):
+        """Colonna anteprima: miniatura grande + didascalia sotto."""
+        col = QWidget()
+        cl = QVBoxLayout(col)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        thumb = QLabel()
+        thumb.setObjectName("wizThumbBig")
+        thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cap = QLabel("")
+        cap.setObjectName("wizHint")
+        cap.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cap.setWordWrap(True)
+        cl.addWidget(thumb, 0, Qt.AlignmentFlag.AlignLeft)
+        cl.addWidget(cap)
+        return col, thumb, cap
+
     def _build_step_pages(self) -> QWidget:
         pane = QWidget()
         pane.setObjectName("wizPane")
@@ -5123,12 +5141,14 @@ class ExportWizardDialog(QDialog):
 
         self._rad_current = QRadioButton(T("export.mode.current"))
         self._rad_range = QRadioButton(T("export.mode.range"))
+        self._rad_free = QRadioButton(T("export.mode.free"))
         self._rad_current.setChecked(True)
-        for rb in (self._rad_current, self._rad_range):
+        for rb in (self._rad_current, self._rad_range, self._rad_free):
             rb.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mode_group = QButtonGroup(self)
         self._mode_group.addButton(self._rad_current)
         self._mode_group.addButton(self._rad_range)
+        self._mode_group.addButton(self._rad_free)
 
         self._lbl_from = QLabel(T("export.range.from"))
         self._lbl_to = QLabel(T("export.range.to"))
@@ -5142,98 +5162,68 @@ class ExportWizardDialog(QDialog):
         self._to_label = QLabel("")
         self._to_label.setObjectName("wizHint")
 
-        # ── UNA riga: "Pagina corrente" + i due box Da/A ────────────────
-        # Sotto ogni header c'è la miniatura live della sua pagina.
+        self._free_edit = QLineEdit()
+        self._free_edit.setPlaceholderText(T("export.free.placeholder"))
+        self._free_edit.setClearButtonEnabled(True)
+        self._free_edit.setMinimumWidth(150)
+
+        # ── Riga dei modi: i controlli stanno QUI, sopra le anteprime ───
+        # Così il campo libero non ruba spazio alle miniature, che restano
+        # sotto a dimensione piena.
+        self._mode_row = QWidget()
+        mr = QHBoxLayout(self._mode_row)
+        mr.setContentsMargins(0, 4, 0, 0)
+        mr.setSpacing(8)
+        mr.addWidget(self._rad_current)
+        mr.addSpacing(10)
+        mr.addWidget(self._rad_range)
+        mr.addWidget(self._lbl_from)
+        mr.addWidget(self._from_spin)
+        mr.addWidget(self._lbl_to)
+        mr.addWidget(self._to_spin)
+        mr.addWidget(self._from_label)
+        mr.addWidget(self._to_label)
+        mr.addSpacing(10)
+        mr.addWidget(self._rad_free)
+        mr.addWidget(self._free_edit, 1)
+        lay.addWidget(self._mode_row)
+
+        self._free_hint = QLabel(T("export.free.hint"))
+        self._free_hint.setObjectName("wizHint")
+        self._free_hint.setWordWrap(True)
+        lay.addWidget(self._free_hint)
+
+        self._free_error = QLabel("")
+        self._free_error.setObjectName("wizError")
+        self._free_error.setWordWrap(True)
+        self._free_error.hide()
+        lay.addWidget(self._free_error)
+
+        # ── Anteprime: 1 (corrente) oppure prima/ultima (intervallo/pagine) ─
         self._preview_row = QWidget()
         row = QHBoxLayout(self._preview_row)
         row.setContentsMargins(0, 6, 0, 0)
         row.setSpacing(18)
 
-        # Colonna "Pagina corrente": radio come header, miniatura sotto.
-        self._col_current = QWidget()
-        cc = QVBoxLayout(self._col_current)
-        cc.setContentsMargins(0, 0, 0, 0)
-        cc.setSpacing(6)
-        self._cur_prev = QWidget()
-        cpp = QVBoxLayout(self._cur_prev)
-        cpp.setContentsMargins(0, 0, 0, 0)
-        cpp.setSpacing(6)
-        self._thumb_current = QLabel()
-        self._thumb_current.setObjectName("wizThumbBig")
-        self._thumb_current.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cap_current = QLabel("")
-        self._cap_current.setObjectName("wizHint")
-        self._cap_current.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cap_current.setWordWrap(True)
-        cpp.addWidget(self._thumb_current, 0, Qt.AlignmentFlag.AlignLeft)
-        cpp.addWidget(self._cap_current)
-        cc.addWidget(self._rad_current)
-        cc.addWidget(self._cur_prev)
-
-        # Colonna "Da pagina": radio intervallo + label + spin, miniatura sotto.
-        self._col_from = QWidget()
-        cf = QVBoxLayout(self._col_from)
-        cf.setContentsMargins(0, 0, 0, 0)
-        cf.setSpacing(6)
-        self._from_head = QWidget()
-        fh = QHBoxLayout(self._from_head)
-        fh.setContentsMargins(0, 0, 0, 0)
-        fh.setSpacing(8)
-        fh.addWidget(self._rad_range)
-        fh.addWidget(self._lbl_from)
-        fh.addWidget(self._from_spin)
-        fh.addWidget(self._from_label)
-        fh.addStretch(1)
-        self._from_prev = QWidget()
-        fp = QVBoxLayout(self._from_prev)
-        fp.setContentsMargins(0, 0, 0, 0)
-        fp.setSpacing(6)
-        self._thumb_first = QLabel()
-        self._thumb_first.setObjectName("wizThumbBig")
-        self._thumb_first.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cap_first = QLabel("")
-        self._cap_first.setObjectName("wizHint")
-        self._cap_first.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cap_first.setWordWrap(True)
-        fp.addWidget(self._thumb_first, 0, Qt.AlignmentFlag.AlignLeft)
-        fp.addWidget(self._cap_first)
-        cf.addWidget(self._from_head)
-        cf.addWidget(self._from_prev)
-
-        # Colonna "A pagina".
-        self._col_to = QWidget()
-        ct = QVBoxLayout(self._col_to)
-        ct.setContentsMargins(0, 0, 0, 0)
-        ct.setSpacing(6)
-        self._to_head = QWidget()
-        th = QHBoxLayout(self._to_head)
-        th.setContentsMargins(0, 0, 0, 0)
-        th.setSpacing(8)
-        th.addWidget(self._lbl_to)
-        th.addWidget(self._to_spin)
-        th.addWidget(self._to_label)
-        th.addStretch(1)
-        self._to_prev = QWidget()
-        tp = QVBoxLayout(self._to_prev)
-        tp.setContentsMargins(0, 0, 0, 0)
-        tp.setSpacing(6)
-        self._thumb_last = QLabel()
-        self._thumb_last.setObjectName("wizThumbBig")
-        self._thumb_last.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cap_last = QLabel("")
-        self._cap_last.setObjectName("wizHint")
-        self._cap_last.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._cap_last.setWordWrap(True)
-        tp.addWidget(self._thumb_last, 0, Qt.AlignmentFlag.AlignLeft)
-        tp.addWidget(self._cap_last)
-        ct.addWidget(self._to_head)
-        ct.addWidget(self._to_prev)
-
+        self._col_current, self._thumb_current, self._cap_current = (
+            self._build_preview_column()
+        )
+        self._col_first, self._thumb_first, self._cap_first = (
+            self._build_preview_column()
+        )
+        self._col_last, self._thumb_last, self._cap_last = (
+            self._build_preview_column()
+        )
         row.addWidget(self._col_current, 0, Qt.AlignmentFlag.AlignTop)
-        row.addWidget(self._col_from, 0, Qt.AlignmentFlag.AlignTop)
-        row.addWidget(self._col_to, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self._col_first, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self._col_last, 0, Qt.AlignmentFlag.AlignTop)
         row.addStretch(1)
         lay.addWidget(self._preview_row)
+
+        self._count_lbl = QLabel("")
+        self._count_lbl.setObjectName("wizHint")
+        self._count_lbl.setWordWrap(True)
+        lay.addWidget(self._count_lbl)
 
         self._ready_lbl = QLabel("")
         self._ready_lbl.setObjectName("wizHint")
@@ -5247,9 +5237,17 @@ class ExportWizardDialog(QDialog):
         lay.addWidget(self._preview_note)
         lay.addStretch(1)
 
+        self._rad_current.toggled.connect(self._on_mode_changed)
         self._rad_range.toggled.connect(self._on_mode_changed)
+        self._rad_free.toggled.connect(self._on_mode_changed)
         self._from_spin.valueChanged.connect(self._on_pages_value_changed)
         self._to_spin.valueChanged.connect(self._on_pages_value_changed)
+        self._free_edit.textChanged.connect(self._on_free_changed)
+
+        # Stato del campo libero (parse live, aggiornato in _refresh_all).
+        self._free_pages: list[int] = []
+        self._free_error_key: str = ""
+        self._free_error_params: dict = {}
 
         # Rete di sicurezza: su schermi bassi si scorre, ma ogni pagina resta
         # INTERA (la miniatura ha l'aspetto reale della pagina).
@@ -5458,6 +5456,9 @@ class ExportWizardDialog(QDialog):
         self._set_step(self._step - 1)
 
     def _go_next(self):
+        if self._step == 1 and self.is_free() and self._free_error_key:
+            self._lbl_error.setText(self._free_error_text())
+            return
         if self._step == len(self.STEPS) - 1:
             if not self._path_edit.text().strip():
                 self._path_edit.setText(self._default_path())
@@ -5477,6 +5478,47 @@ class ExportWizardDialog(QDialog):
             self._rad_range.setChecked(True)  # → _on_mode_changed → refresh
             return
         self._refresh_all()
+
+    def _on_free_changed(self, *_):
+        # Scrivere nel campo libero significa voler esportare un elenco.
+        if self._free_edit.text().strip() and not self._rad_free.isChecked():
+            self._rad_free.setChecked(True)  # → _on_mode_changed → refresh
+            return
+        self._refresh_all()
+
+    def _parse_free(self):
+        """Aggiorna ``_free_pages`` e l'eventuale errore del campo libero."""
+        if not hasattr(self, "_free_edit"):
+            return
+        try:
+            self._free_pages = page_spec.parse_pages(
+                self._free_edit.text(), self._page_count
+            )
+            self._free_error_key = ""
+            self._free_error_params = {}
+        except page_spec.PageSpecError as exc:
+            self._free_pages = []
+            self._free_error_key = f"export.free.err.{exc.code}"
+            self._free_error_params = dict(exc.params)
+
+    def _free_error_text(self) -> str:
+        if not self._free_error_key:
+            return ""
+        return T(self._free_error_key, **self._free_error_params)
+
+    def _update_free_feedback(self):
+        if not hasattr(self, "_free_error"):
+            return
+        self._free_error.setText(self._free_error_text())
+        self._free_error.setVisible(bool(self._free_error_key))
+        if hasattr(self, "_free_hint"):
+            self._free_hint.setVisible(self.is_free())
+
+    def _update_next_enabled(self):
+        if not hasattr(self, "_btn_next"):
+            return
+        blocked = self._step == 1 and self.is_free() and bool(self._free_error_key)
+        self._btn_next.setEnabled(not blocked)
 
     def _page_label(self, page: int) -> str:
         """Etichetta stampata (/PageLabels) della pagina 0-based, o numero fisico."""
@@ -5509,6 +5551,11 @@ class ExportWizardDialog(QDialog):
         if not hasattr(self, "_from_label"):
             return
         pages = self.chosen_pages()
+        if not pages:
+            self._from_label.setText("")
+            self._to_label.setText("")
+            self._preview_note.setText("")
+            return
         lo, hi = min(pages), max(pages)
 
         def _note(page: int) -> str:
@@ -5564,24 +5611,42 @@ class ExportWizardDialog(QDialog):
         )
 
     def _update_page_preview(self):
-        """Anteprime grandi: la corrente sotto il suo radio, Da/A sotto i box."""
+        """Anteprime grandi: la corrente (1) oppure prima/ultima (intervallo/pagine)."""
         if not hasattr(self, "_thumb_first"):
             return
         current = self._rad_current.isChecked()
-        self._cur_prev.setVisible(current)
-        self._from_prev.setVisible(not current)
-        self._to_prev.setVisible(not current)
+        self._col_current.setVisible(current)
+        self._col_first.setVisible(not current)
+        self._col_last.setVisible(not current)
 
         if current:
             self._paint_thumb(
                 self._thumb_current, self._cap_current, self._current_page
             )
+            self._count_lbl.setText("")
             return
 
         pages = self.chosen_pages()
+        if not pages:
+            self._thumb_first.clear()
+            self._cap_first.setText("")
+            self._thumb_last.clear()
+            self._cap_last.setText("")
+            self._count_lbl.setText("")
+            return
         first, last = min(pages), max(pages)
         self._paint_thumb(self._thumb_first, self._cap_first, first)
         self._paint_thumb(self._thumb_last, self._cap_last, last)
+        if len(pages) > 1:
+            self._count_lbl.setText(
+                T(
+                    "export.wizard.preview.count",
+                    n=len(pages),
+                    label=page_spec.format_pages_label(pages),
+                )
+            )
+        else:
+            self._count_lbl.setText("")
 
     def _on_translate_toggled(self, _checked: bool):
         self._translate_touched = True
@@ -5604,17 +5669,27 @@ class ExportWizardDialog(QDialog):
         return (src or self._source_lang, dst or self._target_lang)
 
     def _cache_counts(self) -> tuple[int, int, int]:
-        """(cached, total, missing) per le pagine e le lingue scelte."""
+        """(cached, total, missing) per le pagine e le lingue scelte.
+
+        Conta **esattamente** le pagine selezionate (anche non contigue), non
+        l'intervallo fra la prima e l'ultima.
+        """
         pages = self.chosen_pages()
-        lo, hi = min(pages), max(pages)
+        if not pages:
+            return (0, 0, 0)
         source, target = self._chosen_langs()
-        cached = self._engine.cached_pages(
-            lo, hi, self.chosen_engine(), source, target
+        engine = self.chosen_engine()
+        cached = sum(
+            1
+            for p in pages
+            if self._engine.is_cached(p, engine, source, target)
         )
-        total = hi - lo + 1
-        return len(cached), total, total - len(cached)
+        total = len(pages)
+        return cached, total, total - cached
 
     def _refresh_all(self, *_):
+        self._parse_free()
+        self._update_free_feedback()
         cached, total, missing = self._cache_counts()
         if hasattr(self, "_ready_lbl"):
             self._ready_lbl.setText(
@@ -5633,6 +5708,7 @@ class ExportWizardDialog(QDialog):
             )
         self._update_translate_option(missing)
         self._update_numbering_hints()
+        self._update_next_enabled()
         self._preview_timer.start()
         self._update_path()
         self._update_summary()
@@ -5717,6 +5793,9 @@ class ExportWizardDialog(QDialog):
     def is_current(self) -> bool:
         return self._rad_current.isChecked()
 
+    def is_free(self) -> bool:
+        return self._rad_free.isChecked()
+
     def chosen_engine(self) -> str:
         btn = self._engine_group.checkedButton()
         return (btn.property("code") if btn is not None else None) or "google"
@@ -5730,6 +5809,8 @@ class ExportWizardDialog(QDialog):
     def chosen_pages(self) -> list[int]:
         if self.is_current():
             return [self._current_page]
+        if self.is_free():
+            return list(self._free_pages)
         a, b = self._range_pages()
         return list(range(a, b + 1))
 
@@ -5753,11 +5834,8 @@ class ExportWizardDialog(QDialog):
         return text
 
     def range_label(self) -> str:
-        """Suffisso per il nome file: "156" oppure "156-159"."""
-        if self.is_current():
-            return str(self._current_page + 1)
-        a, b = self._range_pages()
-        return f"{a + 1}-{b + 1}"
+        """Suffisso per il nome file: "156", "156-159" oppure "1,3,7-9"."""
+        return page_spec.format_pages_label(self.chosen_pages())
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -5809,6 +5887,7 @@ class ExportProgressDialog(QDialog):
         total: int,
         pdf_path=None,
         parent=None,
+        range_label: str | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle(T("export.progress.title"))
@@ -5826,6 +5905,7 @@ class ExportProgressDialog(QDialog):
         self._last_folder: Path | None = None
         self._page_from = int(page_from)
         self._page_to = int(page_to)
+        self._range_label_text = range_label
         self._pos: int | None = None
         self._pdf_path = Path(pdf_path) if pdf_path else None
         self._doc = None
@@ -5849,6 +5929,15 @@ class ExportProgressDialog(QDialog):
 
         self._range_lbl = QLabel(
             T(
+                "export.progress.pages",
+                **{
+                    "label": self._range_label_text,
+                    "missing": missing,
+                    "cached": cached,
+                },
+            )
+            if self._range_label_text is not None
+            else T(
                 "export.progress.range",
                 **{
                     "from": page_from,
@@ -6089,17 +6178,27 @@ class ExportProgressDialog(QDialog):
         self._eta_lbl.setText("")
         self._dest = Path(dest)
         self._last_folder = self._dest.parent
-        self._range_lbl.setText(
-            T(
-                "export.progress.range_done",
-                **{
-                    "from": self._page_from,
-                    "to": self._page_to,
-                    "done": count,
-                    "failed": failed,
-                },
+        if self._range_label_text is not None:
+            self._range_lbl.setText(
+                T(
+                    "export.progress.pages_done",
+                    label=self._range_label_text,
+                    done=count,
+                    failed=failed,
+                )
             )
-        )
+        else:
+            self._range_lbl.setText(
+                T(
+                    "export.progress.range_done",
+                    **{
+                        "from": self._page_from,
+                        "to": self._page_to,
+                        "done": count,
+                        "failed": failed,
+                    },
+                )
+            )
         self._path_lbl.setText(
             T("export.progress.saved_path", path=str(dest))
         )
@@ -7879,11 +7978,17 @@ class MainWindow(QMainWindow):
         want_translate = dlg.translate_missing()
         as_zip = dlg.chosen_zip()
         dest = dlg.chosen_path()
+        if not pages:
+            self.status_bar.showMessage(T("export.none_ready"), 5000)
+            return
         if engine == "llm" and want_translate and not self._ensure_llm_key():
             self.status_bar.showMessage(self._no_key_message(), 6000)
             return
-        lo, hi = min(pages), max(pages)
-        cached = self._clone_engine.cached_pages(lo, hi, engine, source, target)
+        cached = [
+            p
+            for p in pages
+            if self._clone_engine.is_cached(p, engine, source, target)
+        ]
         missing = [
             p
             for p in pages
@@ -7917,13 +8022,12 @@ class MainWindow(QMainWindow):
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,
+            pages,
             missing,
             translate,
             engine,
             source,
             target,
-            lo,
-            hi,
             len(cached),
             dest,
             as_zip,
@@ -7972,13 +8076,12 @@ class MainWindow(QMainWindow):
     def _run_export_with_progress(
         self,
         engine,
+        pages: list[int],
         missing: list[int],
         translate: bool,
         engine_name: str,
         source: str,
         target: str,
-        page_from: int,
-        page_to: int,
         cached_count: int,
         dest: str,
         as_zip: bool = False,
@@ -7998,13 +8101,14 @@ class MainWindow(QMainWindow):
         prog = ExportProgressDialog(
             engine_label=T(f"engine.option.{engine_name}"),
             lang_label=flag_endonym(target),
-            page_from=page_from + 1,
-            page_to=page_to + 1,
+            page_from=(min(pages) + 1) if pages else 1,
+            page_to=(max(pages) + 1) if pages else 1,
             missing=total,
             cached=cached_count,
             total=max(total, 1),
             pdf_path=self._pdf_path,
             parent=self,
+            range_label=page_spec.format_pages_label(pages),
         )
         prog.setWindowModality(Qt.WindowModality.ApplicationModal)
         prog.show()
@@ -8057,7 +8161,11 @@ class MainWindow(QMainWindow):
         else:
             prog.set_phase_exporting()
 
-        ready = engine.cached_pages(page_from, page_to, engine_name, source, target)
+        ready = [
+            p
+            for p in pages
+            if engine.is_cached(p, engine_name, source, target)
+        ]
         if not ready:
             prog.set_error(T("export.none_ready"))
             prog.exec()

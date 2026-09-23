@@ -975,6 +975,76 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "A pagina", "en": "To page", "fr": "À la page",
         "de": "Bis Seite", "es": "Hasta la página",
     },
+    "export.mode.free": {
+        "it": "Pagine (1,3,7-9)", "en": "Pages (1,3,7-9)",
+        "fr": "Pages (1,3,7-9)", "de": "Seiten (1,3,7-9)",
+        "es": "Páginas (1,3,7-9)",
+    },
+    "export.free.placeholder": {
+        "it": "es. 1,3,7-9", "en": "e.g. 1,3,7-9", "fr": "ex. 1,3,7-9",
+        "de": "z. B. 1,3,7-9", "es": "p. ej. 1,3,7-9",
+    },
+    "export.free.hint": {
+        "it": "Pagine singole o intervalli separati da virgole: 1,3,7-9. "
+              "Usa «all» per tutte le pagine.",
+        "en": "Single pages or ranges separated by commas: 1,3,7-9. "
+              "Use “all” for every page.",
+        "fr": "Pages isolées ou plages séparées par des virgules : 1,3,7-9. "
+              "Utilisez « all » pour toutes les pages.",
+        "de": "Einzelseiten oder Bereiche, durch Kommas getrennt: 1,3,7-9. "
+              "„all“ für alle Seiten.",
+        "es": "Páginas sueltas o rangos separados por comas: 1,3,7-9. "
+              "Usa «all» para todas las páginas.",
+    },
+    "export.free.err.empty": {
+        "it": "Indica almeno una pagina (es. 1,3,7-9).",
+        "en": "Enter at least one page (e.g. 1,3,7-9).",
+        "fr": "Indiquez au moins une page (ex. 1,3,7-9).",
+        "de": "Geben Sie mindestens eine Seite an (z. B. 1,3,7-9).",
+        "es": "Indica al menos una página (p. ej. 1,3,7-9).",
+    },
+    "export.free.err.token": {
+        "it": "Voce non valida: «{token}».",
+        "en": "Invalid item: “{token}”.",
+        "fr": "Entrée non valide : « {token} ».",
+        "de": "Ungültiger Eintrag: „{token}“.",
+        "es": "Entrada no válida: «{token}».",
+    },
+    "export.free.err.range": {
+        "it": "Intervallo non valido: «{token}».",
+        "en": "Invalid range: “{token}”.",
+        "fr": "Plage non valide : « {token} ».",
+        "de": "Ungültiger Bereich: „{token}“.",
+        "es": "Rango no válido: «{token}».",
+    },
+    "export.free.err.bounds": {
+        "it": "Pagina fuori intervallo (1–{total}).",
+        "en": "Page out of range (1–{total}).",
+        "fr": "Page hors plage (1–{total}).",
+        "de": "Seite außerhalb des Bereichs (1–{total}).",
+        "es": "Página fuera de rango (1–{total}).",
+    },
+    "export.free.err.no_pages": {
+        "it": "Il documento non contiene pagine.",
+        "en": "The document has no pages.",
+        "fr": "Le document ne contient aucune page.",
+        "de": "Das Dokument enthält keine Seiten.",
+        "es": "El documento no contiene páginas.",
+    },
+    "export.free.err.none": {
+        "it": "Nessuna pagina selezionata.",
+        "en": "No pages selected.",
+        "fr": "Aucune page sélectionnée.",
+        "de": "Keine Seiten ausgewählt.",
+        "es": "Ninguna página seleccionada.",
+    },
+    "export.free.err.too_many": {
+        "it": "Troppe pagine richieste.",
+        "en": "Too many pages requested.",
+        "fr": "Trop de pages demandées.",
+        "de": "Zu viele Seiten angefordert.",
+        "es": "Demasiadas páginas solicitadas.",
+    },
     "export.ready": {
         "it": "Già tradotte in cache: {cached} di {total} · Da tradurre: {missing}",
         "en": "Already translated in cache: {cached} of {total} · To translate: {missing}",
@@ -1279,6 +1349,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "La numeración impresa difiere de la física para el intervalo "
               "seleccionado.",
     },
+    "export.wizard.preview.count": {
+        "it": "{n} pagine selezionate · {label}",
+        "en": "{n} pages selected · {label}",
+        "fr": "{n} pages sélectionnées · {label}",
+        "de": "{n} Seiten ausgewählt · {label}",
+        "es": "{n} páginas seleccionadas · {label}",
+    },
     "export.wizard.preview.none": {
         "it": "Anteprima non disponibile (PyMuPDF assente).",
         "en": "Preview unavailable (PyMuPDF missing).",
@@ -1316,6 +1393,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Plage : {from}–{to} · Traduites : {done} · Échecs : {failed}",
         "de": "Bereich: {from}–{to} · Übersetzt: {done} · Fehlgeschlagen: {failed}",
         "es": "Intervalo: {from}–{to} · Traducidas: {done} · Fallidas: {failed}",
+    },
+    "export.progress.pages": {
+        "it": "Pagine {label} · Da tradurre: {missing} · In cache: {cached}",
+        "en": "Pages {label} · To translate: {missing} · Cached: {cached}",
+        "fr": "Pages {label} · À traduire : {missing} · En cache : {cached}",
+        "de": "Seiten {label} · Zu übersetzen: {missing} · Im Cache: {cached}",
+        "es": "Páginas {label} · Por traducir: {missing} · En caché: {cached}",
+    },
+    "export.progress.pages_done": {
+        "it": "Pagine {label} · Tradotte: {done} · Non riuscite: {failed}",
+        "en": "Pages {label} · Translated: {done} · Failed: {failed}",
+        "fr": "Pages {label} · Traduites : {done} · Échecs : {failed}",
+        "de": "Seiten {label} · Übersetzt: {done} · Fehlgeschlagen: {failed}",
+        "es": "Páginas {label} · Traducidas: {done} · Fallidas: {failed}",
     },
     "export.progress.stats": {
         "it": "Tradotte: {done} · Non riuscite: {failed} · Trascorso: {elapsed}",
