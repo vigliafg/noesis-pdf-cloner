@@ -10,6 +10,8 @@
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
+!include "LogicLib.nsh"
+!include "nsDialogs.nsh"
 
 ; -------------------------------------------------------------------
 ; Configurable defines (override with /D on the command line)
@@ -36,6 +38,17 @@ SetCompressor    /SOLID lzma
 BrandingText      " "
 
 ; -------------------------------------------------------------------
+; Uninstaller options page (handle + scelte dell'utente)
+; -------------------------------------------------------------------
+Var UN_H_ALL            ; checkbox "rimuovi tutto"
+Var UN_H_ENGINE         ; checkbox motore
+Var UN_H_DATA           ; checkbox dati app
+Var UN_H_UV             ; checkbox cache/dati uv
+Var UN_OPT_ENGINE       ; 1 = rimuovi il motore
+Var UN_OPT_DATA         ; 1 = rimuovi i dati dell'app
+Var UN_OPT_UV           ; 1 = rimuovi cache/dati di uv
+
+; -------------------------------------------------------------------
 ; MUI2 interface
 ; -------------------------------------------------------------------
 !define MUI_ABORTWARNING
@@ -50,6 +63,7 @@ BrandingText      " "
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
+UninstPage custom un.OptionsPage un.OptionsPageLeave
 !insertmacro MUI_UNPAGE_INSTFILES
 
 ; -- Languages ------------------------------------------------------
@@ -78,11 +92,36 @@ LangString DESC_Desktop     ${LANG_ENGLISH} "Create a shortcut icon on the Deskt
 LangString DESC_StartMenu   ${LANG_ENGLISH} "Create a shortcut group in the Start Menu."
 LangString DESC_App         ${LANG_ENGLISH} "Core application files."
 
+; -- Uninstaller options page --------------------------------------
+LangString UN_TITLE    ${LANG_ITALIAN} "Cosa rimuovere"
+LangString UN_SUBTITLE ${LANG_ITALIAN} "Scegli cosa eliminare dal sistema."
+LangString UN_INTRO    ${LANG_ITALIAN} "Per non lasciare alcuna traccia del programma, lascia selezionate tutte le voci qui sotto."
+LangString UN_ALL      ${LANG_ITALIAN} "Rimuovi tutto: nessuna traccia del programma sul sistema"
+LangString UN_ENGINE   ${LANG_ITALIAN} "Motore di traduzione (.venv2, ~1,1 GB)"
+LangString UN_DATA     ${LANG_ITALIAN} "Impostazioni, cache delle traduzioni e log dell'app"
+LangString UN_UV       ${LANG_ITALIAN} "Cache e dati di uv (%LOCALAPPDATA%\uv, %APPDATA%\uv)"
+
+LangString UN_TITLE    ${LANG_ENGLISH} "What to remove"
+LangString UN_SUBTITLE ${LANG_ENGLISH} "Choose what to delete from your system."
+LangString UN_INTRO    ${LANG_ENGLISH} "To leave no trace of the program, keep all the items below selected."
+LangString UN_ALL      ${LANG_ENGLISH} "Remove everything: no trace of the program on the system"
+LangString UN_ENGINE   ${LANG_ENGLISH} "Translation engine (.venv2, ~1.1 GB)"
+LangString UN_DATA     ${LANG_ENGLISH} "App settings, translation cache and logs"
+LangString UN_UV       ${LANG_ENGLISH} "uv cache and data (%LOCALAPPDATA%\uv, %APPDATA%\uv)"
+
 ; -------------------------------------------------------------------
 ; .onInit — language selection
 ; -------------------------------------------------------------------
 Function .onInit
   !insertmacro MUI_LANGDLL_DISPLAY
+FunctionEnd
+
+; -------------------------------------------------------------------
+; un.onInit — recupera la lingua scelta in installazione (per le pagine
+; personalizzate dell'uninstaller) e prosegue se non disponibile.
+; -------------------------------------------------------------------
+Function un.onInit
+  !insertmacro MUI_UNGETLANGUAGE
 FunctionEnd
 
 ; -------------------------------------------------------------------
@@ -138,22 +177,104 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; -------------------------------------------------------------------
+; Uninstaller — pagina "Cosa rimuovere"
+; -------------------------------------------------------------------
+Function un.OptionsPage
+  !insertmacro MUI_HEADER_TEXT "$(UN_TITLE)" "$(UN_SUBTITLE)"
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+
+  ${NSD_CreateLabel} 0 0 100% 26u "$(UN_INTRO)"
+  Pop $0
+
+  ${NSD_CreateCheckbox} 0 30u 100% 12u "$(UN_ALL)"
+  Pop $UN_H_ALL
+  ${NSD_SetState} $UN_H_ALL ${BST_CHECKED}
+  ${NSD_OnClick} $UN_H_ALL un.ToggleAll
+
+  ${NSD_CreateCheckbox} 12u 46u 100% 12u "$(UN_ENGINE)"
+  Pop $UN_H_ENGINE
+  ${NSD_SetState} $UN_H_ENGINE ${BST_CHECKED}
+
+  ${NSD_CreateCheckbox} 12u 60u 100% 12u "$(UN_DATA)"
+  Pop $UN_H_DATA
+  ${NSD_SetState} $UN_H_DATA ${BST_CHECKED}
+
+  ${NSD_CreateCheckbox} 12u 74u 100% 12u "$(UN_UV)"
+  Pop $UN_H_UV
+  ${NSD_SetState} $UN_H_UV ${BST_CHECKED}
+
+  nsDialogs::Show
+FunctionEnd
+
+Function un.ToggleAll
+  ${NSD_GetState} $UN_H_ALL $0
+  ${If} $0 == ${BST_CHECKED}
+    ${NSD_SetState} $UN_H_ENGINE ${BST_CHECKED}
+    ${NSD_SetState} $UN_H_DATA ${BST_CHECKED}
+    ${NSD_SetState} $UN_H_UV ${BST_CHECKED}
+    EnableWindow $UN_H_ENGINE 0
+    EnableWindow $UN_H_DATA 0
+    EnableWindow $UN_H_UV 0
+  ${Else}
+    ${NSD_SetState} $UN_H_ENGINE ${BST_UNCHECKED}
+    ${NSD_SetState} $UN_H_DATA ${BST_UNCHECKED}
+    ${NSD_SetState} $UN_H_UV ${BST_UNCHECKED}
+    EnableWindow $UN_H_ENGINE 1
+    EnableWindow $UN_H_DATA 1
+    EnableWindow $UN_H_UV 1
+  ${EndIf}
+FunctionEnd
+
+Function un.OptionsPageLeave
+  ${NSD_GetState} $UN_H_ENGINE $UN_OPT_ENGINE
+  ${NSD_GetState} $UN_H_DATA $UN_OPT_DATA
+  ${NSD_GetState} $UN_H_UV $UN_OPT_UV
+FunctionEnd
+
+; -------------------------------------------------------------------
 ; Uninstaller
 ; -------------------------------------------------------------------
 Section "Uninstall"
-  ; Remove application files
+  ; File dell'app
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\setup_engine.ps1"
   Delete "$INSTDIR\uninst.exe"
-  RMDir  "$INSTDIR"
 
-  ; Remove shortcuts
+  ; Motore di traduzione: accanto all'app e nella cartella dati per-utente.
+  ${If} $UN_OPT_ENGINE == ${BST_CHECKED}
+    RMDir /r "$INSTDIR\.venv2"
+    RMDir /r "$APPDATA\noesis-pdf-cloner\engine"
+  ${EndIf}
+
+  ; Dati dell'app: impostazioni, chiave API, cache traduzioni, log.
+  ${If} $UN_OPT_DATA == ${BST_CHECKED}
+    RMDir /r "$APPDATA\noesis-pdf-cloner"
+  ${EndIf}
+
+  ; Cache e dati di uv (condivisi con altri eventuali usi di uv).
+  ${If} $UN_OPT_UV == ${BST_CHECKED}
+    RMDir /r "$LOCALAPPDATA\uv"
+    RMDir /r "$APPDATA\uv"
+  ${EndIf}
+
+  ; Cartella dell'app: ricorsiva solo se può contenere il motore rimosso.
+  ${If} $UN_OPT_ENGINE == ${BST_CHECKED}
+    RMDir /r "$INSTDIR"
+  ${Else}
+    RMDir "$INSTDIR"
+  ${EndIf}
+
+  ; Collegamenti
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk"
   RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
 
-  ; Remove registry entries
+  ; Registro
   DeleteRegKey HKLM "${PRODUCT_REGKEY}"
   DeleteRegKey HKLM "Software\${PRODUCT_NAME}"
 SectionEnd

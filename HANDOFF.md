@@ -168,6 +168,11 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     motore** (apre il dialog di installazione); sparisce da sola appena il
     motore è rilevato. `setup_engine.sh`/`.ps1` ora installano `uv` da soli se
     assente.
+19. **Disinstallazione a scelta (NSIS)**: l'uninstaller ha una pagina custom
+    *"Cosa rimuovere"* con motore `.venv2`, dati app (`%APPDATA%\noesis-pdf-cloner`)
+    e cache/dati di `uv`, più la casella **"Rimuovi tutto: nessuna traccia"**
+    (default: tutto selezionato). `RMDir /r` solo per il motore; altrimenti
+    `RMDir` semplice, così `$INSTDIR` sopravvive se il motore è accanto all'app.
 
 ---
 
@@ -287,11 +292,21 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     destinazione `%LOCALAPPDATA%\noesis-pdf-cloner\engine\.venv2`); attenzione a
     SmartScreen/Defender e ai tempi del download di ~1,1 GB. Meglio comunque:
     installer veloce → primo avvio → la app scarica il motore.
+13. ~~**Disinstallazione del motore / dati**~~ → **fatto (v0.1.4)**:
+    l'uninstaller NSIS mostra la pagina **"Cosa rimuovere"** (custom, nsDialogs)
+    con tre voci — motore `.venv2`, dati app in `%APPDATA%\noesis-pdf-cloner`
+    (cache traduzioni, impostazioni, chiave, log) e cache/dati di `uv` — più la
+    casella **"Rimuovi tutto: nessuna traccia del programma sul sistema"**.
+    Default: tutto selezionato. Deselezionando il motore, la `RMDir` non
+    ricorsiva preserva `$INSTDIR`. Nota: l'uninstaller gira elevato (admin),
+    quindi `$APPDATA`/`$LOCALAPPDATA` sono quelli dell'utente che eleva
+    (coincide con l'utente tipico). Compilato/verificato con `makensis` 3.10.
 
 ### Fatto il 23/09 (v0.1.4)
 
 `uv` nel bundle → avviso "motore non installato" → bootstrap `uv` negli script
-(ordine consigliato rispettato). Restano in coda i punti 8 e 10 (AppImage).
+(ordine consigliato rispettato) → **opzioni di disinstallazione nell'uninstaller
+NSIS**. Restano in coda i punti 8 e 10 (AppImage).
 
 ---
 
