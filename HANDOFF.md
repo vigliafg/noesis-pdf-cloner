@@ -197,6 +197,16 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     chiave). **Nota E2E (Linux)**: con chiave non valida `pdf2zh_next` può
     uscire con **codice 0**, `stderr` vuoto e l'errore 401 su **stdout**: la
     classificazione guarda **anche stdout**, quindi il caso resta `invalid_key`.
+21. **Diagnostica di preflight (`diagnostics.py`)**: modulo **puro Python** (no
+    Qt) che verifica ambiente, `uv`, motore (`pdf2zh_next`), rete, chiave
+    OpenRouter (presenza/fonte/validità/credito) e **modello** (chat completion
+    minima). Ogni check ritorna un `CheckResult` (`id`, `status`
+    ok/warn/fail/skip, `code`, `fix`, `duration_ms`); il `DiagnosticsRunner` li
+    esegue con callback e cancellazione. Stessi `id`/`code`/`fix` del servizio
+    (`app/diagnostics.py`), che li usa in `/health?deep=1` e nel comando
+    **`--doctor`**. La UI (wizard al primo avvio + voce in ⚙️ Impostazioni) è la
+    fase successiva; il modulo è già testato e usando i codici di
+    `classify_engine_failure` parla la stessa lingua degli errori a runtime.
 
 ---
 
@@ -204,7 +214,9 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **325 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **363 OK** (24 skip) |
+| Diagnostica (simulata) | 38 test: server OpenRouter locale (ok/401/402/429/404/timeout), binari `uv`/`pdf2zh_next` finti, runner |
+| Diagnostica reale su Linux | desktop e `--doctor` servizio: tutti i check `ok` (motore, chiave mascherata, modello HTTP 200, catena gratuita) |
 | E2E reale su Linux (chiave OpenRouter) | valida → `done` (26,6 s) · non valida → `error:invalid_key` (5,4 s) · assente → `error:missing_key` |
 | `uv` nel bundle | `vendor/fetch_uv.py` scarica uv 0.12.17, sha256 verificata, `./vendor/uv-bin/uv --version` OK |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
