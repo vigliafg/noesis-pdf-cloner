@@ -3691,7 +3691,6 @@ class TranslatedPagePanel(QWidget):
     export_requested = pyqtSignal()
     export_current_requested = pyqtSignal()
     translate_cancel_requested = pyqtSignal()
-    translate_requested = pyqtSignal()
     install_engine_requested = pyqtSignal()
     enter_key_requested = pyqtSignal()
     use_free_engine_requested = pyqtSignal()
@@ -3750,20 +3749,9 @@ class TranslatedPagePanel(QWidget):
             self._radios[code] = rb
             bar.addWidget(rb)
 
-        # Pulsante di traduzione on demand: la traduzione parte SOLO da qui
-        # (nessuna auto-traduzione al cambio pagina).
-        self.btn_translate = QPushButton(f"▶ {T('clone.translate')}")
-        self.btn_translate.setToolTip(T("clone.translate.tip"))
-        self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_translate.setStyleSheet(
-            "QPushButton { background: #3a6bc5; color: #fff; border: none;"
-            " border-radius: 4px; padding: 3px 12px; font-size: 12px;"
-            " font-weight: bold; }"
-            "QPushButton:hover { background: #4a7bd5; }"
-            "QPushButton:disabled { background: #555; color: #999; }"
-        )
-        self.btn_translate.clicked.connect(self.translate_requested.emit)
-        bar.addWidget(self.btn_translate)
+        # Pulsante di traduzione on demand: sta nella toolbar principale in
+        # alto, così resta raggiungibile anche con la fascia motori chiusa.
+        # (Nessun pulsante qui.)
 
         bar.addStretch()
 
@@ -4076,8 +4064,6 @@ class TranslatedPagePanel(QWidget):
         self.set_target_language(get_target_lang())
         for code, rb in self._radios.items():
             rb.setText(T(f"engine.short.{code}"))
-        self.btn_translate.setText(f"▶ {T('clone.translate')}")
-        self.btn_translate.setToolTip(T("clone.translate.tip"))
         self._collapse_btn.setToolTip(
             T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
         )
@@ -6345,9 +6331,6 @@ class MainWindow(QMainWindow):
         self.translated_panel.translate_cancel_requested.connect(
             self._on_cancel_translation
         )
-        self.translated_panel.translate_requested.connect(
-            self._on_translate_requested
-        )
         self.translated_panel.install_engine_requested.connect(
             self._on_install_engine_banner
         )
@@ -6475,6 +6458,7 @@ class MainWindow(QMainWindow):
         # Striscia "motore non installato": valutata subito all'avvio.
         self._configure_clone_engine()
         self._update_engine_banner()
+        self._update_translate_tooltip()
 
     # ── toolbar ───────────────────────────────────────────────────────────
 
@@ -6564,13 +6548,30 @@ class MainWindow(QMainWindow):
 
         bar.addSeparator()
 
-        # Impostazioni (lingua UI, lingue traduzione, preferenze) — spinto a
-        # destra da uno spacer espanso. Il cambio lingua UI avviene SOLO qui.
+        # Impostazioni (lingua UI, lingue traduzione, preferenze). Il cambio
+        # lingua UI avviene SOLO qui.
         _spacer = QWidget()
         _spacer.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         bar.addWidget(_spacer)
+
+        # ▶ Traduci: la traduzione parte SOLO da qui (nessuna auto-traduzione).
+        # Nella toolbar principale resta raggiungibile anche con la fascia
+        # motori del pannello destro compattata (chevron ▸).
+        self.btn_translate = QPushButton(f"▶ {T('clone.translate')}")
+        self.btn_translate.setToolTip(T("clone.translate.tip"))
+        self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_translate.setStyleSheet(
+            "QPushButton { background: #3a6bc5; color: #fff; border: none;"
+            " border-radius: 4px; padding: 4px 12px; font-size: 13px;"
+            " font-weight: bold; }"
+            "QPushButton:hover { background: #4a7bd5; }"
+            "QPushButton:disabled { background: #555; color: #999; }"
+        )
+        self.btn_translate.clicked.connect(self._on_translate_requested)
+        bar.addWidget(self.btn_translate)
+
         self.btn_settings = QPushButton(T("settings.button"))
         self.btn_settings.setToolTip(T("settings.button.tip"))
         self.btn_settings.clicked.connect(self._on_open_settings)
@@ -7065,6 +7066,7 @@ class MainWindow(QMainWindow):
 
         # Targhetta "in lavorazione" (eventuale pagina in traduzione non mostrata)
         self._update_working_badge()
+        self._update_translate_tooltip()
 
     def _remember_last_page(self, page_num: int):
         """Track the current page per document; persist with a 2 s debounce."""
@@ -7090,9 +7092,23 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def _update_translate_tooltip(self):
+        """Tooltip di ▶ Traduci: motore attivo e pagina corrente.
+
+        Utile quando la fascia motori del pannello destro è compattata: dice
+        su quale motore e pagina agirà il pulsante.
+        """
+        tip = T("clone.translate.tip")
+        if self._page_count:
+            tip += "\n" + T(
+                "clone.translate.tooltip",
+                page=self._current_page + 1,
+                engine=self._engine_display(get_translation_engine()),
+            )
+        self.btn_translate.setToolTip(tip)
+
     def _next_page(self):
         self._set_page(self._current_page + 1)
-
     def _prev_page(self):
         self._set_page(self._current_page - 1)
 
@@ -7209,6 +7225,8 @@ class MainWindow(QMainWindow):
         self.btn_open.setText(T("toolbar.open"))
         self.btn_export.setText(T("toolbar.export"))
         self.btn_export.setToolTip(T("toolbar.export.tip"))
+        self.btn_translate.setText(f"▶ {T('clone.translate')}")
+        self._update_translate_tooltip()
         self.btn_toc.setText(T("toolbar.toc"))
         self.btn_toc.setToolTip(T("toolbar.toc.tip"))
         self.btn_prev.setText(T("toolbar.prev"))
@@ -8085,6 +8103,7 @@ class MainWindow(QMainWindow):
             # Verifica informativa (non blocca): segnala subito una chiave invalida.
             self._start_key_verify(None)
         self._update_engine_banner()
+        self._update_translate_tooltip()
         self._clone_generation += 1
         self._retire_clone_thread()
         self._configure_clone_engine()

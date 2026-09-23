@@ -998,6 +998,38 @@ class OnDemandTranslationTests(unittest.TestCase):
             window.close()
         self.assertEqual(calls, [("show", 0)])
 
+    def test_panel_has_no_translate_button(self):
+        """Il pulsante non è più nella fascia motori (si può compattare)."""
+        window = self._window(self._Engine())
+        try:
+            self.assertFalse(hasattr(window.translated_panel, "btn_translate"))
+        finally:
+            window.close()
+
+    def test_translate_button_in_main_toolbar_starts_page(self):
+        """▶ Traduci è nella toolbar principale e traduce la pagina corrente."""
+        i18n.set_translation_engine("google")
+        window = self._window(self._Engine())
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        try:
+            window.btn_translate.click()
+        finally:
+            window.close()
+        self.assertEqual(calls, [0])
+
+    def test_translate_tooltip_mentions_engine_and_page(self):
+        i18n.set_translation_engine("google")
+        window = self._window(self._Engine())
+        try:
+            window._update_translate_tooltip()
+            tip = window.btn_translate.toolTip()
+        finally:
+            window.close()
+        self.assertIn(i18n.T("clone.translate.tip"), tip)
+        self.assertIn(window._engine_display("google"), tip)
+        self.assertIn("1", tip)  # pagina corrente 0-based → "1"
+
     def test_cached_page_is_shown_without_translating(self):
         engine = self._Engine(cached=[0], engines=["google"])
         i18n.set_translation_engine("google")

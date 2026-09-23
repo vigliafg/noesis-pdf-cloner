@@ -568,6 +568,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Die aktuelle Seite mit der gewählten Engine übersetzen",
         "es": "Traduce la página actual con el motor seleccionado",
     },
+    "clone.translate.tooltip": {
+        "it": "Pagina {page} · motore: {engine}",
+        "en": "Page {page} · engine: {engine}",
+        "fr": "Page {page} · moteur : {engine}",
+        "de": "Seite {page} · Engine: {engine}",
+        "es": "Página {page} · motor: {engine}",
+    },
     "clone.engine_missing": {
         "it": "Motore di traduzione non installato: installalo per tradurre le pagine.",
         "en": "Translation engine not installed: install it to translate pages.",
@@ -604,11 +611,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Usar Google/Bing",
     },
     "clone.pending_page": {
-        "it": "Premi ▶ Traduci per tradurre questa pagina",
-        "en": "Press ▶ Translate to translate this page",
-        "fr": "Appuyez sur ▶ Traduire pour traduire cette page",
-        "de": "▶ Übersetzen drücken, um diese Seite zu übersetzen",
-        "es": "Pulsa ▶ Traducir para traducir esta página",
+        "it": "Premi ▶ Traduci nella barra in alto per tradurre questa pagina",
+        "en": "Press ▶ Translate in the top bar to translate this page",
+        "fr": "Appuyez sur ▶ Traduire dans la barre du haut pour traduire cette page",
+        "de": "▶ Übersetzen in der oberen Leiste drücken, um diese Seite zu übersetzen",
+        "es": "Pulsa ▶ Traducir en la barra superior para traducir esta página",
     },
     "clone.status_todo": {
         "it": "Da tradurre", "en": "Not translated", "fr": "À traduire",

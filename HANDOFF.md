@@ -207,6 +207,14 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     **`--doctor`**. La UI (wizard al primo avvio + voce in ⚙️ Impostazioni) è la
     fase successiva; il modulo è già testato e usando i codici di
     `classify_engine_failure` parla la stessa lingua degli errori a runtime.
+22. **▶ Traduci spostato nella toolbar principale (v0.1.4)**: il pulsante era
+    nella fascia motori del pannello destro, che il chevron `▸` può compattare:
+    con la fascia chiusa il segnaposto diceva "premi ▶ Traduci" ma il pulsante
+    era invisibile. Ora ▶ Traduci sta nella **toolbar principale, a sinistra di
+    ⚙️ Impostazioni**, sempre raggiungibile; la fascia motori conserva lingua
+    target, radio motori, stato, targhetta e 💾 Esporta. Il **tooltip** del
+    pulsante mostra motore attivo e pagina (`clone.translate.tooltip`), e il
+    segnaposto dice "nella barra in alto". Nessuna scorciatoia.
 
 ---
 
@@ -214,7 +222,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **363 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **364 OK** (24 skip) |
 | Diagnostica (simulata) | 38 test: server OpenRouter locale (ok/401/402/429/404/timeout), binari `uv`/`pdf2zh_next` finti, runner |
 | Diagnostica reale su Linux | desktop e `--doctor` servizio: tutti i check `ok` (motore, chiave mascherata, modello HTTP 200, catena gratuita) |
 | E2E reale su Linux (chiave OpenRouter) | valida → `done` (26,6 s) · non valida → `error:invalid_key` (5,4 s) · assente → `error:missing_key` |
