@@ -425,6 +425,47 @@ class ExportWizardDialogTests(unittest.TestCase):
         self.assertEqual(dlg._folder_edit.text(), str(new_dir))
         self.assertEqual(i18n.get_setting("export_dir"), str(new_dir))
 
+    def test_mode_controls_are_contextual(self):
+        dlg = self._dialog()
+        # corrente: nessun controllo visibile
+        self.assertTrue(dlg._range_cluster.isHidden())
+        self.assertTrue(dlg._free_edit.isHidden())
+        dlg._rad_range.setChecked(True)
+        self._app.processEvents()
+        self.assertFalse(dlg._range_cluster.isHidden())
+        self.assertTrue(dlg._free_edit.isHidden())
+        dlg._rad_free.setChecked(True)
+        self._app.processEvents()
+        self.assertTrue(dlg._range_cluster.isHidden())
+        self.assertFalse(dlg._free_edit.isHidden())
+
+    def test_mode_row_fits_available_width(self):
+        """Guardia anti-overflow: la riga dei modi non supera il wizard."""
+        dlg = self._dialog(total=300)
+        avail = dlg.minimumWidth() - 40  # margini del pane (20+20)
+        for rb in (dlg._rad_current, dlg._rad_range, dlg._rad_free):
+            rb.setChecked(True)
+            self._app.processEvents()
+            self.assertLessEqual(
+                dlg._mode_row.minimumSizeHint().width(),
+                avail,
+                f"la riga sborda in modalità '{rb.text()}'",
+            )
+        dlg.done(0)
+
+    def test_range_spins_are_compact(self):
+        dlg = self._dialog()
+        self.assertLessEqual(dlg._from_spin.maximumWidth(), 70)
+        self.assertLessEqual(dlg._to_spin.maximumWidth(), 70)
+        self.assertEqual(dlg._lbl_from.text(), i18n.T("export.range.from.short"))
+        self.assertEqual(dlg._lbl_to.text(), i18n.T("export.range.to.short"))
+
+    def test_preview_info_uses_space_right_of_thumbnails(self):
+        dlg = self._dialog()
+        self.assertTrue(dlg._preview_row.isAncestorOf(dlg._preview_info))
+        self.assertTrue(dlg._preview_info.isAncestorOf(dlg._count_lbl))
+        self.assertTrue(dlg._preview_info.isAncestorOf(dlg._from_label))
+
     def test_qss_styles_the_wizard_controls(self):
         # Lo stile è ricalcato dal wizard del servizio: radio e schede motore
         # devono avere le regole dedicate (altrimenti testo scuro su scuro).

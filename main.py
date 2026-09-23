@@ -4919,6 +4919,8 @@ QLineEdit, QComboBox, QSpinBox {
     background: #1e2430; border: 1px solid #2a3242; color: #e7ecf3;
     border-radius: 9px; padding: 8px 10px; font-size: 13px;
 }
+QSpinBox#wizSpin { padding: 6px 4px; font-size: 13px; }
+QFrame#wizModeSep { background: #2a3242; border: none; max-width: 1px; }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: #4f8cff; }
 QComboBox QAbstractItemView { background: #1e2430; color: #e7ecf3;
     selection-background-color: #4f8cff; selection-color: #08152e; }
@@ -5209,6 +5211,14 @@ class ExportWizardDialog(QDialog):
         self._close_preview_doc()
         super().done(result)
 
+    @staticmethod
+    def _mode_sep() -> QFrame:
+        """Separatore verticale sottile tra i gruppi della riga dei modi."""
+        sep = QFrame()
+        sep.setObjectName("wizModeSep")
+        sep.setFixedWidth(1)
+        return sep
+
     def _build_preview_column(self):
         """Colonna anteprima: miniatura grande + didascalia sotto."""
         col = QWidget()
@@ -5255,13 +5265,17 @@ class ExportWizardDialog(QDialog):
         self._mode_group.addButton(self._rad_range)
         self._mode_group.addButton(self._rad_free)
 
-        self._lbl_from = QLabel(T("export.range.from"))
-        self._lbl_to = QLabel(T("export.range.to"))
+        self._lbl_from = QLabel(T("export.range.from.short"))
+        self._lbl_to = QLabel(T("export.range.to.short"))
         self._from_spin = QSpinBox()
         self._to_spin = QSpinBox()
         for sp in (self._from_spin, self._to_spin):
+            sp.setObjectName("wizSpin")
             sp.setRange(1, self._page_count)
             sp.setValue(self._current_page + 1)
+            sp.setAlignment(Qt.AlignmentFlag.AlignRight)
+            sp.setMinimumWidth(56)
+            sp.setMaximumWidth(62)
         self._from_label = QLabel("")
         self._from_label.setObjectName("wizHint")
         self._to_label = QLabel("")
@@ -5270,25 +5284,29 @@ class ExportWizardDialog(QDialog):
         self._free_edit = QLineEdit()
         self._free_edit.setPlaceholderText(T("export.free.placeholder"))
         self._free_edit.setClearButtonEnabled(True)
-        self._free_edit.setMinimumWidth(150)
+        self._free_edit.setMinimumWidth(160)
 
-        # ── Riga dei modi: i controlli stanno QUI, sopra le anteprime ───
-        # Così il campo libero non ruba spazio alle miniature, che restano
-        # sotto a dimensione piena.
+        # Cluster "Intervallo" (label + numbox): mostrato solo in quel modo.
+        self._range_cluster = QWidget()
+        rc = QHBoxLayout(self._range_cluster)
+        rc.setContentsMargins(0, 0, 0, 0)
+        rc.setSpacing(6)
+        rc.addWidget(self._lbl_from)
+        rc.addWidget(self._from_spin)
+        rc.addWidget(self._lbl_to)
+        rc.addWidget(self._to_spin)
+
+        # ── Riga dei modi: compare SOLO il controllo del modo attivo, così
+        # la riga non supera mai la larghezza e il campo libero ha spazio. ──
         self._mode_row = QWidget()
         mr = QHBoxLayout(self._mode_row)
         mr.setContentsMargins(0, 4, 0, 0)
         mr.setSpacing(8)
         mr.addWidget(self._rad_current)
-        mr.addSpacing(10)
+        mr.addWidget(self._mode_sep())
         mr.addWidget(self._rad_range)
-        mr.addWidget(self._lbl_from)
-        mr.addWidget(self._from_spin)
-        mr.addWidget(self._lbl_to)
-        mr.addWidget(self._to_spin)
-        mr.addWidget(self._from_label)
-        mr.addWidget(self._to_label)
-        mr.addSpacing(10)
+        mr.addWidget(self._range_cluster)
+        mr.addWidget(self._mode_sep())
         mr.addWidget(self._rad_free)
         mr.addWidget(self._free_edit, 1)
         lay.addWidget(self._mode_row)
@@ -5305,6 +5323,7 @@ class ExportWizardDialog(QDialog):
         lay.addWidget(self._free_error)
 
         # ── Anteprime: 1 (corrente) oppure prima/ultima (intervallo/pagine) ─
+        # A destra delle miniature una colonna info usa lo spazio vuoto.
         self._preview_row = QWidget()
         row = QHBoxLayout(self._preview_row)
         row.setContentsMargins(0, 6, 0, 0)
@@ -5322,24 +5341,30 @@ class ExportWizardDialog(QDialog):
         row.addWidget(self._col_current, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(self._col_first, 0, Qt.AlignmentFlag.AlignTop)
         row.addWidget(self._col_last, 0, Qt.AlignmentFlag.AlignTop)
-        row.addStretch(1)
-        lay.addWidget(self._preview_row)
 
         self._count_lbl = QLabel("")
         self._count_lbl.setObjectName("wizHint")
         self._count_lbl.setWordWrap(True)
-        lay.addWidget(self._count_lbl)
+        self._preview_note = QLabel("")
+        self._preview_note.setObjectName("wizHint")
+        self._preview_note.setWordWrap(True)
+        self._preview_info = QWidget()
+        info = QVBoxLayout(self._preview_info)
+        info.setContentsMargins(0, 0, 0, 0)
+        info.setSpacing(6)
+        info.addWidget(self._count_lbl)
+        info.addWidget(self._from_label)
+        info.addWidget(self._to_label)
+        info.addWidget(self._preview_note)
+        info.addStretch(1)
+        row.addWidget(self._preview_info, 1, Qt.AlignmentFlag.AlignTop)
+        lay.addWidget(self._preview_row)
 
         self._ready_lbl = QLabel("")
         self._ready_lbl.setObjectName("wizHint")
         self._ready_lbl.setContentsMargins(2, 4, 0, 0)
         self._ready_lbl.setWordWrap(True)
         lay.addWidget(self._ready_lbl)
-
-        self._preview_note = QLabel("")
-        self._preview_note.setObjectName("wizHint")
-        self._preview_note.setWordWrap(True)
-        lay.addWidget(self._preview_note)
         lay.addStretch(1)
 
         self._rad_current.toggled.connect(self._on_mode_changed)
@@ -5634,6 +5659,17 @@ class ExportWizardDialog(QDialog):
         if hasattr(self, "_free_hint"):
             self._free_hint.setVisible(self.is_free())
 
+    def _update_mode_controls(self):
+        """Mostra solo il controllo del modo attivo (riga compatta).
+
+        In "Pagina corrente" non c'è nessun controllo; in "Intervallo" solo i
+        due numbox; in "Pagine" solo il campo libero, che prende tutto lo spazio.
+        """
+        if not hasattr(self, "_range_cluster"):
+            return
+        self._range_cluster.setVisible(self._rad_range.isChecked())
+        self._free_edit.setVisible(self._rad_free.isChecked())
+
     def _update_next_enabled(self):
         if not hasattr(self, "_btn_next"):
             return
@@ -5810,6 +5846,7 @@ class ExportWizardDialog(QDialog):
     def _refresh_all(self, *_):
         self._parse_free()
         self._update_free_feedback()
+        self._update_mode_controls()
         cached, total, missing = self._cache_counts()
         if hasattr(self, "_ready_lbl"):
             self._ready_lbl.setText(

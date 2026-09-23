@@ -1073,6 +1073,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "A pagina", "en": "To page", "fr": "À la page",
         "de": "Bis Seite", "es": "Hasta la página",
     },
+    "export.range.from.short": {
+        "it": "Da", "en": "From", "fr": "De", "de": "Von", "es": "De",
+    },
+    "export.range.to.short": {
+        "it": "A", "en": "To", "fr": "À", "de": "Bis", "es": "A",
+    },
     "export.mode.free": {
         "it": "Pagine (1,3,7-9)", "en": "Pages (1,3,7-9)",
         "fr": "Pages (1,3,7-9)", "de": "Seiten (1,3,7-9)",
