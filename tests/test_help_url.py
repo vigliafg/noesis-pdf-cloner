@@ -68,6 +68,15 @@ class HelpSiteTests(unittest.TestCase):
             self.assertIn('id="page-actions"', text, page)
             self.assertIn("fabmock", text, page)
 
+    def test_help_explains_export_destination(self):
+        """Ogni guida spiega cartella di destinazione e formato cartella."""
+        docs = os.path.join(_ROOT, "docs")
+        for code in ("it", "en", "fr", "de", "es"):
+            page = os.path.join(docs, "help", code, "index.html")
+            with open(page, encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertIn('id="export-destination"', text, page)
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class HelpUrlTests(unittest.TestCase):

@@ -326,9 +326,9 @@
           (<code>/PageLabels</code>) lorsqu'ils diffèrent.</li>
         <li><strong>Langues</strong> — langue source et langue de destination.</li>
         <li><strong>Moteur</strong> — le moteur de traduction et l'estimation du temps.</li>
-        <li><strong>Sortie</strong> — <strong>un seul PDF</strong> ou
-          <strong>des pages individuelles dans une archive ZIP</strong>, et le
-          chemin d'enregistrement.</li>
+        <li><strong>Sortie</strong> — <strong>un seul PDF</strong>,
+          <strong>pages séparées en ZIP</strong> ou <strong>pages séparées dans un
+          dossier</strong>, plus le dossier de destination et le nom.</li>
       </ol>
 
       <h3 id="export-pages">Choisir les pages (courante, plage, liste)</h3>
@@ -377,6 +377,31 @@
       <div class="note"><strong>Miniatures schématiques</strong> Les petites pages
         ci-dessus ne sont pas un aperçu réel : elles montrent seulement quelles
         pages la sélection inclut.</div>
+
+      <h3 id="export-destination">Destination et format</h3>
+      <p>L'étape <strong>Sortie</strong> décide <strong>où</strong> et
+      <strong>comment</strong> enregistrer.</p>
+      <ul>
+        <li><strong>Dossier de destination</strong> — choisissez-le avec
+          <em>Choisir un dossier…</em> ; l'app le <strong>mémorise</strong> pour les
+          exports suivants (par défaut, le dossier du PDF ouvert).</li>
+        <li><strong>Nom du fichier</strong> (ou <strong>nom du dossier</strong> dans le
+          troisième format) — modifiable ; le nom automatique inclut la sélection, le
+          moteur et la langue.</li>
+        <li><strong>Format</strong> :
+          <ul>
+            <li><strong>Un seul PDF</strong> — un fichier avec les pages choisies.</li>
+            <li><strong>Pages séparées en ZIP</strong> — une archive avec
+              <code>&lt;nom&gt;_pNNNN.pdf</code>.</li>
+            <li><strong>Pages séparées dans un dossier</strong> — un
+              <strong>sous-dossier</strong> dédié dans le dossier choisi, avec les mêmes
+              fichiers séparés.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="note"><strong>Copier dans Téléchargements</strong> À la fin de l'export,
+        le bouton <strong>⬇ Copier dans Téléchargements</strong> copie le résultat dans le
+        dossier Téléchargements ; l'original reste à l'endroit choisi.</div>
 
       <h3>Traduction préalable et progression</h3>
       <p>Les pages pas encore en cache peuvent être traduites avant l'export,

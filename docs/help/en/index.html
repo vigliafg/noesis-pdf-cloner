@@ -316,9 +316,9 @@
           (<code>/PageLabels</code>) when they differ.</li>
         <li><strong>Languages</strong> — source and target language.</li>
         <li><strong>Engine</strong> — the translation engine and the time estimate.</li>
-        <li><strong>Output</strong> — <strong>a single PDF</strong> or
-          <strong>individual pages in a ZIP archive</strong>, and the save
-          path.</li>
+        <li><strong>Output</strong> — <strong>a single PDF</strong>,
+          <strong>single pages in a ZIP</strong> or <strong>single pages in a
+          folder</strong>, plus the destination folder and the name.</li>
       </ol>
 
       <h3 id="export-pages">Choosing pages (current, range, list)</h3>
@@ -365,6 +365,30 @@
 
       <div class="note"><strong>Schematic thumbnails</strong> The little pages above
         are not a real preview: they only show which pages the selection includes.</div>
+
+      <h3 id="export-destination">Destination and format</h3>
+      <p>The <strong>Output</strong> step decides <strong>where</strong> and
+      <strong>how</strong> to save.</p>
+      <ul>
+        <li><strong>Destination folder</strong> — choose it with
+          <em>Choose folder…</em>; the app <strong>remembers</strong> it for later
+          exports (by default it is the folder of the open PDF).</li>
+        <li><strong>File name</strong> (or <strong>folder name</strong> in the third
+          format) — editable; the automatic name includes selection, engine and
+          language.</li>
+        <li><strong>Format</strong>:
+          <ul>
+            <li><strong>Single PDF</strong> — one file with the chosen pages.</li>
+            <li><strong>Single pages in a ZIP</strong> — an archive with
+              <code>&lt;name&gt;_pNNNN.pdf</code>.</li>
+            <li><strong>Single pages in a folder</strong> — a dedicated
+              <strong>subfolder</strong> in the chosen folder, with the same loose files.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="note"><strong>Copy to Downloads</strong> When the export finishes, the
+        <strong>⬇ Copy to Downloads</strong> button copies the result to the system's
+        Downloads folder; the original stays where you saved it.</div>
 
       <h3>Pre-translation and progress</h3>
       <p>Pages not yet in the cache can be translated before export,

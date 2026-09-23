@@ -315,9 +315,9 @@
           (<code>/PageLabels</code>) quando differiscono.</li>
         <li><strong>Lingue</strong> — lingua di origine e di destinazione.</li>
         <li><strong>Motore</strong> — il motore di traduzione e la stima del tempo.</li>
-        <li><strong>Output</strong> — <strong>un unico PDF</strong> oppure
-          <strong>pagine singole in un archivio ZIP</strong>, e il percorso di
-          salvataggio.</li>
+        <li><strong>Output</strong> — <strong>un unico PDF</strong>,
+          <strong>pagine singole in ZIP</strong> oppure <strong>pagine singole in
+          una cartella</strong>, più la cartella di destinazione e il nome.</li>
       </ol>
 
       <h3 id="export-pages">Scegliere le pagine (corrente, intervallo, elenco)</h3>
@@ -365,6 +365,31 @@
       <div class="note"><strong>Miniature schematiche</strong> Le paginette qui
         sopra non sono un'anteprima reale: mostrano soltanto quali pagine vengono
         incluse dalla selezione.</div>
+
+      <h3 id="export-destination">Destinazione e formato</h3>
+      <p>Il passo <strong>Output</strong> decide <strong>dove</strong> e
+      <strong>come</strong> salvare.</p>
+      <ul>
+        <li><strong>Cartella di destinazione</strong> — la scegli con
+          <em>Scegli cartella…</em> e l'app la <strong>ricorda</strong> per gli export
+          successivi (di default è la cartella del PDF aperto).</li>
+        <li><strong>Nome file</strong> (o <strong>nome cartella</strong> nel terzo
+          formato) — modificabile; il nome automatico include selezione, motore e
+          lingua.</li>
+        <li><strong>Formato</strong>:
+          <ul>
+            <li><strong>Un unico PDF</strong> — un solo file con le pagine scelte.</li>
+            <li><strong>Pagine singole in ZIP</strong> — un archivio con
+              <code>&lt;nome&gt;_pNNNN.pdf</code>.</li>
+            <li><strong>Pagine singole in una cartella</strong> — una
+              <strong>sottocartella</strong> dedicata nella cartella scelta, con gli
+              stessi file sciolti.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="note"><strong>Copia in Download</strong> A fine export il pulsante
+        <strong>⬇ Copia in Download</strong> copia il risultato nella cartella Download
+        del sistema; l'originale resta dove l'hai salvato.</div>
 
       <h3>Traduzione preventiva e avanzamento</h3>
       <p>Le pagine non ancora in cache possono essere tradotte prima dell'export,

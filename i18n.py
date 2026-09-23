@@ -1388,6 +1388,31 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Sfoglia…", "en": "Browse…", "fr": "Parcourir…",
         "de": "Durchsuchen…", "es": "Examinar…",
     },
+    "export.wizard.output.folder": {
+        "it": "Cartella di destinazione", "en": "Destination folder",
+        "fr": "Dossier de destination", "de": "Zielordner",
+        "es": "Carpeta de destino",
+    },
+    "export.wizard.output.choose_folder": {
+        "it": "Scegli cartella…", "en": "Choose folder…",
+        "fr": "Choisir un dossier…", "de": "Ordner wählen…",
+        "es": "Elegir carpeta…",
+    },
+    "export.wizard.output.filename": {
+        "it": "Nome file", "en": "File name", "fr": "Nom du fichier",
+        "de": "Dateiname", "es": "Nombre de archivo",
+    },
+    "export.wizard.output.folder_name": {
+        "it": "Nome cartella", "en": "Folder name", "fr": "Nom du dossier",
+        "de": "Ordnername", "es": "Nombre de carpeta",
+    },
+    "export.format.folder": {
+        "it": "Pagine singole in una cartella",
+        "en": "Single pages in a folder",
+        "fr": "Pages séparées dans un dossier",
+        "de": "Einzelseiten in einem Ordner",
+        "es": "Páginas sueltas en una carpeta",
+    },
     "export.wizard.sum.file": {
         "it": "File", "en": "File", "fr": "Fichier", "de": "Datei", "es": "Archivo",
     },
@@ -1579,15 +1604,27 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Datei: {path}", "es": "Archivo: {path}",
     },
     "export.progress.save_download": {
-        "it": "⬇ Salva in Download", "en": "⬇ Save to Downloads",
-        "fr": "⬇ Enregistrer dans Téléchargements",
-        "de": "⬇ In Downloads speichern",
-        "es": "⬇ Guardar en Descargas",
+        "it": "⬇ Copia in Download", "en": "⬇ Copy to Downloads",
+        "fr": "⬇ Copier dans Téléchargements",
+        "de": "⬇ In Downloads kopieren",
+        "es": "⬇ Copiar en Descargas",
+    },
+    "export.progress.save_download.tip": {
+        "it": "Copia il file esportato nella cartella Download; l'originale resta "
+              "dove l'hai salvato.",
+        "en": "Copies the exported file to the Downloads folder; the original "
+              "stays where you saved it.",
+        "fr": "Copie le fichier exporté dans le dossier Téléchargements ; "
+              "l'original reste à l'endroit choisi.",
+        "de": "Kopiert die exportierte Datei in den Downloads-Ordner; das "
+              "Original bleibt am gewählten Ort.",
+        "es": "Copia el archivo exportado a la carpeta Descargas; el original "
+              "permanece donde lo guardaste.",
     },
     "export.progress.downloaded": {
-        "it": "✅ Salvato in {path}", "en": "✅ Saved to {path}",
-        "fr": "✅ Enregistré dans {path}", "de": "✅ Gespeichert in {path}",
-        "es": "✅ Guardado en {path}",
+        "it": "✅ Copiato in {path}", "en": "✅ Copied to {path}",
+        "fr": "✅ Copié dans {path}", "de": "✅ Kopiert nach {path}",
+        "es": "✅ Copiado en {path}",
     },
     "export.progress.download_error": {
         "it": "❌ Impossibile salvare nella cartella Download.",

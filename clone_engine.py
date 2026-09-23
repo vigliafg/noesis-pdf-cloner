@@ -761,6 +761,36 @@ class CloneEngine:
         os.replace(tmp, dest)  # salvataggio atomico dell'export
         return written
 
+    def export_folder(
+        self,
+        pages,
+        engine: str,
+        dest_dir: str | Path,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+        stem: str | None = None,
+    ) -> int:
+        """Scrive i mono-PDF tradotti delle ``pages`` (0-based) in ``dest_dir``.
+
+        Ogni pagina diventa ``<stem>_pNNNN.pdf`` (stessa convenzione di
+        ``export_zip`` e del servizio). Le pagine non in cache sono saltate;
+        ritorna il numero di file scritti e solleva ``ValueError`` se nessuna
+        è disponibile.
+        """
+        dest_dir = Path(dest_dir)
+        prefix = stem or "page"
+        written = 0
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for page in pages:
+            src = self.translated_path_for(page, engine, lang_in, lang_out)
+            if not src.is_file():
+                continue
+            shutil.copy2(src, dest_dir / f"{prefix}_p{page + 1:04d}.pdf")
+            written += 1
+        if written == 0:
+            raise ValueError("nessuna pagina tradotta da esportare")
+        return written
+
     # ── stato ─────────────────────────────────────────────────────────
 
     def _key(self, page: int, engine: str) -> tuple:

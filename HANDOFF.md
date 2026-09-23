@@ -15,7 +15,7 @@ markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (Babe
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
-- Test: **375 OK** (24 skip, regressioni su PDF reali non versionati).
+- Test: **422 OK** (24 skip, regressioni su PDF reali non versionati).
 
 ### Cosa NON è ancora fatto
 - Il motore **Docling** e gli strumenti a zone (dormienti) non sono reintegrati.
@@ -376,6 +376,19 @@ NSIS** → **feedback completo sulla chiave OpenRouter** (precedenza, fonte,
 verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 (AppImage).
 
+### Aggiunte dopo la v0.1.5
+
+- **Campo libero di scelta pagine** nel wizard di export (`pages.py`, allineato a
+  `app/pages.py` del servizio): tre modi (corrente / intervallo / elenco
+  `1,3,7-9`, `all`), validazione live, export esatto anche non contiguo. L'help
+  lo spiega con **miniature schematiche** HTML/CSS.
+- **Pulsante flottante "Azioni pagina"** nel pannello destro a traduzione
+  completata: Salva in Download, Esporta, Traduci la successiva, Ritraduci, Apri
+  col visualizzatore, Cancella cache.
+- **Destinazione export**: cartella di destinazione (ricordata) + nome, terzo
+  formato "pagine singole in una cartella" (`CloneEngine.export_folder`); il
+  pulsante di fine export è diventato **⬇ Copia in Download** (è una copia).
+
 ---
 
 ## 8. File chiave
@@ -383,12 +396,15 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 | File | Ruolo |
 |---|---|
 | `main.py` | GUI PyQt6: `MainWindow`, `TranslatedPagePanel` (barra collassabile), `PdfPageView`, navigazione/zoom, Impostazioni, i18n runtime |
-| `clone_engine.py` | `CloneEngine`: split, subprocess pdf2zh_next, flag per engine, cache, stato, fallback log, auto-rilevamento binario |
+| `clone_engine.py` | `CloneEngine`: split, subprocess pdf2zh_next, flag per engine, cache, stato, fallback log, auto-rilevamento binario; `export_pdf`/`export_zip`/`export_folder` |
+| `pages.py` | Parsing della specifica pagine (campo libero), allineato a `app/pages.py` del servizio |
 | `gtranslate_cli.py` | Catena gratuita Google→Microsoft→LLM per `--clitranslator` |
 | `i18n.py` | Stringhe UI (it/en/fr/de/es), `TRANSLATION_ENGINES = (google, bing, openai)`, config/`DEFAULTS` |
 | `layout_engine.py` | Engine adattativo dei fix di layout (dormiente) |
-| `tests/test_clone_engine.py` | Split/pipeline/flags/cache + regressione off-by-one |
+| `tests/test_clone_engine.py` | Split/pipeline/flags/cache + export (pdf/zip/folder) + regressione off-by-one |
 | `tests/test_clone_panel.py` | Collasso barra motori (offscreen) |
+| `tests/test_page_actions.py` | Pulsante flottante "Azioni pagina" (pannello + gestori) |
+| `tests/test_pages.py` | Parsing del campo libero (semantica + codici errore) |
 | `tests/test_i18n.py` | Completezza traduzioni + config |
 | `run.sh`, `setup_engine.sh`, `setup_engine.ps1` | Bootstrap venv / installazione motore (auto-bootstrap di `uv`) |
 | `vendor/fetch_uv.py` | Scarica `uv` pinnato + verifica `sha256` (incluso nel bundle) |

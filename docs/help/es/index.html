@@ -317,9 +317,9 @@
           (<code>/PageLabels</code>) cuando difieren.</li>
         <li><strong>Idiomas</strong> — idioma de origen y de destino.</li>
         <li><strong>Motor</strong> — el motor de traducción y la estimación del tiempo.</li>
-        <li><strong>Salida</strong> — <strong>un único PDF</strong> o
-          <strong>páginas sueltas en un archivo ZIP</strong>, y la ruta de
-          guardado.</li>
+        <li><strong>Salida</strong> — <strong>un único PDF</strong>,
+          <strong>páginas sueltas en ZIP</strong> o <strong>páginas sueltas en una
+          carpeta</strong>, más la carpeta de destino y el nombre.</li>
       </ol>
 
       <h3 id="export-pages">Elegir páginas (actual, intervalo, lista)</h3>
@@ -368,6 +368,31 @@
       <div class="note"><strong>Miniaturas esquemáticas</strong> Las paginitas de
         arriba no son una vista previa real: solo muestran qué páginas incluye la
         selección.</div>
+
+      <h3 id="export-destination">Destino y formato</h3>
+      <p>El paso <strong>Salida</strong> decide <strong>dónde</strong> y
+      <strong>cómo</strong> guardar.</p>
+      <ul>
+        <li><strong>Carpeta de destino</strong> — elígela con <em>Elegir carpeta…</em>;
+          la app la <strong>recuerda</strong> para exportaciones posteriores (por defecto,
+          la carpeta del PDF abierto).</li>
+        <li><strong>Nombre de archivo</strong> (o <strong>nombre de carpeta</strong> en el
+          tercer formato) — editable; el nombre automático incluye selección, motor e
+          idioma.</li>
+        <li><strong>Formato</strong>:
+          <ul>
+            <li><strong>Un solo PDF</strong> — un archivo con las páginas elegidas.</li>
+            <li><strong>Páginas sueltas en ZIP</strong> — un archivo con
+              <code>&lt;nombre&gt;_pNNNN.pdf</code>.</li>
+            <li><strong>Páginas sueltas en una carpeta</strong> — una
+              <strong>subcarpeta</strong> dedicada en la carpeta elegida, con los mismos
+              archivos sueltos.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="note"><strong>Copiar en Descargas</strong> Al terminar la exportación,
+        el botón <strong>⬇ Copiar en Descargas</strong> copia el resultado en la carpeta
+        Descargas; el original permanece donde lo guardaste.</div>
 
       <h3>Traducción previa y avance</h3>
       <p>Las páginas que aún no están en caché pueden traducirse antes de la exportación,

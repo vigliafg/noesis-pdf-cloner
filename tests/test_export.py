@@ -91,6 +91,18 @@ class _FakeEngine:
                 )
         return len(list(pages))
 
+    def export_folder(
+        self, pages, engine, dest_dir, lang_in=None, lang_out=None, stem=None
+    ):
+        self.exported.append(list(pages))
+        d = Path(dest_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        for page in pages:
+            (d / f"{stem or 'page'}_p{page + 1:04d}.pdf").write_bytes(
+                b"%PDF-1.4 fake"
+            )
+        return len(list(pages))
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class ExportWizardDialogTests(unittest.TestCase):
@@ -365,6 +377,53 @@ class ExportWizardDialogTests(unittest.TestCase):
             dlg.chosen_path().endswith("_pag1,3,7-9_google_it.pdf"),
             dlg.chosen_path(),
         )
+
+    def test_folder_format_selected(self):
+        dlg = self._dialog()
+        dlg._btn_folder.setChecked(True)
+        self._app.processEvents()
+        self.assertTrue(dlg.chosen_folder())
+        self.assertEqual(dlg.chosen_format(), "folder")
+        self.assertFalse(dlg.chosen_zip())
+        self.assertTrue(
+            dlg.chosen_path().endswith("_pag156_google_it"), dlg.chosen_path()
+        )
+        self.assertEqual(
+            dlg._name_lbl.text(), i18n.T("export.wizard.output.folder_name")
+        )
+
+    def test_merged_and_zip_keep_extension(self):
+        dlg = self._dialog()
+        self.assertTrue(dlg.chosen_path().endswith(".pdf"))
+        self.assertEqual(
+            dlg._name_lbl.text(), i18n.T("export.wizard.output.filename")
+        )
+        dlg._btn_zip.setChecked(True)
+        self._app.processEvents()
+        self.assertTrue(dlg.chosen_path().endswith(".zip"))
+
+    def test_remembered_folder_is_used(self):
+        i18n.set_setting("export_dir", self._tmp.name)
+        dlg = self._dialog()
+        self.assertEqual(str(dlg._output_dir()), self._tmp.name)
+        self.assertEqual(dlg._folder_edit.text(), self._tmp.name)
+        self.assertTrue(dlg.chosen_path().startswith(self._tmp.name))
+
+    def test_browse_folder_remembers_choice(self):
+        from unittest import mock
+
+        new_dir = Path(self._tmp.name) / "chosen"
+        new_dir.mkdir()
+        dlg = self._dialog()
+        with mock.patch.object(
+            self.main.QFileDialog,
+            "getExistingDirectory",
+            return_value=str(new_dir),
+        ):
+            dlg._browse_folder()
+        self.assertEqual(str(dlg._output_dir()), str(new_dir))
+        self.assertEqual(dlg._folder_edit.text(), str(new_dir))
+        self.assertEqual(i18n.get_setting("export_dir"), str(new_dir))
 
     def test_qss_styles_the_wizard_controls(self):
         # Lo stile è ricalcato dal wizard del servizio: radio e schede motore
@@ -812,6 +871,43 @@ class ExportProgressDialogTests(unittest.TestCase):
             dlg._open_folder()
         self.assertEqual(opened, ["/tmp/export_dir"])
 
+    def test_save_to_download_copies_folder(self):
+        from unittest import mock
+
+        src_dir = Path(self._tmp.name) / "src" / "export_dir"
+        src_dir.mkdir(parents=True)
+        (src_dir / "page_p0001.pdf").write_bytes(b"%PDF-1.4 x")
+        (src_dir / "page_p0002.pdf").write_bytes(b"%PDF-1.4 x")
+        dlg = self._dialog()
+        dlg.set_completed(str(src_dir), 2, 0)
+        with mock.patch.object(
+            self.main.QStandardPaths,
+            "writableLocation",
+            return_value=self._tmp.name,
+        ):
+            dlg._save_to_download()
+        copied = Path(self._tmp.name) / "export_dir"
+        self.assertTrue(copied.is_dir())
+        self.assertTrue((copied / "page_p0001.pdf").is_file())
+        # È una copia: l'originale resta.
+        self.assertTrue(src_dir.is_dir())
+
+    def test_open_folder_uses_folder_for_folder_format(self):
+        from unittest import mock
+
+        d = Path(self._tmp.name) / "outdir"
+        d.mkdir()
+        dlg = self._dialog()
+        dlg.set_completed(str(d), 2, 0)
+        opened = []
+        with mock.patch.object(
+            self.main.QDesktopServices,
+            "openUrl",
+            side_effect=lambda url: opened.append(url.toLocalFile()),
+        ):
+            dlg._open_folder()
+        self.assertEqual(opened, [str(d)])
+
     def test_open_folder_follows_download_after_save(self):
         from unittest import mock
 
@@ -970,7 +1066,7 @@ class ExportTranslationWaitTests(unittest.TestCase):
         )
         try:
             ok, count, failed = window._run_export_with_progress(
-                engine, [0, 1], [], False, "google", "auto", "it", 2, str(dest), True
+                engine, [0, 1], [], False, "google", "auto", "it", 2, str(dest), "zip"
             )
         finally:
             self.main.ExportProgressDialog.exec = original
@@ -998,6 +1094,30 @@ class ExportTranslationWaitTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual((count, failed), (2, 0))
         self.assertEqual(engine.exported, [[0, 2]])  # la pagina 1 NON è inclusa
+
+    def test_folder_export_writes_pages(self):
+        window = self.main.MainWindow()
+        engine = _FakeEngine(cached=[0, 1, 2])
+        dest = Path(self._tmp.name) / "pages_out"
+        original = self.main.ExportProgressDialog.exec
+        self.main.ExportProgressDialog.exec = (
+            lambda self_: QDialog.DialogCode.Accepted
+        )
+        try:
+            ok, count, failed = window._run_export_with_progress(
+                engine, [0, 2], [], False, "google", "auto", "it", 2,
+                str(dest), "folder",
+            )
+        finally:
+            self.main.ExportProgressDialog.exec = original
+            window.close()
+        self.assertTrue(ok)
+        self.assertEqual((count, failed), (2, 0))
+        self.assertTrue(dest.is_dir())
+        self.assertEqual(
+            sorted(p.name for p in dest.iterdir()),
+            ["page_p0001.pdf", "page_p0003.pdf"],
+        )
 
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")

@@ -315,8 +315,9 @@
           (<code>/PageLabels</code>), wenn sie sich unterscheiden.</li>
         <li><strong>Sprachen</strong> — Ausgangs- und Zielsprache.</li>
         <li><strong>Dienst</strong> — der Übersetzungsdienst und die Zeitschätzung.</li>
-        <li><strong>Ausgabe</strong> — <strong>ein einziges PDF</strong> oder
-          <strong>einzelne Seiten in einem ZIP-Archiv</strong> und der Speicherpfad.</li>
+        <li><strong>Ausgabe</strong> — <strong>eine einzige PDF</strong>,
+          <strong>Einzelseiten als ZIP</strong> oder <strong>Einzelseiten in einem
+          Ordner</strong>, plus Zielordner und Name.</li>
       </ol>
 
       <h3 id="export-pages">Seiten wählen (aktuell, Bereich, Liste)</h3>
@@ -365,6 +366,29 @@
       <div class="note"><strong>Schematische Miniaturen</strong> Die kleinen Seiten
         oben sind keine echte Vorschau: Sie zeigen nur, welche Seiten die Auswahl
         enthält.</div>
+
+      <h3 id="export-destination">Ziel und Format</h3>
+      <p>Der Schritt <strong>Ausgabe</strong> entscheidet, <strong>wo</strong> und
+      <strong>wie</strong> gespeichert wird.</p>
+      <ul>
+        <li><strong>Zielordner</strong> — wählen Sie ihn mit <em>Ordner wählen…</em>;
+          die App <strong>merkt</strong> ihn sich für spätere Exporte (standardmäßig der
+          Ordner der geöffneten PDF).</li>
+        <li><strong>Dateiname</strong> (oder <strong>Ordnername</strong> beim dritten
+          Format) — änderbar; der automatische Name enthält Auswahl, Engine und Sprache.</li>
+        <li><strong>Format</strong>:
+          <ul>
+            <li><strong>Eine einzige PDF</strong> — eine Datei mit den gewählten Seiten.</li>
+            <li><strong>Einzelseiten als ZIP</strong> — ein Archiv mit
+              <code>&lt;Name&gt;_pNNNN.pdf</code>.</li>
+            <li><strong>Einzelseiten in einem Ordner</strong> — ein eigener
+              <strong>Unterordner</strong> im gewählten Ordner mit denselben Einzeldateien.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="note"><strong>In Downloads kopieren</strong> Am Ende des Exports kopiert
+        die Schaltfläche <strong>⬇ In Downloads kopieren</strong> das Ergebnis in den
+        Downloads-Ordner; das Original bleibt am gewählten Ort.</div>
 
       <h3>Vorabübersetzung und Fortschritt</h3>
       <p>Seiten, die noch nicht im Cache sind, können vor dem Export übersetzt werden,

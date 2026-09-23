@@ -333,6 +333,26 @@ class ExportPdfTests(unittest.TestCase):
             self.engine.export_zip([0, 1], "google", dest)
         self.assertFalse(dest.exists())
 
+    def test_export_folder_writes_single_pages(self):
+        self._page_pdf(0, "ZERO")
+        self._page_pdf(2, "TWO")
+        dest_dir = Path(self._tmp.name) / "pages_out"
+        count = self.engine.export_folder(
+            [0, 2], "google", dest_dir, stem="book"
+        )
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            sorted(p.name for p in dest_dir.iterdir()),
+            ["book_p0001.pdf", "book_p0003.pdf"],
+        )
+
+    def test_export_folder_skips_missing_and_raises_when_empty(self):
+        dest_dir = Path(self._tmp.name) / "empty_out"
+        with self.assertRaises(ValueError):
+            self.engine.export_folder([0, 1], "google", dest_dir)
+        # la cartella può esistere ma è vuota
+        self.assertEqual(list(dest_dir.iterdir()), [])
+
 
 class SplitIndexTests(unittest.TestCase):
     """ensure_split must use the same 0-based index as the rest of the app."""

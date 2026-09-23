@@ -35,14 +35,21 @@ lasciare il posto alla nuova traduzione.
   della traduzione (destinazione), motore, zoom di avvio, "riprendi dall'ultima
   pagina" e percorso dell'eseguibile `pdf2zh_next`.
 - 💾 **Esporta** con una **procedura guidata a 5 passi** (File → Pagine → Lingue →
-  Motore → Output, nello stile del wizard del servizio): pagina corrente o
-  intervallo, motore e lingua, **un unico PDF** oppure **pagine singole in un
-  archivio ZIP**, percorso di salvataggio. Lo step **Pagine** mostra **anteprime
-  grandi e live** (prima/ultima pagina della selezione) con il numero **fisico** e
-  quello **stampato** (`/PageLabels`) quando differiscono. Le pagine non ancora in
-  cache possono essere tradotte prima, con annullamento immediato. Dal menu del
+  Motore → Output, nello stile del wizard del servizio): pagina corrente,
+  intervallo **oppure campo libero** (`1,3,7-9`, `all`), motore e lingua, e
+  **tre formati** — **un unico PDF**, **pagine singole in un archivio ZIP**
+  oppure **pagine singole in una sottocartella**. La **cartella di destinazione**
+  si sceglie e viene **ricordata**; lo step **Pagine** mostra **anteprime grandi e
+  live** (prima/ultima della selezione) con il numero **fisico** e quello
+  **stampato** (`/PageLabels`) quando differiscono. Le pagine non ancora in cache
+  possono essere tradotte prima, con annullamento immediato. Dal menu del
   pulsante 💾 è disponibile anche l'export **rapido della sola pagina corrente**.
-  A fine processo la finestra di avanzamento offre **⬇ Salva in Download**.
+  A fine processo la finestra di avanzamento offre **⬇ Copia in Download**
+  (copia il risultato; l'originale resta dove l'hai salvato).
+- ✓ **Azioni pagina**: a traduzione di una pagina completata compare un
+  **pulsante flottante** in basso a destra (non invasivo, sparisce cambiando
+  pagina) con: Salva in Download, Esporta…, Traduci la successiva, Ritraduci,
+  Apri con il visualizzatore di sistema, Cancella cache della pagina.
 - 🌊 Durante la traduzione la preview di destra mostra un **riempimento "liquido"**
   (progresso stimato) sopra la pagina, con un pulsante **Annulla** che interrompe
   subito il subprocess; la finestra di progresso export mostra la **pagina
@@ -143,7 +150,8 @@ python3 -m unittest discover -s tests -v
 ## Struttura
 
 - `main.py` — GUI PyQt6 (pannelli, navigazione, zoom, Impostazioni).
-- `clone_engine.py` — pipeline split → `pdf2zh_next` → cache per engine.
+- `clone_engine.py` — pipeline split → `pdf2zh_next` → cache per engine; export PDF/ZIP/cartella.
+- `pages.py` — parsing della specifica pagine del campo libero (allineato al servizio).
 - `gtranslate_cli.py` — catena gratuita Google→Microsoft→LLM per `--clitranslator`.
 - `i18n.py` — stringhe UI (5 lingue) e config.
 - `layout_engine.py` — engine adattativo dei fix di layout (dormiente).

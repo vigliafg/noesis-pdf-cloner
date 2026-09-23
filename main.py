@@ -4984,6 +4984,10 @@ class ExportWizardDialog(QDialog):
         self._page_count = max(int(page_count), 1)
         self._current_page = min(max(int(current_page), 0), self._page_count - 1)
         self._pdf_path = Path(pdf_path) if pdf_path else None
+        saved_dir = get_setting("export_dir", "") or ""
+        self._folder: Path | None = (
+            Path(saved_dir) if saved_dir and Path(saved_dir).is_dir() else None
+        )
         self._step = 0
         self._translate_touched = False
         self._path_touched = False
@@ -5471,9 +5475,10 @@ class ExportWizardDialog(QDialog):
         seg.setSpacing(8)
         self._btn_merged = QPushButton(T("export.format.merged"))
         self._btn_zip = QPushButton(T("export.format.zip"))
+        self._btn_folder = QPushButton(T("export.format.folder"))
         self._format_group = QButtonGroup(self)
         self._format_group.setExclusive(True)
-        for btn in (self._btn_merged, self._btn_zip):
+        for btn in (self._btn_merged, self._btn_zip, self._btn_folder):
             btn.setObjectName("wizSeg")
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -5483,20 +5488,30 @@ class ExportWizardDialog(QDialog):
         seg.addStretch(1)
         lay.addLayout(seg)
 
-        path_lbl = QLabel(T("export.wizard.output.path"))
-        path_lbl.setObjectName("wizHint")
-        lay.addWidget(path_lbl)
-        prow = QHBoxLayout()
-        prow.setSpacing(8)
+        # Cartella di destinazione: si sceglie col pulsante (campo in sola lettura).
+        folder_lbl = QLabel(T("export.wizard.output.folder"))
+        folder_lbl.setObjectName("wizHint")
+        lay.addWidget(folder_lbl)
+        frow = QHBoxLayout()
+        frow.setSpacing(8)
+        self._folder_edit = QLineEdit()
+        self._folder_edit.setReadOnly(True)
+        self._folder_edit.setText(str(self._output_dir()))
+        choose_dir = QPushButton(T("export.wizard.output.choose_folder"))
+        choose_dir.setObjectName("wizBtn")
+        choose_dir.setCursor(Qt.CursorShape.PointingHandCursor)
+        choose_dir.clicked.connect(self._browse_folder)
+        frow.addWidget(self._folder_edit, 1)
+        frow.addWidget(choose_dir)
+        lay.addLayout(frow)
+
+        # Nome file (o nome cartella nel formato "pagine singole in una cartella").
+        self._name_lbl = QLabel(T("export.wizard.output.filename"))
+        self._name_lbl.setObjectName("wizHint")
+        lay.addWidget(self._name_lbl)
         self._path_edit = QLineEdit()
         self._path_edit.textEdited.connect(self._on_path_edited)
-        browse = QPushButton(T("export.wizard.output.browse"))
-        browse.setObjectName("wizBtn")
-        browse.setCursor(Qt.CursorShape.PointingHandCursor)
-        browse.clicked.connect(self._browse)
-        prow.addWidget(self._path_edit, 1)
-        prow.addWidget(browse)
-        lay.addLayout(prow)
+        lay.addWidget(self._path_edit)
 
         self._summary = QLabel("")
         self._summary.setObjectName("wizSum")
@@ -5507,6 +5522,7 @@ class ExportWizardDialog(QDialog):
 
         self._btn_merged.toggled.connect(self._on_output_changed)
         self._btn_zip.toggled.connect(self._on_output_changed)
+        self._btn_folder.toggled.connect(self._on_output_changed)
         self._update_path()
         return w
 
@@ -5562,7 +5578,10 @@ class ExportWizardDialog(QDialog):
             return
         if self._step == len(self.STEPS) - 1:
             if not self._path_edit.text().strip():
-                self._path_edit.setText(self._default_path())
+                self._path_edit.setText(self._default_filename())
+            # Ricorda la cartella scelta per i prossimi export.
+            set_setting("export_dir", str(self._output_dir()))
+            save_config()
             self.accept()
             return
         self._set_step(self._step + 1)
@@ -5828,6 +5847,8 @@ class ExportWizardDialog(QDialog):
             self._chk_translate.blockSignals(False)
 
     def _output_dir(self) -> Path:
+        if self._folder is not None:
+            return self._folder
         if self._pdf_path is not None:
             return self._pdf_path.parent
         docs = QStandardPaths.writableLocation(
@@ -5837,28 +5858,42 @@ class ExportWizardDialog(QDialog):
 
     def _default_filename(self) -> str:
         stem = self._pdf_path.stem if self._pdf_path else "export"
-        ext = ".zip" if self.chosen_zip() else ".pdf"
-        return (
+        base = (
             f"{stem}_pag{self.range_label()}_{self.chosen_engine()}"
-            f"_{self.chosen_target()}{ext}"
+            f"_{self.chosen_target()}"
         )
+        fmt = self.chosen_format()
+        if fmt == "folder":
+            return base  # è il nome della sottocartella
+        return base + (".zip" if fmt == "zip" else ".pdf")
 
     def _default_path(self) -> str:
         return str(self._output_dir() / self._default_filename())
 
+    def _update_name_label(self):
+        if not hasattr(self, "_name_lbl"):
+            return
+        key = (
+            "export.wizard.output.folder_name"
+            if self.chosen_format() == "folder"
+            else "export.wizard.output.filename"
+        )
+        self._name_lbl.setText(T(key))
+
     def _update_path(self):
         if not hasattr(self, "_path_edit"):
             return
+        self._update_name_label()
         if not self._path_touched:
-            self._path_edit.setText(self._default_path())
+            self._path_edit.setText(self._default_filename())
 
     def _update_summary(self):
         if not hasattr(self, "_summary"):
             return
         source, target = self._chosen_langs()
         name = self._pdf_path.name if self._pdf_path else "—"
-        fmt = T("export.format.zip") if self.chosen_zip() else T("export.format.merged")
-        path = self._path_edit.text().strip() or self._default_path()
+        fmt = T(f"export.format.{self.chosen_format()}")
+        path = self.chosen_path()
         lines = [
             (T("export.wizard.sum.file"), f"{name} · {self.range_label()}"),
             (
@@ -5876,18 +5911,21 @@ class ExportWizardDialog(QDialog):
             )
         )
 
-    def _browse(self):
-        current = self._path_edit.text().strip() or self._default_path()
-        filt = (
-            T("export.filter_zip") if self.chosen_zip() else T("export.filter")
+    def _browse_folder(self):
+        """Sceglie la cartella di destinazione (ricordata in config)."""
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            T("export.wizard.output.choose_folder"),
+            str(self._output_dir()),
         )
-        dest, _ = QFileDialog.getSaveFileName(
-            self, T("export.wizard.output.path"), current, filt
-        )
-        if dest:
-            self._path_edit.setText(dest)
-            self._path_touched = True
-            self._update_summary()
+        if not chosen:
+            return
+        self._folder = Path(chosen)
+        self._folder_edit.setText(chosen)
+        set_setting("export_dir", chosen)
+        save_config()
+        self._update_path()
+        self._update_summary()
 
     # ── API per MainWindow ────────────────────────────────────────────
 
@@ -5918,13 +5956,28 @@ class ExportWizardDialog(QDialog):
     def translate_missing(self) -> bool:
         return self._chk_translate.isChecked()
 
+    def chosen_format(self) -> str:
+        """Formato scelto: ``merged`` (PDF unico), ``zip`` o ``folder``."""
+        if self._btn_folder.isChecked():
+            return "folder"
+        if self._btn_zip.isChecked():
+            return "zip"
+        return "merged"
+
     def chosen_zip(self) -> bool:
         """True se l'utente vuole le pagine singole in un archivio ZIP."""
-        return self._btn_zip.isChecked()
+        return self.chosen_format() == "zip"
+
+    def chosen_folder(self) -> bool:
+        """True se l'utente vuole le pagine singole in una cartella."""
+        return self.chosen_format() == "folder"
 
     def chosen_path(self) -> str:
-        """Percorso di salvataggio con l'estensione del formato scelto."""
-        text = self._path_edit.text().strip() or self._default_path()
+        """Destinazione (file o sottocartella) con l'estensione del formato scelto."""
+        folder = self._output_dir()
+        text = self._path_edit.text().strip() or self._default_filename()
+        if self.chosen_format() == "folder":
+            return str(folder / text)
         ext = ".zip" if self.chosen_zip() else ".pdf"
         if not text.lower().endswith(ext):
             for other in (".pdf", ".zip"):
@@ -5932,7 +5985,7 @@ class ExportWizardDialog(QDialog):
                     text = text[: -len(other)]
                     break
             text += ext
-        return text
+        return str(folder / text)
 
     def range_label(self) -> str:
         """Suffisso per il nome file: "156", "156-159" oppure "1,3,7-9"."""
@@ -6105,6 +6158,7 @@ class ExportProgressDialog(QDialog):
         btns.addStretch(1)
         self._btn_download = QPushButton(T("export.progress.save_download"))
         self._btn_download.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_download.setToolTip(T("export.progress.save_download.tip"))
         self._btn_download.clicked.connect(self._save_to_download)
         self._btn_download.setVisible(False)
         btns.addWidget(self._btn_download)
@@ -6278,7 +6332,8 @@ class ExportProgressDialog(QDialog):
         )
         self._eta_lbl.setText("")
         self._dest = Path(dest)
-        self._last_folder = self._dest.parent
+        # Formato "cartella": la destinazione è essa stessa la cartella da aprire.
+        self._last_folder = self._dest if self._dest.is_dir() else self._dest.parent
         if self._range_label_text is not None:
             self._range_lbl.setText(
                 T(
@@ -6313,8 +6368,12 @@ class ExportProgressDialog(QDialog):
         self._btn_close.setFocus()
 
     def _save_to_download(self):
-        """Copia il file prodotto nella cartella Download dell'utente."""
-        if self._dest is None or not self._dest.is_file():
+        """Copia il risultato nella cartella Download (file o cartella).
+
+        È una **copia**: l'originale resta nella destinazione scelta. Per il
+        formato "pagine singole in una cartella" copia l'intera sottocartella.
+        """
+        if self._dest is None or not self._dest.exists():
             return
         downloads = QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.DownloadLocation
@@ -6322,14 +6381,24 @@ class ExportProgressDialog(QDialog):
         target_dir = Path(downloads) if downloads else Path.home() / "Downloads"
         with contextlib.suppress(OSError):
             target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / self._dest.name
-        stem, suffix = self._dest.stem, self._dest.suffix
-        index = 1
-        while target.exists():
-            target = target_dir / f"{stem}_{index}{suffix}"
-            index += 1
+
+        def _free_target(base: Path) -> Path:
+            if not base.exists():
+                return base
+            stem, suffix = base.stem, base.suffix
+            index = 1
+            while True:
+                candidate = base.parent / f"{stem}_{index}{suffix}"
+                if not candidate.exists():
+                    return candidate
+                index += 1
+
+        target = _free_target(target_dir / self._dest.name)
         try:
-            shutil.copy2(self._dest, target)
+            if self._dest.is_dir():
+                shutil.copytree(self._dest, target)
+            else:
+                shutil.copy2(self._dest, target)
         except OSError:
             self._path_lbl.setText(T("export.progress.download_error"))
             return
@@ -6419,7 +6488,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Noesis PDF Reader Lite")
+        self.setWindowTitle("Noesis PDF Cloner")
         self.resize(1400, 900)
         self.setMinimumSize(800, 600)
 
@@ -8213,7 +8282,7 @@ class MainWindow(QMainWindow):
         source = dlg.chosen_source()
         pages = dlg.chosen_pages()
         want_translate = dlg.translate_missing()
-        as_zip = dlg.chosen_zip()
+        fmt = dlg.chosen_format()
         dest = dlg.chosen_path()
         if not pages:
             self.status_bar.showMessage(T("export.none_ready"), 5000)
@@ -8267,7 +8336,7 @@ class MainWindow(QMainWindow):
             target,
             len(cached),
             dest,
-            as_zip,
+            fmt,
         )
         if not ok:
             return
@@ -8321,7 +8390,7 @@ class MainWindow(QMainWindow):
         target: str,
         cached_count: int,
         dest: str,
-        as_zip: bool = False,
+        fmt: str = "merged",
     ) -> tuple[bool, int, int]:
         """Translate (optionally), merge and save, with a modal progress dialog.
 
@@ -8409,17 +8478,19 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(T("export.none_ready"), 5000)
             return (False, 0, 0)
         try:
-            if as_zip:
+            stem = self._pdf_path.stem if self._pdf_path else None
+            if fmt == "folder":
+                count = engine.export_folder(
+                    ready, engine_name, dest, source, target, stem=stem
+                )
+            elif fmt == "zip":
                 count = engine.export_zip(
-                    ready,
-                    engine_name,
-                    dest,
-                    source,
-                    target,
-                    stem=self._pdf_path.stem if self._pdf_path else None,
+                    ready, engine_name, dest, source, target, stem=stem
                 )
             else:
-                count = engine.export_pdf(ready, engine_name, dest, source, target)
+                count = engine.export_pdf(
+                    ready, engine_name, dest, source, target
+                )
         except Exception:  # noqa: BLE001 — riportato nella finestra
             log.exception("export PDF fallito: %s", dest)
             prog.set_error(T("export.error"))
