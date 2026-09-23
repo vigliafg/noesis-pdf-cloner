@@ -133,6 +133,19 @@ def classify_engine_failure(text: str) -> str:
     return "unknown"
 
 
+def _engine_failure_code(engine: str, stderr: str, stdout: str) -> str | None:
+    """Codice classificato per il motore, oppure ``None`` se non riconosciuto.
+
+    Guarda **sia stderr sia stdout**: con alcune chiavi non valide
+    ``pdf2zh_next`` esce con codice **0**, stderr vuoto e l'errore (401) su
+    stdout, quindi la sola stderr non basta.
+    """
+    code = classify_engine_failure((stderr or "") + "\n" + (stdout or ""))
+    if code != "unknown" and (engine == "llm" or code == "network"):
+        return code
+    return None
+
+
 def _is_windows() -> bool:
     return os.name == "nt"
 
@@ -927,22 +940,30 @@ class CloneEngine:
                 r = self._run_engine(cmd, env, cancel_event)
                 log.info("pdf2zh_next pagina %d: rc=%d", page, r.returncode)
                 if r.returncode != 0:
-                    stderr = r.stderr or ""
-                    code = classify_engine_failure(stderr)
-                    # Per l'LLM riportiamo il codice specifico (chiave, credito,
-                    # rate limit, modello…) così la UI dà un consiglio mirato; per
-                    # gli altri motori solo la rete è un caso riconoscibile.
-                    if code != "unknown" and (engine == "llm" or code == "network"):
+                    code = _engine_failure_code(engine, r.stderr, r.stdout)
+                    if code is not None:
                         raise RuntimeError(code)
                     raise RuntimeError(
-                        f"pdf2zh_next exit {r.returncode}: {stderr[-400:]}"
+                        f"pdf2zh_next exit {r.returncode}: {(r.stderr or '')[-400:]}"
                     )
                 monos = glob.glob(str(out_dir / "*.mono.pdf"))
                 if not monos:
                     if page_has_text(sp):
                         # La pagina ha testo ma il motore non ha prodotto nulla:
-                        # la traduzione è fallita (es. catena non disponibile).
+                        # la traduzione è fallita. Anche con exit 0 può essere un
+                        # errore riconoscibile (es. 401 gestito internamente e
+                        # scritto su stdout): classifica l'output per un
+                        # consiglio mirato, altrimenti usa il messaggio generico.
+                        code = _engine_failure_code(engine, r.stderr, r.stdout)
+                        if code is not None:
+                            raise RuntimeError(code)
                         detail = (r.stderr or "").strip().splitlines()
+                        if not detail:
+                            detail = [
+                                ln.strip()
+                                for ln in (r.stdout or "").splitlines()
+                                if ln.strip()
+                            ]
                         tail = detail[-1][:200] if detail else ""
                         raise RuntimeError(
                             "il motore non ha tradotto la pagina"

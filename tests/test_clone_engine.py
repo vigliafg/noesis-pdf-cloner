@@ -508,6 +508,38 @@ class KeyErrorDetectionTests(unittest.TestCase):
             self.assertIsNone(out)
             self.assertEqual(engine.status(1, "llm"), "error:invalid_key")
 
+    def test_llm_invalid_key_exit0_stdout_is_classified(self):
+        """pdf2zh_next può uscire con 0 e scrivere il 401 su stdout: va classificato."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake = tmp_path / "pdf2zh_next"
+            fake.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "sys.stdout.write("
+                "'openai.AuthenticationError: Error code: 401 - Unauthorized\\n')\n"
+                "sys.exit(0)\n"
+            )
+            fake.chmod(fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
+            engine = clone_engine.CloneEngine(
+                tmp_path / "cache", pdf2zh_bin=fake
+            )
+            src = tmp_path / "book.pdf"
+            src.write_bytes(b"%PDF-1.4 source")
+            engine.set_document(src)
+            engine.lang_in, engine.lang_out = "en", "it"
+            split = engine.split_path(1)
+            split.parent.mkdir(parents=True, exist_ok=True)
+            split.write_bytes(b"%PDF-1.4 page 1")
+            with mock.patch.object(
+                clone_engine, "page_has_text", return_value=True
+            ), mock.patch.dict(
+                os.environ, {"OPENROUTER_API_KEY": "sk-or-bad"}
+            ):
+                out = engine.translate_page(1, "llm")
+            self.assertIsNone(out)
+            self.assertEqual(engine.status(1, "llm"), "error:invalid_key")
+
 
 class CancelTests(unittest.TestCase):
     """Il cancel deve terminare il subprocess, non attendere la pagina."""

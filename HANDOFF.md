@@ -194,7 +194,9 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     pannello destro compare una **striscia "chiave mancante"** (blu, come quella
     del motore non installato) con i pulsanti **Inserisci chiave** (apre il
     dialog) e **Usa Google/Bing** (passa a un motore gratuito, che non richiede
-    chiave).
+    chiave). **Nota E2E (Linux)**: con chiave non valida `pdf2zh_next` può
+    uscire con **codice 0**, `stderr` vuoto e l'errore 401 su **stdout**: la
+    classificazione guarda **anche stdout**, quindi il caso resta `invalid_key`.
 
 ---
 
@@ -202,7 +204,8 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **324 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **325 OK** (24 skip) |
+| E2E reale su Linux (chiave OpenRouter) | valida → `done` (26,6 s) · non valida → `error:invalid_key` (5,4 s) · assente → `error:missing_key` |
 | `uv` nel bundle | `vendor/fetch_uv.py` scarica uv 0.12.17, sha256 verificata, `./vendor/uv-bin/uv --version` OK |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
 | E2E reale pagina 156 di `ha22.pdf` | google 53.3 s · bing 44.1 s · openai 65.3 s — tutti `done` |
