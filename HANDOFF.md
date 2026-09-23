@@ -11,11 +11,11 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.5** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.6** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
-- Test: **422 OK** (24 skip, regressioni su PDF reali non versionati).
+- Test: **432 OK** (24 skip, regressioni su PDF reali non versionati).
 
 ### Cosa NON è ancora fatto
 - Il motore **Docling** e gli strumenti a zone (dormienti) non sono reintegrati.
@@ -376,7 +376,7 @@ NSIS** → **feedback completo sulla chiave OpenRouter** (precedenza, fonte,
 verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 (AppImage).
 
-### Aggiunte dopo la v0.1.5
+### Fatto il 23/09 (v0.1.6)
 
 - **Campo libero di scelta pagine** nel wizard di export (`pages.py`, allineato a
   `app/pages.py` del servizio): tre modi (corrente / intervallo / elenco
@@ -427,8 +427,9 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 - GitHub Pages: abilitato con `build_type=workflow`; sito a
   <https://vigliafg.github.io/noesis-pdf-cloner/> (landing) e guida a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
-- Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**; per pubblicarne una
-  nuova creare un tag `v*` e pusharlo (`git tag v0.1.5 && git push origin v0.1.5`).
+- Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
+  pubblicarne una nuova creare un tag `v*` e pusharlo
+  (`git tag -a v0.1.6 -m "v0.1.6" && git push origin v0.1.6`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
