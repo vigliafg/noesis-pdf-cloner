@@ -58,6 +58,16 @@ class HelpSiteTests(unittest.TestCase):
             self.assertIn("pagemock", text, page)
             self.assertIn("1,3,7-9", text, page)
 
+    def test_help_explains_page_actions_fab(self):
+        """Ogni guida descrive il pulsante flottante delle azioni pagina."""
+        docs = os.path.join(_ROOT, "docs")
+        for code in ("it", "en", "fr", "de", "es"):
+            page = os.path.join(docs, "help", code, "index.html")
+            with open(page, encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertIn('id="page-actions"', text, page)
+            self.assertIn("fabmock", text, page)
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class HelpUrlTests(unittest.TestCase):

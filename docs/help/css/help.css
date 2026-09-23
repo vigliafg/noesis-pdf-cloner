@@ -288,6 +288,44 @@ footer {
 .pcap { margin-top: 10px; font-size: 13px; color: var(--text-dim); }
 .pcap code { font-size: 12px; }
 
+/* ── azioni pagina: mockup del pulsante flottante ─────── */
+
+.fabmock {
+  position: relative;
+  background: #232323;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  height: 210px;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.fabmock-page {
+  position: absolute;
+  left: 16px; top: 16px; right: 16px; bottom: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: #555; font-size: 13px;
+  border: 1px dashed #444; border-radius: 6px;
+}
+.fabmock-fab {
+  position: absolute; right: 14px; bottom: 14px;
+  background: rgba(43, 43, 43, 235);
+  border: 1px solid var(--accent-strong);
+  color: #fff; border-radius: 17px; padding: 6px 13px;
+  font-size: 12px; font-weight: 600;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+.fabmock-menu {
+  position: absolute; right: 14px; bottom: 54px;
+  background: #2b2b2b; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px; display: flex; flex-direction: column; gap: 1px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.fabmock-menu span {
+  font-size: 12px; color: #ddd; padding: 3px 10px; border-radius: 4px;
+  white-space: nowrap;
+}
+.fabmock-menu span:first-child { background: var(--accent-strong); color: #fff; }
+
 /* responsive */
 @media (max-width: 900px) {
   .wrap { flex-direction: column; padding: 0 16px; }

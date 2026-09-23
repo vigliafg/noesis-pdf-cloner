@@ -952,6 +952,104 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Die übersetzte Seite als PDF exportieren",
         "es": "Exportar la página traducida a PDF",
     },
+    "clone.fab.title": {
+        "it": "✓ Azioni pagina", "en": "✓ Page actions",
+        "fr": "✓ Actions de la page", "de": "✓ Seitenaktionen",
+        "es": "✓ Acciones de la página",
+    },
+    "clone.fab.tip": {
+        "it": "Azioni per la pagina tradotta",
+        "en": "Actions for the translated page",
+        "fr": "Actions pour la page traduite",
+        "de": "Aktionen für die übersetzte Seite",
+        "es": "Acciones para la página traducida",
+    },
+    "clone.fab.save_download": {
+        "it": "⬇ Salva in Download", "en": "⬇ Save to Downloads",
+        "fr": "⬇ Enregistrer dans Téléchargements",
+        "de": "⬇ In Downloads speichern",
+        "es": "⬇ Guardar en Descargas",
+    },
+    "clone.fab.export": {
+        "it": "💾 Esporta…", "en": "💾 Export…", "fr": "💾 Exporter…",
+        "de": "💾 Exportieren…", "es": "💾 Exportar…",
+    },
+    "clone.fab.next": {
+        "it": "▶ Traduci la successiva", "en": "▶ Translate next",
+        "fr": "▶ Traduire la suivante", "de": "▶ Nächste übersetzen",
+        "es": "▶ Traducir la siguiente",
+    },
+    "clone.fab.retranslate": {
+        "it": "🔁 Ritraduci", "en": "🔁 Retranslate",
+        "fr": "🔁 Retraduire", "de": "🔁 Neu übersetzen",
+        "es": "🔁 Volver a traducir",
+    },
+    "clone.fab.open_external": {
+        "it": "👁 Apri con il visualizzatore di sistema",
+        "en": "👁 Open with system viewer",
+        "fr": "👁 Ouvrir avec la visionneuse système",
+        "de": "👁 Mit Systembetrachter öffnen",
+        "es": "👁 Abrir con el visor del sistema",
+    },
+    "clone.fab.purge": {
+        "it": "🗑 Cancella cache della pagina",
+        "en": "🗑 Clear page cache",
+        "fr": "🗑 Vider le cache de la page",
+        "de": "🗑 Seiten-Cache löschen",
+        "es": "🗑 Borrar caché de la página",
+    },
+    "clone.fab.saved_download": {
+        "it": "Pagina salvata in Download: {path}",
+        "en": "Page saved to Downloads: {path}",
+        "fr": "Page enregistrée dans Téléchargements : {path}",
+        "de": "Seite in Downloads gespeichert: {path}",
+        "es": "Página guardada en Descargas: {path}",
+    },
+    "clone.fab.save_error": {
+        "it": "Impossibile salvare la pagina in Download.",
+        "en": "Could not save the page to Downloads.",
+        "fr": "Impossible d'enregistrer la page dans Téléchargements.",
+        "de": "Seite konnte nicht in Downloads gespeichert werden.",
+        "es": "No se pudo guardar la página en Descargas.",
+    },
+    "clone.fab.last_page": {
+        "it": "Sei già all'ultima pagina.",
+        "en": "You are already on the last page.",
+        "fr": "Vous êtes déjà à la dernière page.",
+        "de": "Sie sind bereits auf der letzten Seite.",
+        "es": "Ya estás en la última página.",
+    },
+    "clone.fab.retranslate_confirm": {
+        "it": "Ritradurre la pagina {page}? Il clone attuale ({engine}) verrà "
+              "eliminato e rigenerato.",
+        "en": "Retranslate page {page}? The current clone ({engine}) will be "
+              "deleted and regenerated.",
+        "fr": "Retraduire la page {page} ? Le clone actuel ({engine}) sera "
+              "supprimé et régénéré.",
+        "de": "Seite {page} neu übersetzen? Der aktuelle Klon ({engine}) wird "
+              "gelöscht und neu erzeugt.",
+        "es": "¿Volver a traducir la página {page}? El clon actual ({engine}) "
+              "se eliminará y regenerará.",
+    },
+    "clone.fab.purge_confirm": {
+        "it": "Eliminare dalla cache la pagina {page} ({engine})? Dovrai "
+              "ritradurla per rivederla.",
+        "en": "Remove page {page} ({engine}) from the cache? You will need to "
+              "retranslate it to see it again.",
+        "fr": "Supprimer la page {page} ({engine}) du cache ? Vous devrez la "
+              "retraduire pour la revoir.",
+        "de": "Seite {page} ({engine}) aus dem Cache entfernen? Sie müssen sie "
+              "neu übersetzen, um sie wiederzusehen.",
+        "es": "¿Eliminar la página {page} ({engine}) de la caché? Tendrás que "
+              "volver a traducirla para verla.",
+    },
+    "clone.fab.purged": {
+        "it": "Cache della pagina {page} eliminata ({size}).",
+        "en": "Page {page} cache cleared ({size}).",
+        "fr": "Cache de la page {page} vidé ({size}).",
+        "de": "Cache der Seite {page} gelöscht ({size}).",
+        "es": "Caché de la página {page} borrada ({size}).",
+    },
     "export.title": {
         "it": "Esporta pagina tradotta", "en": "Export translated page",
         "fr": "Exporter la page traduite",

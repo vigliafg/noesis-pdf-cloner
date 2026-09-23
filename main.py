@@ -75,7 +75,7 @@ except ImportError:
 
 from PyQt6.QtCore import (
     Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
-    QRect, QLocale, QEventLoop,
+    QRect, QLocale, QEventLoop, QPoint,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
@@ -122,6 +122,7 @@ from PyQt6.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsTextItem,
     QFrame,
+    QGraphicsDropShadowEffect,
 )
 
 # URL base della guida online (sito statico pubblicato su GitHub Pages).
@@ -3707,6 +3708,11 @@ class TranslatedPagePanel(QWidget):
     install_engine_requested = pyqtSignal()
     enter_key_requested = pyqtSignal()
     use_free_engine_requested = pyqtSignal()
+    page_save_download_requested = pyqtSignal()
+    page_translate_next_requested = pyqtSignal()
+    page_retranslate_requested = pyqtSignal()
+    page_open_external_requested = pyqtSignal()
+    page_purge_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3923,6 +3929,54 @@ class TranslatedPagePanel(QWidget):
         self._collapse_btn.clicked.connect(self._toggle_collapsed)
         self._collapse_btn.raise_()
 
+        # ── Pulsante flottante "Azioni pagina" (appare a traduzione fatta) ──
+        # Figlio del pannello FUORI dal layout, in basso a destra: non consuma
+        # spazio alla pagina e non copre i controlli in alto (né il chevron).
+        self._fab = QPushButton(T("clone.fab.title"), self)
+        self._fab.setObjectName("pageFab")
+        self._fab.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._fab.setToolTip(T("clone.fab.tip"))
+        self._fab.setStyleSheet(
+            "QPushButton#pageFab {"
+            " background: rgba(43,43,43,235); color: #fff;"
+            " border: 1px solid #3a6bc5; border-radius: 17px;"
+            " padding: 7px 15px; font-size: 13px; font-weight: 600; }"
+            "QPushButton#pageFab:hover { background: #3a3a3a;"
+            " border-color: #4a90d9; }"
+        )
+        shadow = QGraphicsDropShadowEffect(self._fab)
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 160))
+        self._fab.setGraphicsEffect(shadow)
+        self._fab.clicked.connect(self._toggle_page_actions)
+        self._fab.hide()
+        self._fab.raise_()
+
+        self._fab_menu = QMenu(self)
+        self._fab_menu.setObjectName("pageFabMenu")
+        self._fab_menu.setStyleSheet(
+            "QMenu#pageFabMenu { background: #2b2b2b; color: #e8e8e8;"
+            " border: 1px solid #3a3a3a; padding: 6px; }"
+            "QMenu#pageFabMenu::item { padding: 7px 22px 7px 12px;"
+            " border-radius: 5px; }"
+            "QMenu#pageFabMenu::item:selected { background: #3a6bc5;"
+            " color: #fff; }"
+            "QMenu#pageFabMenu::item:disabled { color: #777; }"
+        )
+        self._fab_actions: dict = {}
+        for key, sig in (
+            ("save_download", self.page_save_download_requested),
+            ("export", self.export_requested),
+            ("next", self.page_translate_next_requested),
+            ("retranslate", self.page_retranslate_requested),
+            ("open_external", self.page_open_external_requested),
+            ("purge", self.page_purge_requested),
+        ):
+            act = self._fab_menu.addAction(T(f"clone.fab.{key}"))
+            act.triggered.connect(lambda _checked=False, s=sig: s.emit())
+            self._fab_actions[key] = act
+
         self._view_zoom: float = 1.0
 
     # ── collapse / expand della barra motori ──────────────────────────
@@ -3969,6 +4023,47 @@ class TranslatedPagePanel(QWidget):
                 offset += self._key_banner.sizeHint().height()
             if offset:
                 y = offset + 6
+        b.move(x, y)
+
+    # ── pulsante flottante "Azioni pagina" ────────────────────────────
+
+    def show_page_actions(self):
+        """Mostra il FAB delle azioni (chiamato a traduzione completata)."""
+        self._fab.show()
+        self._reposition_fab()
+        self._fab.raise_()
+
+    def hide_page_actions(self):
+        """Nasconde il FAB e chiude il menu (cambio pagina, nuova traduzione)."""
+        self._fab_menu.hide()
+        self._fab.hide()
+
+    def is_page_actions_visible(self) -> bool:
+        return not self._fab.isHidden()
+
+    def set_page_actions_next_enabled(self, enabled: bool):
+        """Abilita/disabilita la voce "Traduci la successiva" (ultima pagina)."""
+        act = self._fab_actions.get("next")
+        if act is not None:
+            act.setEnabled(bool(enabled))
+
+    def _toggle_page_actions(self):
+        if self._fab_menu.isVisible():
+            self._fab_menu.hide()
+            return
+        self._fab_menu.adjustSize()
+        pos = self._fab.mapToGlobal(QPoint(0, 0))
+        x = pos.x() + self._fab.width() - self._fab_menu.width()
+        y = pos.y() - self._fab_menu.height() - 4
+        self._fab_menu.popup(QPoint(max(0, x), max(0, y)))
+
+    def _reposition_fab(self):
+        b = self._fab
+        if b.isHidden():
+            return
+        b.adjustSize()
+        x = max(0, self.width() - b.width() - 18)
+        y = max(0, self.height() - b.height() - 18)
         b.move(x, y)
 
     # ── engine radios ─────────────────────────────────────────────────
@@ -4021,6 +4116,7 @@ class TranslatedPagePanel(QWidget):
     def show_translating(self, pixmap: QPixmap | None, caption: str,
                          cancelable: bool = True):
         """Mostra l'overlay liquido durante la traduzione della pagina."""
+        self.hide_page_actions()
         self.hide_spinner()
         self.view.show_page(None)
         self._lbl_status.setText(T("clone.status_running"))
@@ -4067,6 +4163,7 @@ class TranslatedPagePanel(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._reposition_collapse_btn()
+        self._reposition_fab()
         if self._spinner.isVisible():
             self._position_spinner()
         if self._liquid.isVisible():
@@ -4086,6 +4183,10 @@ class TranslatedPagePanel(QWidget):
         self._lbl_key_banner.setText(T("clone.key_missing"))
         self.btn_enter_key.setText(T("clone.key_missing.enter"))
         self.btn_use_free.setText(T("clone.key_missing.use_free"))
+        self._fab.setText(T("clone.fab.title"))
+        self._fab.setToolTip(T("clone.fab.tip"))
+        for key, act in self._fab_actions.items():
+            act.setText(T(f"clone.fab.{key}"))
         self.view.retranslate()
 
 
@@ -6451,6 +6552,21 @@ class MainWindow(QMainWindow):
         self.translated_panel.use_free_engine_requested.connect(
             self._on_use_free_engine_banner
         )
+        self.translated_panel.page_save_download_requested.connect(
+            self._on_fab_save_download
+        )
+        self.translated_panel.page_translate_next_requested.connect(
+            self._on_fab_translate_next
+        )
+        self.translated_panel.page_retranslate_requested.connect(
+            self._on_fab_retranslate
+        )
+        self.translated_panel.page_open_external_requested.connect(
+            self._on_fab_open_external
+        )
+        self.translated_panel.page_purge_requested.connect(
+            self._on_fab_purge
+        )
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
         # Ripristina lo stato collassato/espanso della barra motori (persistito).
@@ -7158,6 +7274,10 @@ class MainWindow(QMainWindow):
         page_num = max(0, min(page_num, count - 1))
         self._current_page = page_num
         self._remember_last_page(page_num)
+
+        # Il FAB delle azioni appartiene alla pagina tradotta appena vista:
+        # cambiando pagina sparisce.
+        self.translated_panel.hide_page_actions()
 
         # Render left
         self._display_page(page_num)
@@ -7895,6 +8015,11 @@ class MainWindow(QMainWindow):
         else:
             self.translated_panel.set_status(T("clone.status_done"))
             self.status_bar.showMessage(T("clone.done", page=page_num + 1))
+            # Azioni pagina: il FAB compare a traduzione fresca completata.
+            self.translated_panel.set_page_actions_next_enabled(
+                page_num < self._page_count - 1
+            )
+            self.translated_panel.show_page_actions()
         self._update_working_badge()
 
     def _on_clone_error(self, generation: int, page_num: int, engine: str, message: str):
@@ -7909,6 +8034,118 @@ class MainWindow(QMainWindow):
         text = _friendly_reason(message)
         self.translated_panel.show_message(text)
         self.status_bar.showMessage(text)
+
+    # ── azioni pagina (pulsante flottante) ────────────────────────────────
+
+    def _confirm_page_action(self, title: str, text: str,
+                             confirm_label: str) -> bool:
+        """Conferma generica per le azioni distruttive del FAB."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(title)
+        box.setText(text)
+        confirm = box.addButton(confirm_label, QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(T("clone.purge.cancel"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return box.clickedButton() is confirm
+
+    def _on_fab_save_download(self):
+        """⬇ Salva in Download: esporta la pagina corrente nella cartella Download."""
+        if not self._pdf_path:
+            return
+        page = self._current_page
+        engine = get_translation_engine()
+        source = get_source_lang()
+        target = get_target_lang()
+        if not self._clone_engine.is_cached(page, engine, source, target):
+            self.status_bar.showMessage(T("export.not_ready"), 5000)
+            return
+        downloads = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.DownloadLocation
+        )
+        target_dir = Path(downloads) if downloads else Path.home() / "Downloads"
+        with contextlib.suppress(OSError):
+            target_dir.mkdir(parents=True, exist_ok=True)
+        base = f"{self._pdf_path.stem}_pag{page + 1}_{engine}_{target}"
+        dest = target_dir / f"{base}.pdf"
+        index = 1
+        while dest.exists():
+            dest = target_dir / f"{base}_{index}.pdf"
+            index += 1
+        try:
+            self._clone_engine.export_pdf(
+                [page], engine, str(dest), source, target
+            )
+        except Exception:  # noqa: BLE001 — riportato nella status bar
+            log.exception("salvataggio pagina in Download fallito: %s", dest)
+            self.status_bar.showMessage(T("clone.fab.save_error"), 5000)
+            return
+        self.status_bar.showMessage(
+            T("clone.fab.saved_download", path=str(dest)), 6000
+        )
+
+    def _on_fab_translate_next(self):
+        """▶ Traduci la successiva: passa alla pagina dopo e la traduce."""
+        if not self._pdf_path or self._page_count == 0:
+            return
+        if self._current_page >= self._page_count - 1:
+            self.status_bar.showMessage(T("clone.fab.last_page"), 4000)
+            return
+        self._set_page(self._current_page + 1)
+        self._on_translate_requested()
+
+    def _on_fab_retranslate(self):
+        """🔁 Ritraduci: elimina la cache della pagina (motore attivo) e ritraduce."""
+        if not self._pdf_path:
+            return
+        page = self._current_page
+        engine = get_translation_engine()
+        if not self._confirm_page_action(
+            T("clone.purge.title"),
+            T(
+                "clone.fab.retranslate_confirm",
+                page=page + 1,
+                engine=self._engine_display(engine),
+            ),
+            T("clone.purge.confirm"),
+        ):
+            return
+        self._clone_engine.purge_page_cache(engine, page)
+        self._on_translate_requested()
+
+    def _on_fab_open_external(self):
+        """👁 Apri con il visualizzatore di sistema il clone della pagina."""
+        if not self._pdf_path:
+            return
+        page = self._current_page
+        engine = get_translation_engine()
+        path = self._clone_engine.translated_path(page, engine)
+        if not path.is_file():
+            self.status_bar.showMessage(T("export.not_ready"), 5000)
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _on_fab_purge(self):
+        """🗑 Cancella cache della pagina (motore attivo), con conferma."""
+        if not self._pdf_path:
+            return
+        page = self._current_page
+        engine = get_translation_engine()
+        if not self._confirm_page_action(
+            T("clone.purge.title"),
+            T(
+                "clone.fab.purge_confirm",
+                page=page + 1,
+                engine=self._engine_display(engine),
+            ),
+            T("clone.purge.confirm"),
+        ):
+            return
+        _files, size = self._clone_engine.purge_page_cache(engine, page)
+        self.status_bar.showMessage(
+            T("clone.fab.purged", page=page + 1, size=_fmt_bytes(size)), 6000
+        )
+        self._show_clone_for_page(page)
 
     def _render_translated_pdf(self, page_num: int, engine: str) -> QPixmap | None:
         path = self._clone_engine.translated_path(page_num, engine)
