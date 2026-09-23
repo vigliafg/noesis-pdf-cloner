@@ -1011,5 +1011,45 @@ class NoWindowTests(unittest.TestCase):
         self.assertIn("startupinfo", captured)
 
 
+class EngineEnvTests(unittest.TestCase):
+    """Il subprocess del motore riceve ``PYTHONIOENCODING=utf-8``.
+
+    Su Windows, senza questo, la catena gratuita (``gtranslate_cli.py``) scrive
+    le accentate in cp1252 e pdf2zh le sostituisce con U+FFFD.
+    """
+
+    def test_engine_passes_utf8_io_encoding(self):
+        import subprocess
+
+        import pymupdf
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            src = tmp_path / "book.pdf"
+            doc = pymupdf.open()
+            doc.new_page()
+            doc.save(src)
+            doc.close()
+            fake = tmp_path / "pdf2zh_next"
+            fake.write_text("#!/bin/sh\n")
+            engine = clone_engine.CloneEngine(
+                tmp_path / "cache", pdf2zh_bin=fake
+            )
+            engine.set_document(src)
+            engine.lang_in, engine.lang_out = "en", "it"
+            captured: dict = {}
+
+            def fake_run(cmd, env, cancel_event=None):
+                captured.update(env)
+                return subprocess.CompletedProcess(cmd, 0, "", "")
+
+            with mock.patch.object(engine, "_run_engine", fake_run), \
+                 mock.patch.object(
+                     clone_engine, "page_has_text", return_value=False
+                 ):
+                engine.translate_page(0, "google")
+            self.assertEqual(captured.get("PYTHONIOENCODING"), "utf-8")
+
+
 if __name__ == "__main__":
     unittest.main()

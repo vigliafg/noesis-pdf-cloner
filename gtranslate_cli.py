@@ -39,6 +39,63 @@ HTTP_TIMEOUT = 15
 ATTEMPTS = 2
 
 
+def _force_utf8_stdio() -> None:
+    """Mette stdin/stdout/stderr in UTF-8.
+
+    ``pdf2zh_next`` esegue questo script come subprocess con
+    ``encoding="utf-8"`` (``translator/translator_impl/clitranslator.py``): se
+    scrivessimo con l'encoding di default del sistema (su Windows la codepage
+    ANSI, es. cp1252) le lettere accentate uscirebbero come byte non-UTF-8 e
+    pdf2zh le sostituirebbe con U+FFFD (�). Vale per l'italiano e per ogni
+    carattere non-ASCII.
+    """
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def _read_input() -> str:
+    """Legge tutto stdin come UTF-8 (fallback: testo già decodificato)."""
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is not None:
+        try:
+            return buffer.read().decode("utf-8", "replace")
+        except (OSError, AttributeError, ValueError):
+            pass
+    return sys.stdin.read()
+
+
+def _emit(text: str) -> None:
+    """Scrive ``text`` su stdout come UTF-8 + newline."""
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is not None:
+        try:
+            buffer.write(text.encode("utf-8") + b"\n")
+            buffer.flush()
+            return
+        except (OSError, AttributeError, ValueError):
+            pass
+    print(text)
+
+
+def _emit_error(text: str) -> None:
+    """Scrive ``text`` su stderr come UTF-8 + newline."""
+    buffer = getattr(sys.stderr, "buffer", None)
+    if buffer is not None:
+        try:
+            buffer.write(text.encode("utf-8") + b"\n")
+            buffer.flush()
+            return
+        except (OSError, AttributeError, ValueError):
+            pass
+    print(text, file=sys.stderr)
+
+
 def http_get(url: str) -> str | None:
     for _ in range(ATTEMPTS):
         try:
@@ -189,19 +246,19 @@ def translate(text: str) -> str | None:
 
 
 def main() -> int:
-    text = sys.stdin.read()
+    _force_utf8_stdio()
+    text = _read_input()
     if not text.strip():
-        print("")
+        _emit("")
         return 0
     text = text[:5000]
     out = translate(text)
     if out is None:
-        print(
-            f"TRANSLATION-ERROR: nessun endpoint disponibile per '{text[:50]}'",
-            file=sys.stderr,
+        _emit_error(
+            f"TRANSLATION-ERROR: nessun endpoint disponibile per '{text[:50]}'"
         )
         return 1
-    print(html.unescape(out).strip())
+    _emit(html.unescape(out).strip())
     return 0
 
 

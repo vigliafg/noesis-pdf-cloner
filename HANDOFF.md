@@ -215,6 +215,16 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     target, radio motori, stato, targhetta e 💾 Esporta. Il **tooltip** del
     pulsante mostra motore attivo e pagina (`clone.translate.tooltip`), e il
     segnaposto dice "nella barra in alto". Nessuna scorciatoia.
+23. **Accentate corrette nel motore Google (v0.1.4)**: `pdf2zh_next` esegue il
+    nostro `gtranslate_cli.py` come subprocess con `encoding="utf-8"` e
+    `errors="replace"` (`clitranslator.py`); il CLI scriveva con l'encoding di
+    default del processo (su Windows **cp1252**), quindi le accentate uscivano
+    come byte non-UTF-8 e pdf2zh le sostituiva con **U+FFFD** («�»). Microsoft e
+    LLM non erano coinvolti (usano i percorsi JSON UTF-8 interni di pdf2zh).
+    Fix: `gtranslate_cli.py` forza **UTF-8** su stdin/stdout/stderr (lettura e
+    scrittura via buffer), e il motore passa `PYTHONIOENCODING=utf-8` al
+    subprocess (difesa in profondità). Vale per l'italiano **e** ogni non-ASCII.
+    Allineato in `app/gtranslate_cli.py` e `app/engine.py` del servizio.
 
 ---
 
@@ -222,7 +232,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **364 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **369 OK** (24 skip) |
 | Diagnostica (simulata) | 38 test: server OpenRouter locale (ok/401/402/429/404/timeout), binari `uv`/`pdf2zh_next` finti, runner |
 | Diagnostica reale su Linux | desktop e `--doctor` servizio: tutti i check `ok` (motore, chiave mascherata, modello HTTP 200, catena gratuita) |
 | E2E reale su Linux (chiave OpenRouter) | valida → `done` (26,6 s) · non valida → `error:invalid_key` (5,4 s) · assente → `error:missing_key` |
