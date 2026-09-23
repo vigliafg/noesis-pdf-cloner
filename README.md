@@ -91,8 +91,19 @@ macOS x64/arm64, Linux AppImage) dal workflow
 [`.github/workflows/release.yml`](.github/workflows/release.yml) (push di un tag
 `v*` o avvio manuale).
 
-Il binario contiene la GUI; il motore `pdf2zh_next` va installato **accanto
-all'eseguibile** con lo script incluso nella release:
+Il binario contiene la GUI **e `uv`** (versione pinnata, inclusa al build time):
+il motore `pdf2zh_next` va installato **accanto all'eseguibile**, senza dover
+installare nulla a mano.
+
+Si può installare il motore **dall'app**: ⚙️ Impostazioni → *Motore di
+clonazione* → **Installa motore**, oppure dal pulsante **Installa motore** nella
+striscia di avviso che compare nel pannello destro finché il motore manca. Se la
+cartella dell'app non è scrivibile (es. `C:\Program Files`, o l'AppImage che gira
+da un mount in sola lettura), il motore viene installato nella cartella dati
+per-utente e l'app lo rileva comunque.
+
+In alternativa, lo script incluso nella release installa il motore accanto
+all'eseguibile (se `uv` non è presente lo scarica da solo):
 
 ```bash
 ./setup_engine.sh                                        # Linux / macOS
@@ -102,17 +113,18 @@ powershell -ExecutionPolicy Bypass -File .\setup_engine.ps1   # Windows
 L'app rileva automaticamente `.venv2` accanto all'eseguibile; in alternativa si
 imposta il percorso in ⚙️ Impostazioni.
 
-Si può anche installare il motore **dall'app**: ⚙️ Impostazioni → *Motore di
-clonazione* → **Installa motore** (crea `.venv2` accanto all'eseguibile e vi
-installa `pdf2zh_next`; richiede `uv`, <https://docs.astral.sh/uv/>). Se la
-cartella dell'app non è scrivibile (es. `C:\Program Files`), il motore viene
-installato nella cartella dati per-utente e l'app lo rileva comunque.
-
 In caso di problemi, l'app scrive un log in
 `<cartella dati>/logs/noesis-pdf-cloner.log` (Windows:
 `%APPDATA%\noesis-pdf-cloner\logs\`, macOS:
 `~/Library/Application Support/noesis-pdf-cloner/logs/`, Linux:
 `~/.local/share/noesis-pdf-cloner/logs/`).
+
+### Componenti di terze parti incluse
+
+- **`uv`** (<https://github.com/astral-sh/uv>), licenza **MIT / Apache-2.0**:
+  scaricato a build time a versione pinnata e verificato via `sha256`
+  (`vendor/fetch_uv.py`), incluso nel bundle. Testi in
+  [`vendor/uv-licenses/`](vendor/uv-licenses/).
 
 ## Test
 

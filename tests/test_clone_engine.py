@@ -601,8 +601,66 @@ class EngineInstallTests(unittest.TestCase):
     def test_find_uv_none_when_missing(self):
         env = {k: v for k, v in os.environ.items() if k != "UV"}
         with mock.patch.dict(os.environ, env, clear=True):
-            with mock.patch.object(clone_engine.shutil, "which", return_value=None):
-                self.assertIsNone(clone_engine.find_uv())
+            with mock.patch.object(clone_engine.sys, "_MEIPASS", None, create=True):
+                with mock.patch.object(
+                    clone_engine.shutil, "which", return_value=None
+                ):
+                    self.assertIsNone(clone_engine.find_uv())
+
+    def test_find_uv_prefers_bundled_over_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            meipass = Path(tmp)
+            bundled = meipass / clone_engine._bin_name("uv")
+            bundled.write_text("")
+            env = {k: v for k, v in os.environ.items() if k != "UV"}
+            with mock.patch.dict(os.environ, env, clear=True), \
+                 mock.patch.object(
+                     clone_engine.sys, "_MEIPASS", str(meipass), create=True
+                 ), \
+                 mock.patch.object(
+                     clone_engine.shutil, "which", return_value="/usr/bin/uv"
+                 ):
+                self.assertEqual(clone_engine.find_uv(), str(bundled))
+
+    def test_find_uv_env_override_beats_bundled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            meipass = Path(tmp)
+            (meipass / clone_engine._bin_name("uv")).write_text("")
+            fake = Path(tmp) / "my-uv"
+            fake.write_text("")
+            with mock.patch.dict(os.environ, {"UV": str(fake)}), \
+                 mock.patch.object(
+                     clone_engine.sys, "_MEIPASS", str(meipass), create=True
+                 ):
+                self.assertEqual(clone_engine.find_uv(), str(fake))
+
+    def test_find_uv_falls_back_to_path_without_bundle(self):
+        env = {k: v for k, v in os.environ.items() if k != "UV"}
+        with mock.patch.dict(os.environ, env, clear=True), \
+             mock.patch.object(clone_engine.sys, "_MEIPASS", None, create=True), \
+             mock.patch.object(
+                 clone_engine.shutil, "which", return_value="/usr/bin/uv"
+             ):
+            self.assertEqual(clone_engine.find_uv(), "/usr/bin/uv")
+
+    def test_bundled_uv_none_without_meipass(self):
+        with mock.patch.object(clone_engine.sys, "_MEIPASS", None, create=True):
+            self.assertIsNone(clone_engine._bundled_uv())
+
+    def test_bundled_uv_gets_exec_bit(self):
+        if os.name == "nt":
+            self.skipTest("bit di esecuzione non applicabile su Windows")
+        with tempfile.TemporaryDirectory() as tmp:
+            meipass = Path(tmp)
+            bundled = meipass / "uv"
+            bundled.write_text("")
+            bundled.chmod(0o600)
+            with mock.patch.object(
+                clone_engine.sys, "_MEIPASS", str(meipass), create=True
+            ):
+                path = clone_engine._bundled_uv()
+            self.assertEqual(path, bundled)
+            self.assertTrue(os.access(bundled, os.X_OK))
 
     def test_install_engine_without_uv_raises(self):
         with mock.patch.object(clone_engine, "find_uv", return_value=None):

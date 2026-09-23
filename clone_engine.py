@@ -254,13 +254,35 @@ def engine_venv_python(venv_dir: str | Path) -> Path:
     return (venv / "Scripts" / "python.exe") if _is_windows() else (venv / "bin" / "python")
 
 
+def _bundled_uv() -> Path | None:
+    """``uv`` incluso nel bundle PyInstaller (``sys._MEIPASS``), se presente."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return None
+    path = Path(meipass) / _bin_name("uv")
+    if not path.is_file():
+        return None
+    if not _is_windows():
+        # Il bit di esecuzione può perdersi impacchettando i dati: lo rimettiamo.
+        with contextlib.suppress(OSError):
+            path.chmod(path.stat().st_mode | 0o111)
+    return path
+
+
 def find_uv() -> str | None:
-    """Eseguibile ``uv`` (env ``UV`` oppure PATH), o ``None`` se assente."""
+    """Localizza ``uv``.
+
+    Priorità: ``UV`` esplicito → ``uv`` incluso nel bundle (deterministico,
+    versione che abbiamo testato) → ``PATH`` di sistema.
+    """
     env = os.environ.get("UV")
     if env:
         candidate = Path(env).expanduser()
         if candidate.is_file():
             return str(candidate)
+    bundled = _bundled_uv()
+    if bundled is not None:
+        return str(bundled)
     return shutil.which("uv")
 
 

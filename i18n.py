@@ -568,6 +568,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Die aktuelle Seite mit der gewählten Engine übersetzen",
         "es": "Traduce la página actual con el motor seleccionado",
     },
+    "clone.engine_missing": {
+        "it": "Motore di traduzione non installato: installalo per tradurre le pagine.",
+        "en": "Translation engine not installed: install it to translate pages.",
+        "fr": "Moteur de traduction non installé : installez-le pour traduire les pages.",
+        "de": "Übersetzungs-Engine nicht installiert: installieren, um Seiten zu übersetzen.",
+        "es": "Motor de traducción no instalado: instálalo para traducir las páginas.",
+    },
+    "clone.engine_missing.install": {
+        "it": "Installa motore", "en": "Install engine",
+        "fr": "Installer le moteur", "de": "Engine installieren",
+        "es": "Instalar motor",
+    },
     "clone.pending_page": {
         "it": "Premi ▶ Traduci per tradurre questa pagina",
         "en": "Press ▶ Translate to translate this page",

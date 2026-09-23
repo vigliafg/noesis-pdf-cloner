@@ -5,14 +5,24 @@
 #
 #   ./setup_engine.sh
 #
-# Richiede Python 3.12 e 'uv' (https://docs.astral.sh/uv/).
+# Richiede 'uv' (https://docs.astral.sh/uv/): se manca, viene installato
+# automaticamente con l'installer ufficiale.
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
+# uv: usa quello presente, altrimenti scarica il binario ufficiale.
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv non trovato: lo installo (installer ufficiale astral.sh)…"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # L'installer mette uv in ~/.local/bin e aggiorna il profilo; nella sessione
+  # corrente potrebbe non essere ancora nel PATH.
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
 UV="${UV:-uv}"
 if ! command -v "$UV" >/dev/null 2>&1; then
-  echo "ERRORE: 'uv' non trovato. Installa uv da https://docs.astral.sh/uv/" >&2
+  echo "ERRORE: 'uv' non disponibile. Installalo da https://docs.astral.sh/uv/" >&2
   exit 1
 fi
 

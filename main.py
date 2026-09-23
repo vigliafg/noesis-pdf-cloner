@@ -3661,6 +3661,7 @@ class TranslatedPagePanel(QWidget):
     export_current_requested = pyqtSignal()
     translate_cancel_requested = pyqtSignal()
     translate_requested = pyqtSignal()
+    install_engine_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3768,6 +3769,38 @@ class TranslatedPagePanel(QWidget):
         self.btn_export.setMenu(export_menu)
         bar.addWidget(self.btn_export)
 
+        # ── Striscia "motore non installato" (nascosta se il motore c'è) ──
+        # Non blocca nulla: informa e offre il pulsante Installa. Si nasconde
+        # da sola appena il motore è rilevato.
+        self._engine_banner = QFrame()
+        self._engine_banner.setObjectName("engineBanner")
+        self._engine_banner.setStyleSheet(
+            "QFrame#engineBanner { background: #4a3f1c;"
+            " border-bottom: 1px solid #6d5c28; }"
+        )
+        banner_lay = QHBoxLayout(self._engine_banner)
+        banner_lay.setContentsMargins(10, 4, 10, 4)
+        banner_lay.setSpacing(10)
+        self._lbl_engine_banner = QLabel(T("clone.engine_missing"))
+        self._lbl_engine_banner.setWordWrap(True)
+        self._lbl_engine_banner.setStyleSheet(
+            "color: #ffd873; font-size: 12px; background: transparent;"
+        )
+        banner_lay.addWidget(self._lbl_engine_banner, 1)
+        self.btn_install_engine = QPushButton(T("clone.engine_missing.install"))
+        self.btn_install_engine.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_install_engine.setStyleSheet(
+            "QPushButton { background: #b5892a; color: #1a1a1a; border: none;"
+            " border-radius: 4px; padding: 3px 12px; font-size: 12px;"
+            " font-weight: bold; }"
+            "QPushButton:hover { background: #d0a03a; }"
+        )
+        self.btn_install_engine.clicked.connect(
+            self.install_engine_requested.emit
+        )
+        banner_lay.addWidget(self.btn_install_engine)
+        self._engine_banner.hide()
+
         # ── Page view (read-only) wrapped in a scroll area ────────────
         self.view = PdfPageView()
         self.scroll_area = QScrollArea()
@@ -3775,6 +3808,7 @@ class TranslatedPagePanel(QWidget):
         self.scroll_area.setWidget(self.view)
 
         layout.addWidget(self._bar)
+        layout.addWidget(self._engine_banner)
         layout.addWidget(self.scroll_area)
 
         # ── Spinner overlay (child, positioned manually) ──────────────
@@ -3848,7 +3882,13 @@ class TranslatedPagePanel(QWidget):
     def _reposition_collapse_btn(self):
         b = self._collapse_btn
         x = max(0, self.width() - b.width() - 6)
-        b.move(x, 6)
+        y = 6
+        # A barra collassata il pulsante non ha più la barra sotto di sé: se
+        # c'è la striscia "motore non installato" lo spostiamo sotto di essa
+        # per non coprirne il pulsante Installa.
+        if self._is_collapsed and self._engine_banner.isVisible():
+            y = self._engine_banner.sizeHint().height() + 6
+        b.move(x, y)
 
     # ── engine radios ─────────────────────────────────────────────────
 
@@ -3873,6 +3913,11 @@ class TranslatedPagePanel(QWidget):
 
     def set_target_language(self, target: str):
         self._lbl_target.setText(flag_endonym(target))
+
+    def set_engine_missing(self, missing: bool):
+        """Mostra/nasconde la striscia "motore di traduzione non installato"."""
+        self._engine_banner.setVisible(bool(missing))
+        self._reposition_collapse_btn()
 
     def show_page(self, pixmap: QPixmap | None):
         self.hide_spinner()
@@ -3952,6 +3997,8 @@ class TranslatedPagePanel(QWidget):
             T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
         )
         self.btn_export.setToolTip(T("clone.export.tip"))
+        self._lbl_engine_banner.setText(T("clone.engine_missing"))
+        self.btn_install_engine.setText(T("clone.engine_missing.install"))
         self.view.retranslate()
 
 
@@ -6179,6 +6226,9 @@ class MainWindow(QMainWindow):
         self.translated_panel.translate_requested.connect(
             self._on_translate_requested
         )
+        self.translated_panel.install_engine_requested.connect(
+            self._on_install_engine_banner
+        )
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
         # Ripristina lo stato collassato/espanso della barra motori (persistito).
@@ -6293,6 +6343,10 @@ class MainWindow(QMainWindow):
 
         # L'apertura del PDF è gestita in main(): argomento da riga di comando
         # oppure harrison2025.pdf nella directory corrente.
+
+        # Striscia "motore non installato": valutata subito all'avvio.
+        self._configure_clone_engine()
+        self._update_engine_banner()
 
     # ── toolbar ───────────────────────────────────────────────────────────
 
@@ -6977,6 +7031,7 @@ class MainWindow(QMainWindow):
         # Pannello clone: allinea lingua/engine e aggiorna la vista (on demand:
         # cambiare motore/lingua NON avvia più una traduzione).
         self._configure_clone_engine()
+        self._update_engine_banner()
         self.translated_panel.set_target_language(dst)
         self.translated_panel.set_engine(engine)
         if langs_changed or engine_changed:
@@ -7159,6 +7214,24 @@ class MainWindow(QMainWindow):
         self._clone_engine.lang_in = src
         self._clone_engine.lang_out = dst
         self._clone_engine.set_pdf2zh_bin(get_setting("pdf2zh_bin", "") or None)
+
+    def _update_engine_banner(self):
+        """Mostra la striscia "motore non installato" solo se il motore manca."""
+        self.translated_panel.set_engine_missing(
+            not self._clone_engine.available()
+        )
+
+    def _on_install_engine_banner(self):
+        """Pulsante *Installa* della striscia: apre il dialog di installazione."""
+        dlg = EngineInstallDialog(self)
+
+        def _installed(path: str):
+            self._configure_clone_engine()
+            self._update_engine_banner()
+            self.status_bar.showMessage(T("engine.install.done", path=path), 8000)
+
+        dlg.installed.connect(_installed)
+        dlg.exec()
 
     def _apply_api_key(self, key):
         """Salva/rimuove la chiave OpenRouter (archivio per-utente + env)."""

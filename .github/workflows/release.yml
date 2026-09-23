@@ -50,6 +50,13 @@ jobs:
             Windows) ICON="--icon assets/noesispdf.ico" ;;
             macOS)   ICON="--icon assets/noesispdf.icns" ;;
           esac
+          UVEXT=""
+          case "$RUNNER_OS" in
+            Windows) UVEXT=".exe" ;;
+          esac
+          # uv pinnato (sha256 verificata) incluso nel bundle: l'app può
+          # installare il motore senza che l'utente abbia uv installato.
+          python vendor/fetch_uv.py
           pyinstaller \
             --onefile \
             --windowed \
@@ -60,6 +67,7 @@ jobs:
             --collect-data pymupdf \
             --add-data "assets${SEP}assets" \
             --add-data "gtranslate_cli.py${SEP}." \
+            --add-data "vendor/uv-bin/uv${UVEXT}${SEP}." \
             main.py
 
       - name: Build NSIS installer (Windows)
@@ -122,6 +130,8 @@ jobs:
       - name: Build with PyInstaller
         shell: bash
         run: |
+          # uv pinnato (sha256 verificata) incluso nel bundle.
+          python vendor/fetch_uv.py
           pyinstaller \
             --onefile \
             --windowed \
@@ -131,6 +141,7 @@ jobs:
             --collect-data pymupdf \
             --add-data "assets:assets" \
             --add-data "gtranslate_cli.py:." \
+            --add-data "vendor/uv-bin/uv:." \
             main.py
 
       - name: Package AppImage

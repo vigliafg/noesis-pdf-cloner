@@ -158,6 +158,16 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     pagina; su conferma `CloneEngine.purge_page_cache` la rimuove (tutte le
     lingue di quella pagina, senza toccare le altre pagine, `split/` o gli altri
     motori) e annulla le traduzioni in background di quella pagina/motore.
+17. **`uv` incluso nel bundle (motore senza prerequisiti)**: il binario `uv`
+    (versione pinnata + `sha256`, licenza MIT/Apache-2.0) è scaricato a build
+    time da `vendor/fetch_uv.py` e incluso nel bundle PyInstaller. `find_uv()`
+    usa: `UV` esplicito → `uv` del bundle → `PATH`. Così "Installa motore"
+    funziona senza che l'utente abbia `uv` installato.
+18. **Striscia "motore non installato"**: nel pannello destro, finché il motore
+    manca, compare una striscia ambra non bloccante con il pulsante **Installa
+    motore** (apre il dialog di installazione); sparisce da sola appena il
+    motore è rilevato. `setup_engine.sh`/`.ps1` ora installano `uv` da soli se
+    assente.
 
 ---
 
@@ -165,7 +175,8 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **300 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **321 OK** (24 skip) |
+| `uv` nel bundle | `vendor/fetch_uv.py` scarica uv 0.12.17, sha256 verificata, `./vendor/uv-bin/uv --version` OK |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
 | E2E reale pagina 156 di `ha22.pdf` | google 53.3 s · bing 44.1 s · openai 65.3 s — tutti `done` |
 | Contenuto clone pagina 156 | layout preservato, **figura MRI preservata**, `FIGURA 16-1`/`TABELLA 16-4` |
@@ -246,7 +257,7 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
    attendere la fine della pagina; i risultati obsoleti restano scartati dal
    generation guard.
 7. **Docling** e reintegrazione degli strumenti a zone: lavoro futuro previsto.
-8. **AppImage e motore `.venv2`** (da fare domani): l'AppImage gira da un mount
+8. **AppImage e motore `.venv2`** (rinviato): l'AppImage gira da un mount
    temporaneo in sola lettura, quindi il `.venv2` non può stare "accanto
    all'eseguibile". Da fare:
    - far cercare all'app anche `$APPIMAGE`/`$APPDIR`, così rileva un `.venv2`
@@ -255,71 +266,32 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
      motore** (installa in `~/.local/share/noesis-pdf-cloner/engine/.venv2`,
      già auto-rilevato) oppure impostare il percorso a mano in ⚙️ Impostazioni →
      *Eseguibile pdf2zh_next*.
-9. **Avviso "motore non installato"** (da fare domani): all'avvio, o al primo
-   ▶ Traduci senza motore, mostrare un promemoria con scorciatoia a
-   ⚙️ Impostazioni → *Installa motore*, invece del solo messaggio
-   *"pdf2zh_next non trovato"*. Oggi l'installazione è **manuale** (nessun
-   prompt automatico) e richiede `uv` già presente (~1,1 GB da scaricare).
-   - **Bootstrap di `uv`** (valutare): se `find_uv()` è `None`, scaricare il
-     binario ufficiale `uv` per la piattaforma (asset GitHub, es.
-     `uv-x86_64-unknown-linux-gnu.tar.gz`, `uv-x86_64-pc-windows-msvc.zip`,
-     `uv-*-apple-darwin.tar.gz`) con **versione pinnata + verifica `.sha256`**,
-     scompattarlo in `<app-data>/tools/uv` e usarlo per `install_engine`. `uv`
-     gestisce da sé anche il download di Python 3.12 → "Installa motore"
-     diventerebbe davvero un click senza prerequisiti (a parte la rete).
-     Attenzione a Proxy/offline, Gatekeeper (macOS) e SmartScreen/AV (Windows).
-10. **Robustezza AppImage su Linux** (valutare): build su `ubuntu-22.04` per una
+9. ~~**Avviso "motore non installato"**~~ → **fatto (v0.1.4)**: striscia ambra
+   non bloccante nel pannello destro con pulsante **Installa motore**, visibile
+   finché il motore manca (`TranslatedPagePanel.set_engine_missing`,
+   `MainWindow._update_engine_banner`).
+10. **Robustezza AppImage su Linux** (rinviato): build su `ubuntu-22.04` per una
     glibc più vecchia (compatibilità distro); documentare `libfuse2` e
     `./NoesisPDFCloner-x86_64.AppImage --appimage-extract-and-run`; valutare in
     aggiunta un `.tar.gz` estraibile senza FUSE.
-11. **Alternativa robusta: `uv` incluso nel bundle** (da fare domani): invece di
-    scaricare `uv` a runtime, includerlo nel bundle PyInstaller con
-    `--add-data` (binario per piattaforma, da `astral-sh/uv`), così la parte
-    installer funziona **anche offline e senza download del tool**; resta da
-    scaricare solo il motore (~1,1 GB). Da valutare:
-    - dimensioni: +~25 MB per build (una tantum, trascurabile);
-    - aggiornare il binario `uv` a ogni release dell'app;
-    - includere le licenze **MIT/Apache-2.0** di `uv`;
-    - precedenza: `uv` di sistema/PATH (per aggiornamenti) → `uv` incluso nel
-      bundle → (fallback) download a runtime del punto 9.
-12. **Setup Windows: motore integrato nell'installer NSIS** (da fare domani): oggi
-    `installer.nsi` **copia** solo `setup_engine.ps1` (non lo esegue) e il
-    motore va installato dopo, a mano o dal pulsante in-app; anche su Windows
-    `install_engine` richiede `uv` già presente. Idea: rendere l'installer un
-    one-shot con una **componente opzionale** *"Motore di traduzione"*:
-    - includere `uv.exe` nell'installer (`File "vendor\uv.exe"`, da
-      `uv-x86_64-pc-windows-msvc.zip`) — stessa logica del punto 11;
-    - nella sezione opzionale eseguire, senza finestra console
-      (`nsExec::ExecToLog`), `uv venv --python 3.12` + `uv pip install
-      pdf2zh_next`, con `DetailsPrint`/progress e avviso ~1,1 GB (scaricabile
-      dopo se si deseleziona);
-    - destinazione del `.venv2`: `%LOCALAPPDATA%\noesis-pdf-cloner\engine\.venv2`
-      (già auto-rilevato) per non dipendere da `C:\Program Files` non
-      scrivibile;
-    - alternativa più leggera: far **bootstrap di `uv` dentro
-      `setup_engine.ps1`** (scarica `uv.exe` se assente) — speculare al punto 9,
-      senza toccare l'NSIS;
-    - attenzione a SmartScreen/Defender (installer non firmato) e ai tempi del
-      download.
+11. ~~**`uv` incluso nel bundle**~~ → **fatto (v0.1.4)**: `vendor/fetch_uv.py`
+    scarica `uv` pinnato (`UV_VERSION = 0.12.17`) con verifica `sha256` a build
+    time; incluso nel bundle PyInstaller (`--add-data`, come
+    `gtranslate_cli.py`); `find_uv()` = `UV` → bundle (`sys._MEIPASS`) →
+    `PATH`; licenze MIT/Apache-2.0 in `vendor/uv-licenses/`. Da ricordare:
+    **aggiornare `UV_VERSION` + le hash** a ogni aggiornamento di `uv`.
+12. ~~**Bootstrap di `uv` negli script**~~ → **fatto (v0.1.4)**:
+    `setup_engine.sh`/`.ps1` installano `uv` da soli se assente. **Resta
+    opzionale** (da valutare): integrare il motore nell'installer NSIS come
+    **componente opzionale e skippabile** (`uv.exe` incluso, `nsExec::ExecToLog`,
+    destinazione `%LOCALAPPDATA%\noesis-pdf-cloner\engine\.venv2`); attenzione a
+    SmartScreen/Defender e ai tempi del download di ~1,1 GB. Meglio comunque:
+    installer veloce → primo avvio → la app scarica il motore.
 
-### Ordine consigliato (Windows)
+### Fatto il 23/09 (v0.1.4)
 
-1. **Punto 11 — `uv` incluso nel bundle** (mossa a più alto rendimento): un solo
-   lavoro che sistema **Windows + Linux AppImage + macOS**, elimina il
-   prerequisito `uv` e il download a runtime di un binario (meno problemi
-   AV/SmartScreen). `uv.exe` si aggiunge come già si fa per `gtranslate_cli.py`
-   (risolto via `sys._MEIPASS`); `find_uv()` lo preferisce a PATH.
-2. **Punto 9 — avviso "motore non installato"** al primo avvio, con scorciatoia
-   a ⚙️ Impostazioni → *Installa motore*: il motore resta scaricato **dalla
-   app**, che ha già progress/log/cancel. Costo basso, grande effetto UX.
-3. **Punto 12 versione leggera** — bootstrap di `uv` dentro `setup_engine.ps1`:
-   fallback per il portable / uso da script.
-4. **Punto 12 versione NSIS** (motore durante il setup): **opzionale e
-   skippabile**, o da rimandare. Non metterei il download di 1,1 GB dentro
-   l'installer come default: è lungo, fragile su rete instabile, scrive in
-   `C:\Program Files` (serve admin; altrimenti `%LOCALAPPDATA%`) e l'installer
-   non è firmato. Meglio: installer veloce → primo avvio → la app scarica il
-   motore.
+`uv` nel bundle → avviso "motore non installato" → bootstrap `uv` negli script
+(ordine consigliato rispettato). Restano in coda i punti 8 e 10 (AppImage).
 
 ---
 
@@ -335,7 +307,9 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
 | `tests/test_clone_engine.py` | Split/pipeline/flags/cache + regressione off-by-one |
 | `tests/test_clone_panel.py` | Collasso barra motori (offscreen) |
 | `tests/test_i18n.py` | Completezza traduzioni + config |
-| `run.sh`, `setup_engine.sh`, `setup_engine.ps1` | Bootstrap venv / installazione motore |
+| `run.sh`, `setup_engine.sh`, `setup_engine.ps1` | Bootstrap venv / installazione motore (auto-bootstrap di `uv`) |
+| `vendor/fetch_uv.py` | Scarica `uv` pinnato + verifica `sha256` (incluso nel bundle) |
+| `vendor/uv-licenses/` | Licenze MIT/Apache-2.0 di `uv` |
 | `.github/workflows/release.yml` | Release multipiattaforma (PyInstaller + NSIS + AppImage) |
 | `.github/workflows/pages.yml` | Pubblica `docs/help/` su GitHub Pages |
 | `assets/` | Logo sorgente `assets/PDFCLONER.jpeg` e icone di release (`noesispdf.ico`/`.icns`/`-256.png`) generate da esso; l'icona è usata anche a runtime (`app.setWindowIcon`) |
@@ -350,9 +324,10 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
 - Visibilità: **pubblica**.
 - GitHub Pages: abilitato con `build_type=workflow`; guida a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
-- Release: esistenti **v0.1.2** e (in preparazione) **v0.1.3**; per pubblicarne una nuova
-  creare un tag `v*` e pusharlo (`git tag v0.1.3 && git push origin v0.1.3`). Un
-  `workflow_dispatch` su `main` produce solo artifact, senza release.
+- Release: esistenti **v0.1.2**, **v0.1.3** e (in preparazione) **v0.1.4**; per
+  pubblicarne una nuova creare un tag `v*` e pusharlo
+  (`git tag v0.1.4 && git push origin v0.1.4`). Un `workflow_dispatch` su `main`
+  produce solo artifact, senza release.
 
 ---
 

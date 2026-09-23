@@ -119,6 +119,38 @@ class CollapsibleBarTests(unittest.TestCase):
         self.assertEqual(self.panel._spinner.text(), i18n.T("clone.pending_page"))
         self.assertEqual(self.panel._lbl_status.text(), i18n.T("clone.status_todo"))
 
+    def test_engine_banner_hidden_by_default(self):
+        self.assertTrue(self.panel._engine_banner.isHidden())
+
+    def test_set_engine_missing_toggles_banner(self):
+        self.panel.set_engine_missing(True)
+        self._app.processEvents()
+        self.assertTrue(self.panel._engine_banner.isVisible())
+        self.panel.set_engine_missing(False)
+        self._app.processEvents()
+        self.assertFalse(self.panel._engine_banner.isVisible())
+
+    def test_install_engine_button_emits(self):
+        received = []
+        self.panel.install_engine_requested.connect(lambda: received.append(True))
+        self.panel.btn_install_engine.click()
+        self.assertEqual(received, [True])
+
+    def test_engine_banner_is_translated(self):
+        self.assertEqual(
+            self.panel._lbl_engine_banner.text(), i18n.T("clone.engine_missing")
+        )
+        self.assertEqual(
+            self.panel.btn_install_engine.text(), i18n.T("settings.clone.install")
+        )
+
+    def test_collapse_btn_moves_below_banner_when_collapsed(self):
+        self.panel.set_collapsed(True)
+        y_without = self.panel._collapse_btn.y()
+        self.panel.set_engine_missing(True)
+        self._app.processEvents()
+        self.assertGreater(self.panel._collapse_btn.y(), y_without)
+
 
 if __name__ == "__main__":
     unittest.main()

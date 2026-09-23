@@ -13,6 +13,9 @@ dist/
 AppDir/
 *.AppImage
 
+# uv scaricato da vendor/fetch_uv.py (incluso nel bundle in build)
+vendor/uv-bin/
+
 # engine / translation caches
 cache/
 engine_events.jsonl

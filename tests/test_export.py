@@ -1062,6 +1062,19 @@ class OnDemandTranslationTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(i18n.get_translation_engine(), "bing")
 
+    def test_engine_banner_reflects_availability(self):
+        engine = self._Engine()
+        engine.available = lambda: False
+        window = self._window(engine)
+        try:
+            window._update_engine_banner()
+            self.assertFalse(window.translated_panel._engine_banner.isHidden())
+            engine.available = lambda: True
+            window._update_engine_banner()
+            self.assertTrue(window.translated_panel._engine_banner.isHidden())
+        finally:
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

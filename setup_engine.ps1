@@ -4,9 +4,19 @@
 #
 #   powershell -ExecutionPolicy Bypass -File .\setup_engine.ps1
 #
-# Richiede Python 3.12 e 'uv' (https://docs.astral.sh/uv/).
+# Richiede 'uv' (https://docs.astral.sh/uv/): se manca, viene installato
+# automaticamente con l'installer ufficiale.
 $ErrorActionPreference = "Stop"
 Set-Location -Path $PSScriptRoot
+
+# uv: usa quello presente, altrimenti scarica il binario ufficiale.
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Host "uv non trovato: lo installo (installer ufficiale astral.sh)..."
+    Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+    # L'installer mette uv in %USERPROFILE%\.local\bin e aggiorna il profilo;
+    # nella sessione corrente potrebbe non essere ancora nel PATH.
+    $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+}
 
 $uv = if ($env:UV) { $env:UV } else { "uv" }
 if (-not (Get-Command $uv -ErrorAction SilentlyContinue)) {
