@@ -580,6 +580,29 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Installer le moteur", "de": "Engine installieren",
         "es": "Instalar motor",
     },
+    "clone.key_missing": {
+        "it": "Manca la chiave OpenRouter per il motore LLM. Puoi inserirla "
+              "oppure usare un motore gratuito (Google/Bing), che non la richiede.",
+        "en": "The OpenRouter key for the LLM engine is missing. Enter it or use "
+              "a free engine (Google/Bing), which does not require it.",
+        "fr": "La clé OpenRouter pour le moteur LLM est absente. Saisissez-la ou "
+              "utilisez un moteur gratuit (Google/Bing), qui ne la demande pas.",
+        "de": "Der OpenRouter-Schlüssel für die LLM-Engine fehlt. Trage ihn ein "
+              "oder nutze eine kostenlose Engine (Google/Bing), die ihn nicht "
+              "benötigt.",
+        "es": "Falta la clave de OpenRouter para el motor LLM. Introdúcela o usa "
+              "un motor gratuito (Google/Bing), que no la necesita.",
+    },
+    "clone.key_missing.enter": {
+        "it": "Inserisci chiave", "en": "Enter key",
+        "fr": "Saisir la clé", "de": "Schlüssel eingeben",
+        "es": "Introducir clave",
+    },
+    "clone.key_missing.use_free": {
+        "it": "Usa Google/Bing", "en": "Use Google/Bing",
+        "fr": "Utiliser Google/Bing", "de": "Google/Bing nutzen",
+        "es": "Usar Google/Bing",
+    },
     "clone.pending_page": {
         "it": "Premi ▶ Traduci per tradurre questa pagina",
         "en": "Press ▶ Translate to translate this page",
@@ -682,15 +705,20 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "clone.no_key": {
         "it": "Serve una chiave OpenRouter per il motore LLM: inseriscila in "
-              "⚙️ Impostazioni → Motore (o in un dialogo dedicato).",
+              "⚙️ Impostazioni → Motore (o in un dialogo dedicato). In "
+              "alternativa usa il motore Google/Bing: non serve la chiave.",
         "en": "An OpenRouter key is required for the LLM engine: enter it in "
-              "⚙️ Settings → Engine (or in the dedicated dialog).",
+              "⚙️ Settings → Engine (or in the dedicated dialog). Alternatively "
+              "use the Google/Bing engine: no key needed.",
         "fr": "Une clé OpenRouter est requise pour le moteur LLM : saisissez-la "
-              "dans ⚙️ Paramètres → Moteur (ou dans la boîte dédiée).",
+              "dans ⚙️ Paramètres → Moteur (ou dans la boîte dédiée). Sinon, "
+              "utilisez le moteur Google/Bing : aucune clé requise.",
         "de": "Für die LLM-Engine ist ein OpenRouter-Schlüssel nötig: trage ihn "
-              "in ⚙️ Einstellungen → Engine ein (oder im Dialog).",
+              "in ⚙️ Einstellungen → Engine ein (oder im Dialog). Alternativ die "
+              "Google/Bing-Engine nutzen: kein Schlüssel nötig.",
         "es": "Se necesita una clave OpenRouter para el motor LLM: introdúcela "
-              "en ⚙️ Ajustes → Motor (o en el diálogo dedicado).",
+              "en ⚙️ Ajustes → Motor (o en el diálogo dedicado). Si no, usa el "
+              "motor Google/Bing: no hace falta clave.",
     },
     "clone.invalid_key": {
         "it": "Chiave OpenRouter non valida o rifiutata (401). Controllala in "

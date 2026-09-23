@@ -190,6 +190,11 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     rete, oppure usa Google/Bing). Su Windows, se la variabile esiste nel
     registro ma non è stata ereditata dal processo, l'app lo dice ("riavvia
     l'app"). La classificazione è **allineata** in `app/engine.py` del servizio.
+    Inoltre, quando il motore LLM è selezionato e **manca la chiave**, nel
+    pannello destro compare una **striscia "chiave mancante"** (blu, come quella
+    del motore non installato) con i pulsanti **Inserisci chiave** (apre il
+    dialog) e **Usa Google/Bing** (passa a un motore gratuito, che non richiede
+    chiave).
 
 ---
 

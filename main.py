@@ -3693,6 +3693,8 @@ class TranslatedPagePanel(QWidget):
     translate_cancel_requested = pyqtSignal()
     translate_requested = pyqtSignal()
     install_engine_requested = pyqtSignal()
+    enter_key_requested = pyqtSignal()
+    use_free_engine_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3832,6 +3834,46 @@ class TranslatedPagePanel(QWidget):
         banner_lay.addWidget(self.btn_install_engine)
         self._engine_banner.hide()
 
+        # ── Striscia "chiave OpenRouter mancante" (motore LLM selezionato) ──
+        # Non blocca: informa e offre le due azioni (inserisci la chiave oppure
+        # passa a un motore gratuito). Si nasconde quando la chiave c'è.
+        self._key_banner = QFrame()
+        self._key_banner.setObjectName("keyBanner")
+        self._key_banner.setStyleSheet(
+            "QFrame#keyBanner { background: #1c2a4a;"
+            " border-bottom: 1px solid #28406d; }"
+        )
+        key_lay = QHBoxLayout(self._key_banner)
+        key_lay.setContentsMargins(10, 4, 10, 4)
+        key_lay.setSpacing(10)
+        self._lbl_key_banner = QLabel(T("clone.key_missing"))
+        self._lbl_key_banner.setWordWrap(True)
+        self._lbl_key_banner.setStyleSheet(
+            "color: #9dc0ff; font-size: 12px; background: transparent;"
+        )
+        key_lay.addWidget(self._lbl_key_banner, 1)
+        self.btn_enter_key = QPushButton(T("clone.key_missing.enter"))
+        self.btn_enter_key.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_enter_key.setStyleSheet(
+            "QPushButton { background: #2a5db5; color: #fff; border: none;"
+            " border-radius: 4px; padding: 3px 12px; font-size: 12px;"
+            " font-weight: bold; }"
+            "QPushButton:hover { background: #3a78d0; }"
+        )
+        self.btn_enter_key.clicked.connect(self.enter_key_requested.emit)
+        key_lay.addWidget(self.btn_enter_key)
+        self.btn_use_free = QPushButton(T("clone.key_missing.use_free"))
+        self.btn_use_free.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_use_free.setStyleSheet(
+            "QPushButton { background: #3a3a3a; color: #eaeaea;"
+            " border: 1px solid #555; border-radius: 4px; padding: 3px 12px;"
+            " font-size: 12px; }"
+            "QPushButton:hover { background: #4a4a4a; }"
+        )
+        self.btn_use_free.clicked.connect(self.use_free_engine_requested.emit)
+        key_lay.addWidget(self.btn_use_free)
+        self._key_banner.hide()
+
         # ── Page view (read-only) wrapped in a scroll area ────────────
         self.view = PdfPageView()
         self.scroll_area = QScrollArea()
@@ -3840,6 +3882,7 @@ class TranslatedPagePanel(QWidget):
 
         layout.addWidget(self._bar)
         layout.addWidget(self._engine_banner)
+        layout.addWidget(self._key_banner)
         layout.addWidget(self.scroll_area)
 
         # ── Spinner overlay (child, positioned manually) ──────────────
@@ -3915,10 +3958,16 @@ class TranslatedPagePanel(QWidget):
         x = max(0, self.width() - b.width() - 6)
         y = 6
         # A barra collassata il pulsante non ha più la barra sotto di sé: se
-        # c'è la striscia "motore non installato" lo spostiamo sotto di essa
-        # per non coprirne il pulsante Installa.
-        if self._is_collapsed and self._engine_banner.isVisible():
-            y = self._engine_banner.sizeHint().height() + 6
+        # sono visibili le strisce informative le spostiamo sotto di esse per
+        # non coprirne i pulsanti.
+        if self._is_collapsed:
+            offset = 0
+            if not self._engine_banner.isHidden():
+                offset += self._engine_banner.sizeHint().height()
+            if not self._key_banner.isHidden():
+                offset += self._key_banner.sizeHint().height()
+            if offset:
+                y = offset + 6
         b.move(x, y)
 
     # ── engine radios ─────────────────────────────────────────────────
@@ -3948,6 +3997,11 @@ class TranslatedPagePanel(QWidget):
     def set_engine_missing(self, missing: bool):
         """Mostra/nasconde la striscia "motore di traduzione non installato"."""
         self._engine_banner.setVisible(bool(missing))
+        self._reposition_collapse_btn()
+
+    def set_engine_key_missing(self, missing: bool):
+        """Mostra/nasconde la striscia "chiave OpenRouter mancante" (LLM)."""
+        self._key_banner.setVisible(bool(missing))
         self._reposition_collapse_btn()
 
     def show_page(self, pixmap: QPixmap | None):
@@ -4030,6 +4084,9 @@ class TranslatedPagePanel(QWidget):
         self.btn_export.setToolTip(T("clone.export.tip"))
         self._lbl_engine_banner.setText(T("clone.engine_missing"))
         self.btn_install_engine.setText(T("clone.engine_missing.install"))
+        self._lbl_key_banner.setText(T("clone.key_missing"))
+        self.btn_enter_key.setText(T("clone.key_missing.enter"))
+        self.btn_use_free.setText(T("clone.key_missing.use_free"))
         self.view.retranslate()
 
 
@@ -6294,6 +6351,12 @@ class MainWindow(QMainWindow):
         self.translated_panel.install_engine_requested.connect(
             self._on_install_engine_banner
         )
+        self.translated_panel.enter_key_requested.connect(
+            self._on_enter_key_banner
+        )
+        self.translated_panel.use_free_engine_requested.connect(
+            self._on_use_free_engine_banner
+        )
         self.translated_panel.set_target_language(get_target_lang())
         self.translated_panel.set_engine(get_translation_engine())
         # Ripristina lo stato collassato/espanso della barra motori (persistito).
@@ -7281,10 +7344,17 @@ class MainWindow(QMainWindow):
         self._clone_engine.set_pdf2zh_bin(get_setting("pdf2zh_bin", "") or None)
 
     def _update_engine_banner(self):
-        """Mostra la striscia "motore non installato" solo se il motore manca."""
+        """Aggiorna le strisce informative (motore e chiave mancanti)."""
         self.translated_panel.set_engine_missing(
             not self._clone_engine.available()
         )
+        self.translated_panel.set_engine_key_missing(self._llm_key_needed())
+
+    def _llm_key_needed(self) -> bool:
+        """True se il motore LLM è selezionato e non c'è una chiave disponibile."""
+        if get_translation_engine() != "llm":
+            return False
+        return not bool((os.environ.get(keystore.ENV_VAR) or "").strip())
 
     def _on_install_engine_banner(self):
         """Pulsante *Installa* della striscia: apre il dialog di installazione."""
@@ -7297,6 +7367,17 @@ class MainWindow(QMainWindow):
 
         dlg.installed.connect(_installed)
         dlg.exec()
+
+    def _on_enter_key_banner(self):
+        """Pulsante *Inserisci chiave* della striscia: apre il dialog dedicato."""
+        if self._prompt_api_key():
+            self._update_engine_banner()
+            if self._pdf_path:
+                self._show_clone_for_page(self._current_page)
+
+    def _on_use_free_engine_banner(self):
+        """Pulsante *Usa Google/Bing*: passa a un motore gratuito (senza chiave)."""
+        self.translated_panel.set_engine("google", emit=True)
 
     def _apply_api_key(self, key):
         """Salva/rimuove la chiave OpenRouter (archivio per-utente + env).
@@ -8003,6 +8084,7 @@ class MainWindow(QMainWindow):
         if engine == "llm" and self._ensure_llm_key(force=True):
             # Verifica informativa (non blocca): segnala subito una chiave invalida.
             self._start_key_verify(None)
+        self._update_engine_banner()
         self._clone_generation += 1
         self._retire_clone_thread()
         self._configure_clone_engine()
