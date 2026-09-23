@@ -693,16 +693,117 @@ _STRINGS: dict[str, dict[str, str]] = {
               "en ⚙️ Ajustes → Motor (o en el diálogo dedicado).",
     },
     "clone.invalid_key": {
-        "it": "Chiave OpenRouter non valida (401). Controllala in "
-              "⚙️ Impostazioni → Motore.",
-        "en": "Invalid OpenRouter key (401). Check it in "
+        "it": "Chiave OpenRouter non valida o rifiutata (401). Controllala in "
+              "⚙️ Impostazioni → Motore. Nota: la chiave salvata lì ha la "
+              "precedenza sulla variabile di sistema OPENROUTER_API_KEY.",
+        "en": "Invalid or rejected OpenRouter key (401). Check it in "
+              "⚙️ Settings → Engine. Note: the key saved there overrides the "
+              "OPENROUTER_API_KEY system variable.",
+        "fr": "Clé OpenRouter non valide ou refusée (401). Vérifiez-la dans "
+              "⚙️ Paramètres → Moteur. Remarque : la clé enregistrée là-bas est "
+              "prioritaire sur la variable système OPENROUTER_API_KEY.",
+        "de": "Ungültiger oder abgelehnter OpenRouter-Schlüssel (401). Prüfe ihn "
+              "in ⚙️ Einstellungen → Engine. Hinweis: Der dort gespeicherte "
+              "Schlüssel hat Vorrang vor der Systemvariable OPENROUTER_API_KEY.",
+        "es": "Clave OpenRouter no válida o rechazada (401). Compruébala en "
+              "⚙️ Ajustes → Motor. Nota: la clave guardada allí tiene prioridad "
+              "sobre la variable de sistema OPENROUTER_API_KEY.",
+    },
+    "clone.err.forbidden": {
+        "it": "OpenRouter ha rifiutato l'accesso (403). Controlla la chiave e i "
+              "permessi in ⚙️ Impostazioni → Motore.",
+        "en": "OpenRouter refused access (403). Check the key and permissions in "
               "⚙️ Settings → Engine.",
-        "fr": "Clé OpenRouter non valide (401). Vérifiez-la dans "
+        "fr": "OpenRouter a refusé l'accès (403). Vérifiez la clé et les "
+              "autorisations dans ⚙️ Paramètres → Moteur.",
+        "de": "OpenRouter hat den Zugriff verweigert (403). Prüfe Schlüssel und "
+              "Berechtigungen in ⚙️ Einstellungen → Engine.",
+        "es": "OpenRouter rechazó el acceso (403). Comprueba la clave y los "
+              "permisos en ⚙️ Ajustes → Motor.",
+    },
+    "clone.err.no_credits": {
+        "it": "Credito OpenRouter esaurito (402). Aggiungi credito su OpenRouter "
+              "oppure usa il motore Google/Bing.",
+        "en": "OpenRouter credit exhausted (402). Add credit on OpenRouter or use "
+              "the Google/Bing engine.",
+        "fr": "Crédit OpenRouter épuisé (402). Ajoutez du crédit sur OpenRouter "
+              "ou utilisez le moteur Google/Bing.",
+        "de": "OpenRouter-Guthaben aufgebraucht (402). Lade Guthaben bei "
+              "OpenRouter auf oder nutze die Google/Bing-Engine.",
+        "es": "Crédito de OpenRouter agotado (402). Añade crédito en OpenRouter "
+              "o usa el motor Google/Bing.",
+    },
+    "clone.err.rate_limited": {
+        "it": "Troppe richieste a OpenRouter (429). Attendi qualche istante e "
+              "riprova, oppure usa il motore Google/Bing.",
+        "en": "Too many requests to OpenRouter (429). Wait a moment and retry, "
+              "or use the Google/Bing engine.",
+        "fr": "Trop de requêtes vers OpenRouter (429). Attendez un instant et "
+              "réessayez, ou utilisez le moteur Google/Bing.",
+        "de": "Zu viele Anfragen an OpenRouter (429). Warte kurz und versuche es "
+              "erneut oder nutze die Google/Bing-Engine.",
+        "es": "Demasiadas solicitudes a OpenRouter (429). Espera un momento y "
+              "reintenta, o usa el motor Google/Bing.",
+    },
+    "clone.err.model_not_found": {
+        "it": "Modello LLM non disponibile su OpenRouter (404). Verifica il "
+              "modello o usa il motore Google/Bing.",
+        "en": "LLM model not available on OpenRouter (404). Check the model or "
+              "use the Google/Bing engine.",
+        "fr": "Modèle LLM indisponible sur OpenRouter (404). Vérifiez le modèle "
+              "ou utilisez le moteur Google/Bing.",
+        "de": "LLM-Modell auf OpenRouter nicht verfügbar (404). Prüfe das Modell "
+              "oder nutze die Google/Bing-Engine.",
+        "es": "Modelo LLM no disponible en OpenRouter (404). Comprueba el modelo "
+              "o usa el motor Google/Bing.",
+    },
+    "clone.err.network": {
+        "it": "Impossibile contattare OpenRouter (rete, proxy o timeout). "
+              "Controlla la connessione e riprova; puoi intanto usare il motore "
+              "Google/Bing.",
+        "en": "Could not reach OpenRouter (network, proxy or timeout). Check your "
+              "connection and retry; you can use the Google/Bing engine meanwhile.",
+        "fr": "Impossible de joindre OpenRouter (réseau, proxy ou délai). "
+              "Vérifiez la connexion et réessayez ; vous pouvez utiliser le moteur "
+              "Google/Bing en attendant.",
+        "de": "OpenRouter nicht erreichbar (Netzwerk, Proxy oder Timeout). Prüfe "
+              "die Verbindung und versuche es erneut; nutze in der Zwischenzeit "
+              "die Google/Bing-Engine.",
+        "es": "No se pudo contactar con OpenRouter (red, proxy o tiempo de "
+              "espera). Comprueba la conexión y reintenta; mientras tanto puedes "
+              "usar el motor Google/Bing.",
+    },
+    "clone.key_check": {
+        "it": "Verifica della chiave OpenRouter…",
+        "en": "Checking the OpenRouter key…",
+        "fr": "Vérification de la clé OpenRouter…",
+        "de": "OpenRouter-Schlüssel wird geprüft…",
+        "es": "Comprobando la clave de OpenRouter…",
+    },
+    "clone.status_key_check": {
+        "it": "verifica chiave…", "en": "checking key…",
+        "fr": "vérification de la clé…", "de": "Schlüssel wird geprüft…",
+        "es": "comprobando clave…",
+    },
+    "clone.key_stale": {
+        "it": "La variabile di sistema OPENROUTER_API_KEY è impostata ma questa "
+              "app non l'ha ancora caricata (su Windows serve riavviare l'app "
+              "dopo averla creata). Riapri l'app oppure inserisci la chiave in "
+              "⚙️ Impostazioni → Motore.",
+        "en": "The OPENROUTER_API_KEY system variable is set but this app has not "
+              "loaded it yet (on Windows, restart the app after creating it). "
+              "Reopen the app or enter the key in ⚙️ Settings → Engine.",
+        "fr": "La variable système OPENROUTER_API_KEY est définie mais cette app "
+              "ne l'a pas encore chargée (sous Windows, redémarrez l'app après "
+              "l'avoir créée). Rouvrez l'app ou saisissez la clé dans "
               "⚙️ Paramètres → Moteur.",
-        "de": "Ungültiger OpenRouter-Schlüssel (401). Prüfe ihn in "
-              "⚙️ Einstellungen → Engine.",
-        "es": "Clave OpenRouter no válida (401). Compruébala en "
-              "⚙️ Ajustes → Motor.",
+        "de": "Die Systemvariable OPENROUTER_API_KEY ist gesetzt, aber diese App "
+              "hat sie noch nicht geladen (unter Windows die App nach dem Anlegen "
+              "neu starten). Starte die App neu oder trage den Schlüssel in "
+              "⚙️ Einstellungen → Engine ein.",
+        "es": "La variable de sistema OPENROUTER_API_KEY está definida pero esta "
+              "app aún no la ha cargado (en Windows, reinicia la app después de "
+              "crearla). Reabre la app o introduce la clave en ⚙️ Ajustes → Motor.",
     },
     "clone.no_engine": {
         "it": "Motore pdf2zh_next non trovato.\nInstallalo con «Installa motore» in ⚙️ Impostazioni.",
@@ -1505,6 +1606,64 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Créer ou gérer une clé sur OpenRouter",
         "de": "Schlüssel auf OpenRouter erstellen oder verwalten",
         "es": "Crear o gestionar una clave en OpenRouter",
+    },
+    "apikey.source.file": {
+        "it": "Chiave attiva: quella salvata qui.",
+        "en": "Active key: the one saved here.",
+        "fr": "Clé active : celle enregistrée ici.",
+        "de": "Aktiver Schlüssel: der hier gespeicherte.",
+        "es": "Clave activa: la guardada aquí.",
+    },
+    "apikey.source.env_shadowed": {
+        "it": "La variabile di sistema OPENROUTER_API_KEY è impostata ma viene "
+              "ignorata: vince la chiave salvata qui (svuotala per usarla).",
+        "en": "The OPENROUTER_API_KEY system variable is set but ignored: the key "
+              "saved here wins (clear it to use the variable).",
+        "fr": "La variable système OPENROUTER_API_KEY est définie mais ignorée : "
+              "la clé enregistrée ici est prioritaire (effacez-la pour l'utiliser).",
+        "de": "Die Systemvariable OPENROUTER_API_KEY ist gesetzt, wird aber "
+              "ignoriert: Der hier gespeicherte Schlüssel hat Vorrang (leeren, um "
+              "die Variable zu nutzen).",
+        "es": "La variable de sistema OPENROUTER_API_KEY está definida pero se "
+              "ignora: prevalece la clave guardada aquí (vacíala para usarla).",
+    },
+    "apikey.source.env": {
+        "it": "Chiave attiva: variabile di sistema OPENROUTER_API_KEY. Se salvi "
+              "una chiave qui, avrà la precedenza.",
+        "en": "Active key: OPENROUTER_API_KEY system variable. If you save a key "
+              "here, it will take precedence.",
+        "fr": "Clé active : variable système OPENROUTER_API_KEY. Si vous "
+              "enregistrez une clé ici, elle sera prioritaire.",
+        "de": "Aktiver Schlüssel: Systemvariable OPENROUTER_API_KEY. Wenn du hier "
+              "einen Schlüssel speicherst, hat er Vorrang.",
+        "es": "Clave activa: variable de sistema OPENROUTER_API_KEY. Si guardas "
+              "una clave aquí, tendrá prioridad.",
+    },
+    "apikey.source.none": {
+        "it": "Nessuna chiave: il motore LLM non può tradurre finché non ne "
+              "inserisci una.",
+        "en": "No key: the LLM engine cannot translate until you enter one.",
+        "fr": "Aucune clé : le moteur LLM ne peut pas traduire tant que vous n'en "
+              "saisissez pas.",
+        "de": "Kein Schlüssel: Die LLM-Engine kann nicht übersetzen, bis du einen "
+              "eingibst.",
+        "es": "Sin clave: el motor LLM no puede traducir hasta que introduzcas una.",
+    },
+    "apikey.source.env_stale": {
+        "it": "Variabile di sistema OPENROUTER_API_KEY trovata ma non ancora "
+              "caricata da questa app: riavvia l'app (o il PC) perché venga letta, "
+              "oppure inserisci qui la chiave.",
+        "en": "OPENROUTER_API_KEY system variable found but not loaded by this app "
+              "yet: restart the app (or the PC) so it is read, or enter the key here.",
+        "fr": "Variable système OPENROUTER_API_KEY trouvée mais pas encore chargée "
+              "par cette app : redémarrez l'app (ou le PC) pour qu'elle soit lue, "
+              "ou saisissez la clé ici.",
+        "de": "Systemvariable OPENROUTER_API_KEY gefunden, aber von dieser App "
+              "noch nicht geladen: Starte die App (oder den PC) neu, damit sie "
+              "gelesen wird, oder trage den Schlüssel hier ein.",
+        "es": "Variable de sistema OPENROUTER_API_KEY encontrada pero aún no "
+              "cargada por esta app: reinicia la app (o el PC) para leerla, o "
+              "introduce la clave aquí.",
     },
     "settings.clone.hint": {
         "it": "Il motore pdf2zh_next gira in un venv separato (Python 3.12). "

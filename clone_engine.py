@@ -68,13 +68,69 @@ class TranslationCancelled(RuntimeError):
 
 def _looks_like_auth_error(text: str) -> bool:
     """True se lo stderr di pdf2zh_next indica una chiave OpenRouter invalida."""
+    return classify_engine_failure(text) == "invalid_key"
+
+
+# Marcatore → codice, in ordine di priorità. Il primo che compare vince.
+_FAILURE_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "invalid_key",
+        (
+            "401",
+            "unauthorized",
+            "invalid api key",
+            "invalid_api_key",
+            "no auth credentials",
+            "authentication",
+        ),
+    ),
+    ("forbidden", ("403", "forbidden", "permission denied")),
+    (
+        "no_credits",
+        (
+            "402",
+            "payment required",
+            "insufficient credit",
+            "insufficient_quota",
+            "quota exceeded",
+            "out of credits",
+        ),
+    ),
+    ("rate_limited", ("429", "rate limit", "too many requests")),
+    (
+        "model_not_found",
+        ("404", "model not found", "no endpoints found", "not a valid model"),
+    ),
+    (
+        "network",
+        (
+            "connection",
+            "timed out",
+            "timeout",
+            "getaddrinfo",
+            "name or service not known",
+            "temporary failure in name resolution",
+            "ssl",
+            "proxy",
+            "network is unreachable",
+            "max retries exceeded",
+            "nodename nor servname",
+        ),
+    ),
+)
+
+
+def classify_engine_failure(text: str) -> str:
+    """Classifica un fallimento di ``pdf2zh_next`` a partire dallo stderr.
+
+    Ritorna uno tra: ``invalid_key``, ``forbidden``, ``no_credits``,
+    ``rate_limited``, ``model_not_found``, ``network``, ``unknown``.
+    """
     low = (text or "").lower()
-    return (
-        "401" in low
-        or "unauthorized" in low
-        or "invalid api key" in low
-        or "invalid_api_key" in low
-    )
+    for code, markers in _FAILURE_MARKERS:
+        if any(marker in low for marker in markers):
+            return code
+    return "unknown"
 
 
 def _is_windows() -> bool:
@@ -872,8 +928,12 @@ class CloneEngine:
                 log.info("pdf2zh_next pagina %d: rc=%d", page, r.returncode)
                 if r.returncode != 0:
                     stderr = r.stderr or ""
-                    if engine == "llm" and _looks_like_auth_error(stderr):
-                        raise RuntimeError("invalid_key")
+                    code = classify_engine_failure(stderr)
+                    # Per l'LLM riportiamo il codice specifico (chiave, credito,
+                    # rate limit, modello…) così la UI dà un consiglio mirato; per
+                    # gli altri motori solo la rete è un caso riconoscibile.
+                    if code != "unknown" and (engine == "llm" or code == "network"):
+                        raise RuntimeError(code)
                     raise RuntimeError(
                         f"pdf2zh_next exit {r.returncode}: {stderr[-400:]}"
                     )

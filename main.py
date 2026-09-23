@@ -1618,17 +1618,48 @@ def _keystore_path() -> Path:
     return _app_data_base() / "secrets.json"
 
 
-# Da dove proviene la chiave OpenRouter all'avvio: "env" | "file" | "none".
+# Da dove proviene la chiave OpenRouter attiva all'avvio:
+# "file" (salvata in Impostazioni) | "env" (variabile di sistema) | "none".
 _API_KEY_SOURCE = "none"
+# Valore della variabile di sistema all'avvio: fallback se si rimuove il file.
+_API_KEY_ENV_AT_START = ""
+# Variabile presente nel registro di sistema ma NON ereditata da questo processo
+# (tipico su Windows quando la si crea con l'app/sessione già avviata).
+_API_KEY_ENV_STALE = False
+
+# Codici d'errore del motore → chiave i18n con il consiglio per l'utente.
+_ENGINE_ERROR_KEYS = {
+    "missing_key": "clone.no_key",
+    "invalid_key": "clone.invalid_key",
+    "forbidden": "clone.err.forbidden",
+    "no_credits": "clone.err.no_credits",
+    "rate_limited": "clone.err.rate_limited",
+    "model_not_found": "clone.err.model_not_found",
+    "network": "clone.err.network",
+}
 
 
 def _friendly_reason(message: str) -> str:
-    """Traduce i codici motore (missing_key/invalid_key) in messaggi utente."""
-    if message == "missing_key":
-        return T("clone.no_key")
-    if message == "invalid_key":
-        return T("clone.invalid_key")
+    """Traduce i codici d'errore del motore in messaggi utente con consiglio."""
+    key = _ENGINE_ERROR_KEYS.get(message)
+    if key is not None:
+        return T(key)
     return T("clone.failed", reason=message)
+
+
+def _llm_key_source_text() -> str:
+    """Descrive quale chiave OpenRouter è attiva (per Impostazioni)."""
+    file_key = keystore.KeyStore(_keystore_path()).get()
+    if file_key:
+        base = T("apikey.source.file")
+        if _API_KEY_ENV_AT_START:
+            base += " " + T("apikey.source.env_shadowed")
+        return base
+    if _API_KEY_ENV_AT_START:
+        return T("apikey.source.env")
+    if _API_KEY_ENV_STALE:
+        return T("apikey.source.env_stale")
+    return T("apikey.source.none")
 
 
 def _detect_os_lang() -> str:
@@ -4146,7 +4177,10 @@ class ApiKeyDialog(QDialog):
         root = QVBoxLayout(self)
         root.setSpacing(10)
 
-        intro = QLabel(T("apikey.intro"))
+        intro_text = T("apikey.intro")
+        if _API_KEY_ENV_STALE:
+            intro_text += "\n\n" + T("apikey.source.env_stale")
+        intro = QLabel(intro_text)
         intro.setWordWrap(True)
         root.addWidget(intro)
 
@@ -4213,6 +4247,23 @@ class ApiKeyDialog(QDialog):
         else:
             self._result.setText(T("apikey.verify_unreachable"))
             self._result.setStyleSheet("color: #ffcc66; font-size: 12px;")
+
+
+class KeyVerifyThread(QThread):
+    """Verifica non bloccante della chiave OpenRouter (endpoint ``/key``)."""
+
+    verified = pyqtSignal(bool, str, str)  # ok, reason, key
+
+    def __init__(self, key: str, parent=None):
+        super().__init__(parent)
+        self._key = key
+
+    def run(self):  # noqa: D102 — override QThread
+        try:
+            ok, reason = keystore.KeyStore.verify(self._key)
+        except Exception:  # noqa: BLE001 — la verifica non deve mai crashare
+            ok, reason = False, "unreachable"
+        self.verified.emit(ok, reason, self._key)
 
 
 class EngineInstallThread(QThread):
@@ -4421,6 +4472,10 @@ class SettingsDialog(QDialog):
         api_row.addWidget(self._btn_api_verify)
         api_row.addWidget(self._btn_api_clear)
         clone_form.addRow(self._lbl_api, api_row)
+        self._api_source = QLabel(_llm_key_source_text())
+        self._api_source.setWordWrap(True)
+        self._api_source.setStyleSheet("color: #93a0b4; font-size: 12px;")
+        clone_form.addRow(self._api_source)
         self._api_result = QLabel("")
         self._api_result.setWordWrap(True)
         self._api_result.setStyleSheet("color: #999; font-size: 12px;")
@@ -4517,7 +4572,11 @@ class SettingsDialog(QDialog):
         )
 
     def _on_verify_api(self):
-        ok, reason = keystore.KeyStore.verify(self._api_edit.text().strip())
+        key = self._api_edit.text().strip()
+        if not key:
+            # Campo vuoto: verifica la chiave attiva (es. variabile di sistema).
+            key = (os.environ.get(keystore.ENV_VAR) or "").strip()
+        ok, reason = keystore.KeyStore.verify(key)
         if ok:
             self._api_result.setText(T("apikey.verify_ok"))
             self._api_result.setStyleSheet("color: #7fd67f; font-size: 12px;")
@@ -4535,6 +4594,7 @@ class SettingsDialog(QDialog):
         """Rimuove la chiave salvata (il salvataggio avviene in config col campo)."""
         self._api_edit.clear()
         keystore.KeyStore(_keystore_path()).clear()
+        self._api_source.setText(_llm_key_source_text())
         self._api_result.setText(T("apikey.removed"))
         self._api_result.setStyleSheet("color: #999; font-size: 12px;")
 
@@ -4613,6 +4673,7 @@ class SettingsDialog(QDialog):
         self._chk_api_show.setText(T("apikey.show"))
         self._btn_api_verify.setText(T("apikey.verify"))
         self._btn_api_clear.setText(T("apikey.clear"))
+        self._api_source.setText(_llm_key_source_text())
         self._api_edit.setPlaceholderText(T("apikey.placeholder"))
         self._md_check.setText(T("settings.text.md"))
         self._header_check.setText(T("settings.text.header"))
@@ -6167,6 +6228,10 @@ class MainWindow(QMainWindow):
         self._retired_clone_threads: list[CloneTranslateThread] = []
         self._orig_pixmap: QPixmap | None = None
         self._llm_key_prompted = False
+        # Chiave LLM verificata con successo in questa sessione ("" = da verificare).
+        self._llm_key_verified = ""
+        self._key_verify_thread: KeyVerifyThread | None = None
+        self._pending_translate_page: int | None = None
         self._clone_generation: int = 0
         self._clone_run_start: dict[str, float] = {}
 
@@ -7234,19 +7299,30 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _apply_api_key(self, key):
-        """Salva/rimuove la chiave OpenRouter (archivio per-utente + env)."""
+        """Salva/rimuove la chiave OpenRouter (archivio per-utente + env).
+
+        La chiave salvata ha la precedenza; rimuovendola si torna alla variabile
+        di sistema (se era presente all'avvio).
+        """
         if key is None:
             return
+        global _API_KEY_SOURCE
         key = str(key).strip()
         store = keystore.KeyStore(_keystore_path())
         if key:
             store.set(key)
-            os.environ["OPENROUTER_API_KEY"] = key
+            os.environ[keystore.ENV_VAR] = key
+            _API_KEY_SOURCE = "file"
         else:
             store.clear()
-            # Rimuove l'override solo se non proviene da un env esterno.
-            if _API_KEY_SOURCE != "env":
-                os.environ.pop("OPENROUTER_API_KEY", None)
+            if _API_KEY_ENV_AT_START:
+                os.environ[keystore.ENV_VAR] = _API_KEY_ENV_AT_START
+                _API_KEY_SOURCE = "env"
+            else:
+                os.environ.pop(keystore.ENV_VAR, None)
+                _API_KEY_SOURCE = "none"
+        # La chiave è cambiata: va rivalidata prima del prossimo uso.
+        self._llm_key_verified = ""
 
     def _prompt_api_key(self) -> bool:
         """Chiede la chiave OpenRouter; True se dopo il dialogo è disponibile."""
@@ -7272,6 +7348,76 @@ class MainWindow(QMainWindow):
             return False
         self._llm_key_prompted = True
         return self._prompt_api_key()
+
+    def _no_key_message(self) -> str:
+        """Messaggio per chiave mancante, distinguendo la variabile non caricata."""
+        return T("clone.key_stale") if _API_KEY_ENV_STALE else T("clone.no_key")
+
+    def _start_key_verify(self, page: int | None):
+        """Avvia (non bloccante) la verifica della chiave OpenRouter.
+
+        ``page`` è la pagina da tradurre quando la verifica serve da pre-volo,
+        oppure ``None`` per una verifica informativa (es. selezione del motore).
+        """
+        key = (os.environ.get(keystore.ENV_VAR) or "").strip()
+        self._pending_translate_page = page
+        if not key:
+            return
+        if key == self._llm_key_verified:
+            if page is not None:
+                self._pending_translate_page = None
+                self._request_translation(page)
+            return
+        thread = self._key_verify_thread
+        if thread is not None and thread.isRunning():
+            return  # verifica in corso: al termine userà la pagina in attesa
+        self.translated_panel.set_status(T("clone.status_key_check"))
+        self.status_bar.showMessage(T("clone.key_check"))
+        thread = KeyVerifyThread(key, self)
+        thread.verified.connect(self._on_key_verified)
+        thread.finished.connect(
+            lambda t=thread: self._on_key_verify_finished(t)
+        )
+        self._key_verify_thread = thread
+        thread.start()
+
+    def _on_key_verify_finished(self, thread):
+        """Rilascia il riferimento al thread di verifica terminato."""
+        if self._key_verify_thread is thread:
+            self._key_verify_thread = None
+        thread.deleteLater()
+
+    def _on_key_verified(self, ok: bool, reason: str, key: str):
+        """Esito della verifica: prosegue col pre-volo o mostra il consiglio."""
+        page = self._pending_translate_page
+        self._pending_translate_page = None
+        if ok:
+            self._llm_key_verified = key
+            if page is not None:
+                # Rientra nel flusso completo (purge di altri motori, cache…)
+                # solo se l'utente è ancora sulla pagina richiesta.
+                if page == self._current_page:
+                    self._on_translate_requested()
+            else:
+                self.status_bar.showMessage(T("apikey.verify_ok"), 6000)
+            return
+        code = {
+            "invalid": "invalid_key",
+            "missing": "missing_key",
+            "unreachable": "network",
+        }.get(reason, "unknown")
+        text = _friendly_reason(code)
+        if page is None:
+            # Verifica informativa: non sporcare il pannello.
+            self.status_bar.showMessage(text, 8000)
+            return
+        if page != self._current_page:
+            return
+        self.translated_panel.hide_spinner()
+        self.translated_panel.hide_liquid()
+        self.translated_panel.set_status(T("clone.status_error"))
+        self.translated_panel.show_message(text)
+        self.status_bar.showMessage(text)
 
     def _engine_display(self, engine: str) -> str:
         return T(f"engine.option.{engine}")
@@ -7320,9 +7466,15 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if engine == "llm" and not self._ensure_llm_key(force=True):
-            self._request_translation(page)  # mostra clone.no_key
-            return
+        if engine == "llm":
+            if not self._ensure_llm_key(force=True):
+                self._request_translation(page)  # mostra clone.no_key
+                return
+            key = (os.environ.get(keystore.ENV_VAR) or "").strip()
+            if key and key != self._llm_key_verified:
+                # Verifica pre-volo: non far fallire un lavoro lungo per chiave.
+                self._start_key_verify(page)
+                return
 
         if not self._clone_engine.available():
             self._request_translation(page)  # mostra clone.no_engine
@@ -7396,9 +7548,10 @@ class MainWindow(QMainWindow):
 
         if engine == "llm" and not self._ensure_llm_key():
             self.translated_panel.hide_liquid()
-            self.translated_panel.show_message(T("clone.no_key"))
+            message = self._no_key_message()
+            self.translated_panel.show_message(message)
             self.translated_panel.set_status(T("clone.status_error"))
-            self.status_bar.showMessage(T("clone.no_key"), 6000)
+            self.status_bar.showMessage(message, 6000)
             return
 
         if self._clone_engine.is_cached(page_num, engine):
@@ -7613,7 +7766,7 @@ class MainWindow(QMainWindow):
         as_zip = dlg.chosen_zip()
         dest = dlg.chosen_path()
         if engine == "llm" and want_translate and not self._ensure_llm_key():
-            self.status_bar.showMessage(T("clone.no_key"), 6000)
+            self.status_bar.showMessage(self._no_key_message(), 6000)
             return
         lo, hi = min(pages), max(pages)
         cached = self._clone_engine.cached_pages(lo, hi, engine, source, target)
@@ -7847,8 +8000,9 @@ class MainWindow(QMainWindow):
             return
         set_translation_engine(engine)
         save_config()
-        if engine == "llm":
-            self._ensure_llm_key(force=True)
+        if engine == "llm" and self._ensure_llm_key(force=True):
+            # Verifica informativa (non blocca): segnala subito una chiave invalida.
+            self._start_key_verify(None)
         self._clone_generation += 1
         self._retire_clone_thread()
         self._configure_clone_engine()
@@ -8014,9 +8168,14 @@ def main():
     if not _icon.isNull():
         app.setWindowIcon(_icon)
 
-    # Carica la chiave OpenRouter dall'archivio per-utente (se non già in env).
-    global _API_KEY_SOURCE
+    # Chiave OpenRouter: la chiave salvata (Impostazioni) ha la precedenza, la
+    # variabile di sistema OPENROUTER_API_KEY è il fallback. Registriamo anche
+    # se nel sistema la variabile esiste ma non è stata ereditata (Windows).
+    global _API_KEY_SOURCE, _API_KEY_ENV_AT_START, _API_KEY_ENV_STALE
+    _API_KEY_ENV_AT_START = (os.environ.get(keystore.ENV_VAR) or "").strip()
     _API_KEY_SOURCE = keystore.load_into_env(_keystore_path())
+    _reg_value, _reg_scope = keystore.registry_env_key()
+    _API_KEY_ENV_STALE = bool(_reg_value) and not _API_KEY_ENV_AT_START
 
     # Config v2: al primo avvio vengono scritti i default (lingua UI = lingua
     # dell'OS o italiano); le scelte persistono tra gli aggiornamenti (la

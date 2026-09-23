@@ -7,8 +7,10 @@ dove supportati. Non è cifrato: su Windows la cartella profilo è già protetta
 per utente; su Linux/macOS i permessi restano ristretti.
 
 La chiave non viene mai scritta in ``config.json``, nei log o nei commit.
-All'avvio l'app la carica in ``os.environ[OPENROUTER_API_KEY]`` (se la variabile
-non è già impostata), così motore e catena gratuita la usano come prima.
+All'avvio l'app la carica in ``os.environ[OPENROUTER_API_KEY]``: la chiave
+**salvata** dall'utente (Impostazioni) ha la precedenza, la variabile d'ambiente
+di sistema resta come *fallback*. Così un'impostazione esplicita nell'app non
+viene sovrascritta da una variabile di sistema (spesso non aggiornata).
 
 Modulo **puro Python** (nessuna dipendenza da Qt): testabile senza QApplication.
 """
@@ -21,7 +23,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-__all__ = ["KeyStore", "ENV_VAR", "DEFAULT_BASE_URL", "load_into_env"]
+__all__ = [
+    "KeyStore",
+    "ENV_VAR",
+    "DEFAULT_BASE_URL",
+    "load_into_env",
+    "registry_env_key",
+]
 
 ENV_VAR = "OPENROUTER_API_KEY"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
@@ -108,18 +116,59 @@ class KeyStore:
 
 
 def load_into_env(path: str | Path) -> str:
-    """Carica la chiave salvata in ``os.environ`` se non già presente.
+    """Carica la chiave efficace in ``os.environ``.
 
-    Ritorna da dove proviene: ``"env"`` (variabile già impostata),
-    ``"file"`` (letta dall'archivio) oppure ``"none"``.
+    Precedenza: la chiave **salvata** (file per-utente) vince; se manca si usa
+    la variabile d'ambiente ``OPENROUTER_API_KEY``. Ritorna da dove proviene la
+    chiave attiva: ``"file"`` (archivio), ``"env"`` (variabile di sistema) o
+    ``"none"``.
     """
-    if os.environ.get(ENV_VAR):
-        return "env"
     key = KeyStore(path).get()
     if key:
         os.environ[ENV_VAR] = key
         return "file"
+    if os.environ.get(ENV_VAR):
+        return "env"
     return "none"
+
+
+def _registry_env_key() -> tuple[str, str]:
+    """``(valore, ambito)`` di ``OPENROUTER_API_KEY`` nel registro di Windows.
+
+    Serve a distinguere "variabile assente" da "variabile impostata nel sistema
+    ma non ancora ereditata da questo processo" (su Windows una variabile creata
+    di recente compare solo nei processi avviati dopo l'aggiornamento della
+    sessione). ``("", "")`` su sistemi non Windows o se non è presente.
+    """
+    if os.name != "nt":  # pragma: no cover - dipende dall'OS
+        return ("", "")
+    try:  # pragma: no cover - solo Windows
+        import winreg
+    except Exception:  # pragma: no cover
+        return ("", "")
+    checks = (
+        (winreg.HKEY_CURRENT_USER, r"Environment", "user"),
+        (
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+            "system",
+        ),
+    )
+    for root, subkey, scope in checks:  # pragma: no cover - solo Windows
+        try:
+            with winreg.OpenKey(root, subkey) as handle:
+                value, _ = winreg.QueryValueEx(handle, ENV_VAR)
+        except OSError:
+            continue
+        value = str(value or "").strip()
+        if value:
+            return (value, scope)
+    return ("", "")
+
+
+def registry_env_key() -> tuple[str, str]:
+    """Espone :func:`_registry_env_key` (monkeypatch nei test)."""
+    return _registry_env_key()
 
 
 class _suppress:

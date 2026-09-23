@@ -462,6 +462,24 @@ class KeyErrorDetectionTests(unittest.TestCase):
             self.assertTrue(clone_engine._looks_like_auth_error(text))
         self.assertFalse(clone_engine._looks_like_auth_error("timeout"))
 
+    def test_classify_engine_failure_codes(self):
+        cases = {
+            "HTTP 401 Unauthorized": "invalid_key",
+            "invalid_api_key": "invalid_key",
+            "403 Forbidden": "forbidden",
+            "402 Payment Required": "no_credits",
+            "insufficient_quota": "no_credits",
+            "429 Too Many Requests": "rate_limited",
+            "404 model not found": "model_not_found",
+            "getaddrinfo failed": "network",
+            "Connection timed out": "network",
+            "qualcosa di strano": "unknown",
+        }
+        for text, code in cases.items():
+            self.assertEqual(
+                clone_engine.classify_engine_failure(text), code, text
+            )
+
     def test_llm_invalid_key_reports_invalid_key(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

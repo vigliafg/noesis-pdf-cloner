@@ -50,9 +50,14 @@ lasciare il posto alla nuova traduzione.
 - ❓ Guida online (`docs/help/`, pubblicata su GitHub Pages).
 - 🔑 **Chiave OpenRouter**: se il motore LLM è selezionato senza chiave, l'app la
   chiede (dialogo dedicato) e la salva in un **file per-utente** protetto
-  (`keystore.py`, 0600, nella cartella dati) oppure la legge da
-  `OPENROUTER_API_KEY`. Il campo è in ⚙️ Impostazioni → Motore con **Verifica**;
-  gli errori "chiave assente/invalida" sono messaggi guidati.
+  (`keystore.py`, 0600, nella cartella dati). Il campo è in
+  ⚙️ Impostazioni → Motore con **Verifica**. **La chiave salvata ha la
+  precedenza** sulla variabile di sistema `OPENROUTER_API_KEY` (che resta il
+  *fallback*); Impostazioni mostra quale chiave è attiva. Prima di tradurre con
+  l'LLM la chiave viene **verificata** (senza bloccare la GUI) e gli errori sono
+  **classificati** con un consiglio (chiave non valida, credito esaurito, troppe
+  richieste, modello non disponibile, rete): in questi casi puoi ripiegare sul
+  motore Google/Bing.
 
 > Il codice di estrazione testo/markdown e gli strumenti a zone di lite sono
 > **mantenuti dormienti** (UI nascosta) e verranno riattivati con l'integrazione

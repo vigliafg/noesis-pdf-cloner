@@ -53,12 +53,27 @@ class KeyStoreTests(unittest.TestCase):
         self.assertTrue(masked.endswith("1234"))
         self.assertIn("…", masked)
 
-    def test_load_into_env_prefers_existing_env(self):
+    def test_load_into_env_file_wins_over_env(self):
+        """La chiave salvata ha la precedenza sulla variabile di sistema."""
         self.store.set("from-file")
         with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "from-env"}):
             source = keystore.load_into_env(self.path)
+            self.assertEqual(source, "file")
+            self.assertEqual(os.environ["OPENROUTER_API_KEY"], "from-file")
+
+    def test_load_into_env_env_is_fallback(self):
+        """Senza chiave salvata si usa la variabile di sistema."""
+        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        env["OPENROUTER_API_KEY"] = "from-env"
+        with mock.patch.dict(os.environ, env, clear=True):
+            source = keystore.load_into_env(self.path)
             self.assertEqual(source, "env")
             self.assertEqual(os.environ["OPENROUTER_API_KEY"], "from-env")
+
+    def test_registry_env_key_empty_off_windows(self):
+        if os.name == "nt":
+            self.skipTest("comportamento Windows")
+        self.assertEqual(keystore.registry_env_key(), ("", ""))
 
     def test_load_into_env_from_file(self):
         self.store.set("from-file")

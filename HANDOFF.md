@@ -177,6 +177,19 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     `%APPDATA%\uv`) non si tocca**: è condivisa da tutte le app che usano `uv`
     (Python gestiti e tool installati inclusi) e rimuoverla rompe altre
     installazioni.
+20. **Chiave OpenRouter: precedenza e feedback (v0.1.4)**: la chiave **salvata
+    in ⚙️ Impostazioni vince** sulla variabile di sistema `OPENROUTER_API_KEY`
+    (che resta il *fallback*; "Rimuovi" torna a usarla). In Impostazioni una
+    riga indica **quale chiave è attiva** (file / variabile di sistema /
+    nessuna) e avvisa se una variabile di sistema viene ignorata. Prima di far
+    partire una pagina LLM la chiave viene **verificata** (endpoint `/key`, in
+    un thread, senza bloccare la GUI) e, se invalida/irraggiungibile, si mostra
+    un **consiglio mirato** senza avviare il lavoro. Gli errori del motore sono
+    **classificati** (`invalid_key`, `forbidden`, `no_credits`, `rate_limited`,
+    `model_not_found`, `network`) con messaggio e suggerimento (credito, attesa,
+    rete, oppure usa Google/Bing). Su Windows, se la variabile esiste nel
+    registro ma non è stata ereditata dal processo, l'app lo dice ("riavvia
+    l'app"). La classificazione è **allineata** in `app/engine.py` del servizio.
 
 ---
 
@@ -184,7 +197,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
 
 | Verifica | Esito |
 |---|---|
-| Suite `unittest discover -s tests` | **321 OK** (24 skip) |
+| Suite `unittest discover -s tests` | **324 OK** (24 skip) |
 | `uv` nel bundle | `vendor/fetch_uv.py` scarica uv 0.12.17, sha256 verificata, `./vendor/uv-bin/uv --version` OK |
 | Smoke test GUI headless (offscreen) | nav/TOC/zoom/engine OK |
 | E2E reale pagina 156 di `ha22.pdf` | google 53.3 s · bing 44.1 s · openai 65.3 s — tutti `done` |
@@ -308,12 +321,19 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     Hermes). Nota: l'uninstaller gira elevato (admin), quindi
     `$APPDATA`/`$LOCALAPPDATA` sono quelli dell'utente che eleva (coincide con
     l'utente tipico). Compilato/verificato con `makensis` 3.10.
+14. ~~**Chiave OpenRouter: precedenza e feedback**~~ → **fatto (v0.1.4)**: vedi
+    §4 punto 20. La chiave salvata ha la precedenza sulla variabile di sistema;
+    indicatore della fonte attiva, verifica pre-volo non bloccante, errori del
+    motore classificati con consigli. Classificazione allineata nel servizio
+    (`app/engine.py`).
 
 ### Fatto il 23/09 (v0.1.4)
 
 `uv` nel bundle → avviso "motore non installato" → bootstrap `uv` negli script
 (ordine consigliato rispettato) → **opzioni di disinstallazione nell'uninstaller
-NSIS**. Restano in coda i punti 8 e 10 (AppImage).
+NSIS** → **feedback completo sulla chiave OpenRouter** (precedenza, fonte,
+verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
+(AppImage).
 
 ---
 
