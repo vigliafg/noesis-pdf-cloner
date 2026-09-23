@@ -43,10 +43,8 @@ BrandingText      " "
 Var UN_H_ALL            ; checkbox "rimuovi tutto"
 Var UN_H_ENGINE         ; checkbox motore
 Var UN_H_DATA           ; checkbox dati app
-Var UN_H_UV             ; checkbox cache/dati uv
 Var UN_OPT_ENGINE       ; 1 = rimuovi il motore
 Var UN_OPT_DATA         ; 1 = rimuovi i dati dell'app
-Var UN_OPT_UV           ; 1 = rimuovi cache/dati di uv
 
 ; -------------------------------------------------------------------
 ; MUI2 interface
@@ -99,7 +97,6 @@ LangString UN_INTRO    ${LANG_ITALIAN} "Per non lasciare alcuna traccia del prog
 LangString UN_ALL      ${LANG_ITALIAN} "Rimuovi tutto: nessuna traccia del programma sul sistema"
 LangString UN_ENGINE   ${LANG_ITALIAN} "Motore di traduzione (.venv2, ~1,1 GB)"
 LangString UN_DATA     ${LANG_ITALIAN} "Impostazioni, cache delle traduzioni e log dell'app"
-LangString UN_UV       ${LANG_ITALIAN} "Cache e dati di uv (%LOCALAPPDATA%\uv, %APPDATA%\uv)"
 
 LangString UN_TITLE    ${LANG_ENGLISH} "What to remove"
 LangString UN_SUBTITLE ${LANG_ENGLISH} "Choose what to delete from your system."
@@ -107,7 +104,6 @@ LangString UN_INTRO    ${LANG_ENGLISH} "To leave no trace of the program, keep a
 LangString UN_ALL      ${LANG_ENGLISH} "Remove everything: no trace of the program on the system"
 LangString UN_ENGINE   ${LANG_ENGLISH} "Translation engine (.venv2, ~1.1 GB)"
 LangString UN_DATA     ${LANG_ENGLISH} "App settings, translation cache and logs"
-LangString UN_UV       ${LANG_ENGLISH} "uv cache and data (%LOCALAPPDATA%\uv, %APPDATA%\uv)"
 
 ; -------------------------------------------------------------------
 ; .onInit — language selection
@@ -203,10 +199,6 @@ Function un.OptionsPage
   Pop $UN_H_DATA
   ${NSD_SetState} $UN_H_DATA ${BST_CHECKED}
 
-  ${NSD_CreateCheckbox} 12u 74u 100% 12u "$(UN_UV)"
-  Pop $UN_H_UV
-  ${NSD_SetState} $UN_H_UV ${BST_CHECKED}
-
   nsDialogs::Show
 FunctionEnd
 
@@ -215,24 +207,19 @@ Function un.ToggleAll
   ${If} $0 == ${BST_CHECKED}
     ${NSD_SetState} $UN_H_ENGINE ${BST_CHECKED}
     ${NSD_SetState} $UN_H_DATA ${BST_CHECKED}
-    ${NSD_SetState} $UN_H_UV ${BST_CHECKED}
     EnableWindow $UN_H_ENGINE 0
     EnableWindow $UN_H_DATA 0
-    EnableWindow $UN_H_UV 0
   ${Else}
     ${NSD_SetState} $UN_H_ENGINE ${BST_UNCHECKED}
     ${NSD_SetState} $UN_H_DATA ${BST_UNCHECKED}
-    ${NSD_SetState} $UN_H_UV ${BST_UNCHECKED}
     EnableWindow $UN_H_ENGINE 1
     EnableWindow $UN_H_DATA 1
-    EnableWindow $UN_H_UV 1
   ${EndIf}
 FunctionEnd
 
 Function un.OptionsPageLeave
   ${NSD_GetState} $UN_H_ENGINE $UN_OPT_ENGINE
   ${NSD_GetState} $UN_H_DATA $UN_OPT_DATA
-  ${NSD_GetState} $UN_H_UV $UN_OPT_UV
 FunctionEnd
 
 ; -------------------------------------------------------------------
@@ -255,11 +242,9 @@ Section "Uninstall"
     RMDir /r "$APPDATA\noesis-pdf-cloner"
   ${EndIf}
 
-  ; Cache e dati di uv (condivisi con altri eventuali usi di uv).
-  ${If} $UN_OPT_UV == ${BST_CHECKED}
-    RMDir /r "$LOCALAPPDATA\uv"
-    RMDir /r "$APPDATA\uv"
-  ${EndIf}
+  ; NOTA: NON tocchiamo la cache/dati di uv (%LOCALAPPDATA%\uv, %APPDATA%\uv):
+  ; sono condivisi da tutte le app che usano uv (Python gestiti e tool
+  ; installati inclusi) e rimuoverli romperebbe altre installazioni.
 
   ; Cartella dell'app: ricorsiva solo se può contenere il motore rimosso.
   ${If} $UN_OPT_ENGINE == ${BST_CHECKED}
