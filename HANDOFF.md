@@ -384,7 +384,10 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
   lo spiega con **miniature schematiche** HTML/CSS.
 - **Pulsante flottante "Azioni pagina"** nel pannello destro a traduzione
   completata: Salva in Download, Esporta, Traduci la successiva, Ritraduci, Apri
-  col visualizzatore, Cancella cache.
+  col visualizzatore, Cancella cache. Entra con uno **slide-up con overshoot** e
+  un glow dell'ombra una tantum (~180 ms di ritardo, ~280 ms di movimento,
+  `QPropertyAnimation`); un **pallino azzurro** sull'angolo resta finché non apri
+  il menu. Le animazioni si fermano su hide/resize.
 - **Destinazione export**: cartella di destinazione (ricordata) + nome, terzo
   formato "pagine singole in una cartella" (`CloneEngine.export_folder`); il
   pulsante di fine export è diventato **⬇ Copia in Download** (è una copia).

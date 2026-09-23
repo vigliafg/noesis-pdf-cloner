@@ -75,7 +75,7 @@ except ImportError:
 
 from PyQt6.QtCore import (
     Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
-    QRect, QLocale, QEventLoop, QPoint,
+    QRect, QLocale, QEventLoop, QPoint, QPropertyAnimation, QEasingCurve,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
@@ -3949,9 +3949,33 @@ class TranslatedPagePanel(QWidget):
         shadow.setOffset(0, 3)
         shadow.setColor(QColor(0, 0, 0, 160))
         self._fab.setGraphicsEffect(shadow)
+        self._fab_shadow = shadow
         self._fab.clicked.connect(self._toggle_page_actions)
         self._fab.hide()
         self._fab.raise_()
+
+        # Pallino persistente: cue che resta finché il menu non viene aperto.
+        # È figlio del pill (fuori layout), in alto a destra, e non intercetta
+        # i clic (che devono aprire il menu).
+        self._fab_dot = QLabel(self._fab)
+        self._fab_dot.setObjectName("pageFabDot")
+        self._fab_dot.setFixedSize(8, 8)
+        self._fab_dot.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        self._fab_dot.setStyleSheet(
+            "QLabel#pageFabDot { background: #4a90d9; border-radius: 4px; }"
+        )
+        self._fab_dot.hide()
+
+        # Animazioni d'ingresso: riferimenti tenuti vivi (altrimenti il GC le
+        # distrugge) e un timer per il breve ritardo prima del movimento.
+        self._fab_anim: QPropertyAnimation | None = None
+        self._fab_glow: QPropertyAnimation | None = None
+        self._fab_badge_pending = False
+        self._fab_delay = QTimer(self)
+        self._fab_delay.setSingleShot(True)
+        self._fab_delay.timeout.connect(self._launch_fab_animations)
 
         self._fab_menu = QMenu(self)
         self._fab_menu.setObjectName("pageFabMenu")
@@ -4027,14 +4051,29 @@ class TranslatedPagePanel(QWidget):
 
     # ── pulsante flottante "Azioni pagina" ────────────────────────────
 
+    # Ingresso del FAB: distanza dello slide, ritardo e durata (ms).
+    _FAB_SLIDE_PX = 16
+    _FAB_ENTER_DELAY_MS = 180
+    _FAB_ENTER_MS = 280
+
     def show_page_actions(self):
-        """Mostra il FAB delle azioni (chiamato a traduzione completata)."""
+        """Mostra il FAB delle azioni (chiamato a traduzione completata).
+
+        Il pill compare subito (visibilità immediata), ma 16px più in basso:
+        dopo un breve ritardo scatta lo slide-up con overshoot e un glow una
+        tantum dell'ombra. Il pallino-badge resta finché l'utente non apre il
+        menu.
+        """
+        self._fab_badge_pending = True
         self._fab.show()
-        self._reposition_fab()
         self._fab.raise_()
+        self._fab_dot.setVisible(True)
+        self._start_fab_entrance()
 
     def hide_page_actions(self):
         """Nasconde il FAB e chiude il menu (cambio pagina, nuova traduzione)."""
+        self._stop_fab_animations()
+        self._clear_fab_badge()
         self._fab_menu.hide()
         self._fab.hide()
 
@@ -4047,24 +4086,89 @@ class TranslatedPagePanel(QWidget):
         if act is not None:
             act.setEnabled(bool(enabled))
 
+    def _start_fab_entrance(self):
+        """Prepara slide-up + glow d'ingresso; il movimento parte col ritardo."""
+        self._stop_fab_animations()
+        self._reposition_fab(final=True)
+        final = self._fab.pos()
+        self._fab.move(final.x(), final.y() + self._FAB_SLIDE_PX)
+        self._reposition_fab_dot()
+
+        slide = QPropertyAnimation(self._fab, b"pos", self)
+        slide.setDuration(self._FAB_ENTER_MS)
+        slide.setStartValue(self._fab.pos())
+        slide.setEndValue(final)
+        slide.setEasingCurve(QEasingCurve.Type.OutBack)
+        self._fab_anim = slide
+
+        glow = QPropertyAnimation(self._fab_shadow, b"blurRadius", self)
+        glow.setDuration(self._FAB_ENTER_MS + 220)
+        glow.setStartValue(18.0)
+        glow.setKeyValueAt(0.5, 30.0)
+        glow.setEndValue(18.0)
+        self._fab_glow = glow
+
+        self._fab_delay.start(self._FAB_ENTER_DELAY_MS)
+
+    def _launch_fab_animations(self):
+        """Avvia davvero le animazioni (dopo il ritardo), se ancora visibile."""
+        if self._fab.isHidden():
+            return
+        if self._fab_anim is not None:
+            self._fab_anim.start()
+        if self._fab_glow is not None:
+            self._fab_glow.start()
+
+    def _stop_fab_animations(self):
+        """Ferma le animazioni in corso e riporta l'ombra al valore base."""
+        if hasattr(self, "_fab_delay"):
+            self._fab_delay.stop()
+        for anim in (self._fab_anim, self._fab_glow):
+            if anim is not None:
+                anim.stop()
+        self._fab_anim = None
+        self._fab_glow = None
+        if getattr(self, "_fab_shadow", None) is not None:
+            self._fab_shadow.setBlurRadius(18.0)
+
+    def _clear_fab_badge(self):
+        """Spegne il pallino: ha fatto il suo lavoro o il FAB è stato nascosto."""
+        self._fab_badge_pending = False
+        if getattr(self, "_fab_dot", None) is not None:
+            self._fab_dot.hide()
+
+    def _reposition_fab_dot(self):
+        """Posiziona il pallino nell'angolo alto-destro del pill."""
+        d = self._fab_dot
+        if d is None or d.isHidden():
+            return
+        d.move(max(0, self._fab.width() - d.width() - 5), 5)
+        d.raise_()
+
     def _toggle_page_actions(self):
         if self._fab_menu.isVisible():
             self._fab_menu.hide()
             return
+        # Il menu è stato aperto: il pallino ha fatto il suo lavoro.
+        self._clear_fab_badge()
         self._fab_menu.adjustSize()
         pos = self._fab.mapToGlobal(QPoint(0, 0))
         x = pos.x() + self._fab.width() - self._fab_menu.width()
         y = pos.y() - self._fab_menu.height() - 4
         self._fab_menu.popup(QPoint(max(0, x), max(0, y)))
 
-    def _reposition_fab(self):
+    def _reposition_fab(self, final: bool = False):
         b = self._fab
         if b.isHidden():
             return
+        if not final:
+            # Un resize durante l'ingresso annulla l'animazione e riallinea.
+            self._stop_fab_animations()
         b.adjustSize()
         x = max(0, self.width() - b.width() - 18)
         y = max(0, self.height() - b.height() - 18)
         b.move(x, y)
+        self._reposition_fab_dot()
 
     # ── engine radios ─────────────────────────────────────────────────
 

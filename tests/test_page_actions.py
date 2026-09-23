@@ -111,6 +111,52 @@ class PageActionsFabTests(unittest.TestCase):
         self.assertGreaterEqual(fab.x(), self.panel.width() - fab.width() - 40)
         self.assertGreaterEqual(fab.y(), self.panel.height() - fab.height() - 40)
 
+    def test_entrance_starts_lower_then_slides_into_place(self):
+        self.panel.show_page_actions()
+        self._app.processEvents()
+        fab = self.panel._fab
+        final_y = self.panel.height() - fab.height() - 18
+        # Appare subito, ma 16px più in basso della posizione finale.
+        self.assertEqual(fab.y(), final_y + self.panel._FAB_SLIDE_PX)
+        self.assertIsNotNone(self.panel._fab_anim)
+        self.assertTrue(self.panel._fab_delay.isActive())
+        # Avviata l'animazione, si conclude esattamente nella posizione finale.
+        self.panel._launch_fab_animations()
+        self.panel._fab_anim.setCurrentTime(self.panel._fab_anim.duration())
+        self.assertEqual(fab.y(), final_y)
+
+    def test_entrance_animates_shadow_glow(self):
+        self.panel.show_page_actions()
+        self.assertIsNotNone(self.panel._fab_glow)
+        self.assertEqual(self.panel._fab_shadow.blurRadius(), 18.0)
+
+    def test_badge_visible_on_show_and_cleared_on_menu_open(self):
+        self.panel.show_page_actions()
+        self._app.processEvents()
+        self.assertTrue(self.panel._fab_dot.isVisible())
+        self.panel._toggle_page_actions()  # apre il menu
+        self.assertFalse(self.panel._fab_dot.isVisible())
+        self.assertFalse(self.panel._fab_badge_pending)
+        self.panel._fab_menu.hide()
+
+    def test_badge_stays_after_repositioning(self):
+        self.panel.show_page_actions()
+        self._app.processEvents()
+        self.panel.resize(520, 700)
+        self._app.processEvents()
+        self.assertTrue(self.panel._fab_dot.isVisible())
+        self.assertGreater(self.panel._fab_dot.x(), 0)
+
+    def test_hide_stops_animations_and_badge(self):
+        self.panel.show_page_actions()
+        self.panel._launch_fab_animations()
+        self.panel.hide_page_actions()
+        self.assertIsNone(self.panel._fab_anim)
+        self.assertIsNone(self.panel._fab_glow)
+        self.assertFalse(self.panel._fab_delay.isActive())
+        self.assertFalse(self.panel._fab_dot.isVisible())
+        self.assertEqual(self.panel._fab_shadow.blurRadius(), 18.0)
+
     def test_menu_has_six_translated_actions(self):
         labels = [a.text() for a in self.panel._fab_menu.actions()]
         self.assertEqual(

@@ -314,6 +314,11 @@ footer {
   font-size: 12px; font-weight: 600;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
 }
+.fabmock-dot {
+  position: absolute; top: 4px; right: 5px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #4a90d9; box-shadow: 0 0 5px #4a90d9;
+}
 .fabmock-menu {
   position: absolute; right: 14px; bottom: 54px;
   background: #2b2b2b; border: 1px solid var(--border); border-radius: 8px;
