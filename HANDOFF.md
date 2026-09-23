@@ -177,7 +177,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     `%APPDATA%\uv`) non si tocca**: è condivisa da tutte le app che usano `uv`
     (Python gestiti e tool installati inclusi) e rimuoverla rompe altre
     installazioni.
-20. **Chiave OpenRouter: precedenza e feedback (v0.1.4)**: la chiave **salvata
+20. **Chiave OpenRouter: precedenza e feedback (v0.1.5)**: la chiave **salvata
     in ⚙️ Impostazioni vince** sulla variabile di sistema `OPENROUTER_API_KEY`
     (che resta il *fallback*; "Rimuovi" torna a usarla). In Impostazioni una
     riga indica **quale chiave è attiva** (file / variabile di sistema /
@@ -207,7 +207,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     **`--doctor`**. La UI (wizard al primo avvio + voce in ⚙️ Impostazioni) è la
     fase successiva; il modulo è già testato e usando i codici di
     `classify_engine_failure` parla la stessa lingua degli errori a runtime.
-22. **▶ Traduci spostato nella toolbar principale (v0.1.4)**: il pulsante era
+22. **▶ Traduci spostato nella toolbar principale (v0.1.5)**: il pulsante era
     nella fascia motori del pannello destro, che il chevron `▸` può compattare:
     con la fascia chiusa il segnaposto diceva "premi ▶ Traduci" ma il pulsante
     era invisibile. Ora ▶ Traduci sta nella **toolbar principale, a sinistra di
@@ -215,7 +215,7 @@ engine è istantaneo; con un engine diverso si rigenera (cache separata).
     target, radio motori, stato, targhetta e 💾 Esporta. Il **tooltip** del
     pulsante mostra motore attivo e pagina (`clone.translate.tooltip`), e il
     segnaposto dice "nella barra in alto". Nessuna scorciatoia.
-23. **Accentate corrette nel motore Google (v0.1.4)**: `pdf2zh_next` esegue il
+23. **Accentate corrette nel motore Google (v0.1.5)**: `pdf2zh_next` esegue il
     nostro `gtranslate_cli.py` come subprocess con `encoding="utf-8"` e
     `errors="replace"` (`clitranslator.py`); il CLI scriveva con l'encoding di
     default del processo (su Windows **cp1252**), quindi le accentate uscivano
@@ -326,7 +326,7 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
      motore** (installa in `~/.local/share/noesis-pdf-cloner/engine/.venv2`,
      già auto-rilevato) oppure impostare il percorso a mano in ⚙️ Impostazioni →
      *Eseguibile pdf2zh_next*.
-9. ~~**Avviso "motore non installato"**~~ → **fatto (v0.1.4)**: striscia ambra
+9. ~~**Avviso "motore non installato"**~~ → **fatto (v0.1.5)**: striscia ambra
    non bloccante nel pannello destro con pulsante **Installa motore**, visibile
    finché il motore manca (`TranslatedPagePanel.set_engine_missing`,
    `MainWindow._update_engine_banner`).
@@ -334,20 +334,20 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     glibc più vecchia (compatibilità distro); documentare `libfuse2` e
     `./NoesisPDFCloner-x86_64.AppImage --appimage-extract-and-run`; valutare in
     aggiunta un `.tar.gz` estraibile senza FUSE.
-11. ~~**`uv` incluso nel bundle**~~ → **fatto (v0.1.4)**: `vendor/fetch_uv.py`
+11. ~~**`uv` incluso nel bundle**~~ → **fatto (v0.1.5)**: `vendor/fetch_uv.py`
     scarica `uv` pinnato (`UV_VERSION = 0.12.17`) con verifica `sha256` a build
     time; incluso nel bundle PyInstaller (`--add-data`, come
     `gtranslate_cli.py`); `find_uv()` = `UV` → bundle (`sys._MEIPASS`) →
     `PATH`; licenze MIT/Apache-2.0 in `vendor/uv-licenses/`. Da ricordare:
     **aggiornare `UV_VERSION` + le hash** a ogni aggiornamento di `uv`.
-12. ~~**Bootstrap di `uv` negli script**~~ → **fatto (v0.1.4)**:
+12. ~~**Bootstrap di `uv` negli script**~~ → **fatto (v0.1.5)**:
     `setup_engine.sh`/`.ps1` installano `uv` da soli se assente. **Resta
     opzionale** (da valutare): integrare il motore nell'installer NSIS come
     **componente opzionale e skippabile** (`uv.exe` incluso, `nsExec::ExecToLog`,
     destinazione `%LOCALAPPDATA%\noesis-pdf-cloner\engine\.venv2`); attenzione a
     SmartScreen/Defender e ai tempi del download di ~1,1 GB. Meglio comunque:
     installer veloce → primo avvio → la app scarica il motore.
-13. ~~**Disinstallazione del motore / dati**~~ → **fatto (v0.1.4)**:
+13. ~~**Disinstallazione del motore / dati**~~ → **fatto (v0.1.5)**:
     l'uninstaller NSIS mostra la pagina **"Cosa rimuovere"** (custom, nsDialogs)
     con due voci — motore `.venv2` e dati app in `%APPDATA%\noesis-pdf-cloner`
     (cache traduzioni, impostazioni, chiave, log) — più la casella **"Rimuovi
@@ -359,13 +359,13 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     Hermes). Nota: l'uninstaller gira elevato (admin), quindi
     `$APPDATA`/`$LOCALAPPDATA` sono quelli dell'utente che eleva (coincide con
     l'utente tipico). Compilato/verificato con `makensis` 3.10.
-14. ~~**Chiave OpenRouter: precedenza e feedback**~~ → **fatto (v0.1.4)**: vedi
+14. ~~**Chiave OpenRouter: precedenza e feedback**~~ → **fatto (v0.1.5)**: vedi
     §4 punto 20. La chiave salvata ha la precedenza sulla variabile di sistema;
     indicatore della fonte attiva, verifica pre-volo non bloccante, errori del
     motore classificati con consigli. Classificazione allineata nel servizio
     (`app/engine.py`).
 
-### Fatto il 23/09 (v0.1.4)
+### Fatto il 23/09 (v0.1.5)
 
 `uv` nel bundle → avviso "motore non installato" → bootstrap `uv` negli script
 (ordine consigliato rispettato) → **opzioni di disinstallazione nell'uninstaller
@@ -404,10 +404,9 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 - Visibilità: **pubblica**.
 - GitHub Pages: abilitato con `build_type=workflow`; guida a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
-- Release: esistenti **v0.1.2**, **v0.1.3** e (in preparazione) **v0.1.4**; per
-  pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag v0.1.4 && git push origin v0.1.4`). Un `workflow_dispatch` su `main`
-  produce solo artifact, senza release.
+- Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**; per pubblicarne una
+  nuova creare un tag `v*` e pusharlo (`git tag v0.1.5 && git push origin v0.1.5`).
+  Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
 
