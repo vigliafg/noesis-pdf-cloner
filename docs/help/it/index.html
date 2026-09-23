@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Guida — Noesis PDF Cloner</title>
+  <link rel="icon" href="../../assets/noesispdf-256.png">
   <link rel="stylesheet" href="../css/help.css">
 </head>
 <body>
 
   <header class="topbar">
-    <div class="brand">Noesis PDF Reader <span class="lite">Lite</span> — <em>Guida</em></div>
+    <a class="brand" href="../../">
+      <img src="../../assets/noesispdf-256.png" alt="">
+      Noesis PDF Cloner — <em>Guida</em>
+    </a>
     <div class="lang-switch">
       <a href="../it/" class="active" lang="it">🇮🇹 Italiano</a>
       <a href="../en/" lang="en">🇬🇧 English</a>
@@ -22,19 +26,19 @@
   <div class="wrap">
     <nav class="sidebar">
       <div class="group-label">Prodotto</div>
-      <a href="#features">Features</a>
+      <a href="#features">Panoramica</a>
       <a href="#getting-started">Per iniziare</a>
       <a href="#interface">Interfaccia</a>
       <div class="group-label">Uso</div>
       <a href="#navigation">Navigazione</a>
-      <a href="#extraction">Estrazione del testo</a>
-      <a href="#zones-exclude">Zone di esclusione</a>
-      <a href="#zones-include">Zone di inclusione</a>
-      <a href="#images">Estrazione immagini</a>
       <a href="#translation">Traduzione</a>
+      <a href="#engines">Motori</a>
+      <a href="#apikey">Chiave OpenRouter</a>
+      <a href="#export">Esportazione</a>
       <a href="#settings">Impostazioni</a>
       <div class="group-label">Piattaforme</div>
       <a href="#install">Installazione</a>
+      <a href="#engine">Motore di clonazione</a>
       <a href="#uninstall">Disinstallazione</a>
       <div class="group-label">Legalità</div>
       <a href="#legal">Disclaimer uso lecito</a>
@@ -44,129 +48,113 @@
 
     <main class="content">
       <h1>Noesis PDF Cloner — Guida</h1>
-      <p>Benvenuto nella guida completa. Qui trovi la descrizione di tutte le
-      funzionalità, le istruzioni di installazione e disinstallazione per ogni
-      piattaforma e le informazioni sull'uso lecito del programma.</p>
+      <p>Benvenuto nella guida completa. Noesis PDF Cloner apre un PDF e mostra
+      <strong>a sinistra la pagina originale</strong> e <strong>a destra la stessa
+      pagina tradotta con il layout preservato</strong>. Qui trovi la descrizione
+      delle funzionalità, l'uso dei motori di traduzione, la gestione della chiave
+      OpenRouter, l'esportazione, l'installazione e l'uso lecito del programma.</p>
 
       <!-- ═══════════════ PRODOTTO ═══════════════ -->
 
-      <h2 id="features">Features</h2>
-      <p>Noesis PDF Cloner è un lettore PDF con un motore di estrazione
-      del testo adattativo che ricostruisce automaticamente l'ordine di
-      lettura della pagina. Rispetto al progetto padre, questa versione usa un
-      solo motore di rendering (<strong>PyMuPDF</strong>) e un solo motore di
-      estrazione (<strong>PyMuPDF4LLM</strong>), senza menu di scelta a
-      runtime: tutto è automatico, con la possibilità di intervenire
-      manualmente dove serve.</p>
+      <h2 id="features">Panoramica</h2>
+      <p>Il clone tradotto è prodotto da
+      <strong>pdf2zh_next v2</strong> (typesetter <strong>BabelDOC</strong>):
+      testo, immagini, colonne, tabelle e formule restano al loro posto, mentre
+      il testo viene tradotto nella lingua scelta. La traduzione è
+      <strong>on-demand</strong>, pagina per pagina, con <strong>cache su
+      disco</strong> separata per motore e coppia linguistica.</p>
 
       <div class="cards">
-        <div class="card"><h4>📄 Estrazione intelligente</h4><p>Il testo della
-          pagina viene estratto in Markdown con l'ordine di lettura corretto:
-          colonne, tabelle, titoli, didascalie.</p></div>
-        <div class="card"><h4>🔍 Vista affiancata</h4><p>Pagina renderizzata a
-          sinistra, testo estratto a destra, con navigazione, indice (TOC) e
-          zoom.</p></div>
-        <div class="card"><h4>🚫 Zone di esclusione</h4><p>Trascina un box
-          rosso sul rumore (header, footer, immagini, didascalie) per
-          rimuoverlo dal testo.</p></div>
-        <div class="card"><h4>🟩 Zone di inclusione</h4><p>I box verdi numerati
-          definiscono l'ordine di lettura manuale per le pagine complesse.</p></div>
-        <div class="card"><h4>🖼️ Estrazione immagini</h4><p>Seleziona una zona
-          della pagina e salva la figura ritagliata nella galleria.</p></div>
-        <div class="card"><h4>🌐 Traduzione</h4><p>Traduci la pagina nella
-          lingua di destinazione scelta, con cache su disco.</p></div>
-        <div class="card"><h4>⚙️ Impostazioni</h4><p>Lingua interfaccia,
-          lingue di traduzione, zoom, font, header e comportamento di
-          lettura.</p></div>
-        <div class="card"><h4>🌍 Interfaccia multilingue</h4><p>Italiano,
-          English, Français, Deutsch, Español — cambiabile al volo.</p></div>
+        <div class="card"><h4>📖 Vista affiancata</h4><p>Pagina originale a
+          sinistra, clone tradotto a destra, con zoom sincronizzato.</p></div>
+        <div class="card"><h4>🧩 Layout preservato</h4><p>Il clone mantiene
+          impaginazione, figure, tabelle e formule della pagina.</p></div>
+        <div class="card"><h4>🌐 Tre motori</h4><p>Google (catena gratuita con
+          fallback), Bing e LLM via OpenRouter.</p></div>
+        <div class="card"><h4>▶ Traduzione on-demand</h4><p>La pagina parte solo
+          dal pulsante ▶ Traduci: niente traduzione automatica navigando.</p></div>
+        <div class="card"><h4>🗂️ Cache per motore</h4><p>Al secondo accesso la
+          pagina è istantanea; cambiando motore l'app chiede conferma.</p></div>
+        <div class="card"><h4>💾 Export guidato</h4><p>Wizard a 5 passi: un PDF
+          unito oppure pagine singole in ZIP.</p></div>
+        <div class="card"><h4>🔑 Chiave protetta</h4><p>La chiave OpenRouter è
+          salvata in un file per-utente (<code>0600</code>) con verifica.</p></div>
+        <div class="card"><h4>🌍 Interfaccia multilingue</h4><p>Italiano, English,
+          Français, Deutsch, Español — cambiabile al volo.</p></div>
       </div>
 
       <h3>In sintesi</h3>
       <ul>
-        <li><strong>Automatico di default</strong>: l'engine adattativo decide
-          il piano di lettura per ogni pagina.</li>
-        <li><strong>Manuale quando serve</strong>: le zone rosse e verdi
-          intervengono solo se le disegni tu.</li>
-        <li><strong>Zero configurazione per iniziare</strong>: apri un PDF e
-          leggi.</li>
+        <li><strong>Affiancato</strong>: originale e clone sempre a confronto.</li>
+        <li><strong>Controllo</strong>: la traduzione parte solo quando vuoi tu.</li>
+        <li><strong>Zero chiavi per iniziare</strong>: Google e Bing sono gratuiti.</li>
       </ul>
 
       <!-- ═══════════════ PER INIZIARE ═══════════════ -->
 
       <h2 id="getting-started">Per iniziare</h2>
       <ol>
-        <li>Avvia l'applicazione (vedi <a href="#install">Installazione</a>
-          per la tua piattaforma).</li>
-        <li>Clicca su <strong>📂 Apri PDF</strong> nella toolbar e scegli un
-          file PDF.</li>
-        <li>La pagina appare a sinistra, il testo estratto a destra.</li>
-        <li>Usa <strong>◀ Prec.</strong> / <strong>Succ. ▶</strong>, i tasti
-          freccia o l'indice <strong>📑 Indice</strong> per spostarti nel
-          documento.</li>
-        <li>Se il testo contiene rumore, prova le
-          <a href="#zones-exclude">zone di esclusione</a>.</li>
+        <li>Avvia l'applicazione (vedi <a href="#install">Installazione</a>) e
+          assicurati che il <a href="#engine">motore di clonazione</a> sia
+          installato.</li>
+        <li>Clicca su <strong>📂 Apri PDF</strong> nella toolbar e scegli un file.</li>
+        <li>In ⚙️ Impostazioni scegli la <strong>lingua del documento</strong>
+          (origine, anche <em>auto</em>) e la <strong>lingua della
+          traduzione</strong> (destinazione).</li>
+        <li>Scegli il <a href="#engines">motore</a> nella fascia del pannello
+          destro (Google, Bing o LLM).</li>
+        <li>Premi <strong>▶ Traduci</strong>: il clone appare a destra con il
+          layout intatto.</li>
+        <li>Con 💾 <strong>Esporta</strong> salvi la pagina o un intervallo (vedi
+          <a href="#export">Esportazione</a>).</li>
       </ol>
 
-      <div class="note"><strong>Consiglio</strong> Alla prima apertura l'app
-        parte nell'ultima pagina del documento (se l'opzione "Riprendi
-        dall'ultima pagina" è attiva) e nella lingua rilevata dal sistema
-        operativo.</div>
+      <div class="note"><strong>Consiglio</strong> Alla prima apertura l'app può
+        riprendere dall'ultima pagina del documento (se l'opzione è attiva) e usa
+        la lingua dell'interfaccia scelta. La traduzione <em>non</em> parte da
+        sola: serve sempre il pulsante ▶ Traduci.</div>
 
       <!-- ═══════════════ INTERFACCIA ═══════════════ -->
 
       <h2 id="interface">Interfaccia</h2>
-      <p>La finestra è divisa in tre aree principali:</p>
+      <p>La finestra è divisa in due pannelli affiancati: <strong>originale</strong>
+      a sinistra, <strong>clone tradotto</strong> a destra.</p>
 
       <h3>Toolbar superiore</h3>
       <table>
         <tr><th>Elemento</th><th>Funzione</th></tr>
         <tr><td>📂 Apri PDF</td><td>Apre un documento PDF</td></tr>
         <tr><td>📑 Indice</td><td>Mostra/nasconde l'indice (TOC) a sinistra</td></tr>
-        <tr><td>◀ Prec. / Succ. ▶ + numeri</td><td>Navigazione tra le pagine</td></tr>
-        <tr><td>🔍− / Scala / 🔍+</td><td>Zoom della pagina</td></tr>
-        <tr><td>📝 MD ✓</td><td>Attiva/disattiva il rendering Markdown del testo</td></tr>
-        <tr><td>⚙️ Impostazioni</td><td>Lingue, preferenze e comportamento</td></tr>
+        <tr><td>◀ Prec. / Succ. ▶ + numero</td><td>Navigazione tra le pagine</td></tr>
+        <tr><td>🔍− / Scala / 🔍+</td><td>Zoom sincronizzato dei due pannelli</td></tr>
+        <tr><td>📝 MD ✓</td><td>Rendering Markdown on/off (per il testo)</td></tr>
+        <tr><td>▶ Traduci</td><td>Traduce la pagina corrente (on-demand)</td></tr>
+        <tr><td>💾 Esporta</td><td>Wizard di esportazione (menu: export rapido)</td></tr>
+        <tr><td>⚙️ Impostazioni</td><td>Lingue, motore, chiave e preferenze</td></tr>
         <tr><td>❓ Guida</td><td>Apre questa guida nel browser</td></tr>
       </table>
 
-      <h3>Pannello di pagina (sinistra)</h3>
-      <p>Sopra la pagina ci sono gli strumenti di zona:</p>
-      <table>
-        <tr><th>Elemento</th><th>Funzione</th></tr>
-        <tr><td>🖱️ Seleziona zona</td><td>Estrae l'immagine della zona disegnata</td></tr>
-        <tr><td>🚫 Escludi zona</td><td>Esclude la zona dal testo (box rosso)</td></tr>
-        <tr><td>🟩 Includi zona</td><td>Definisce l'ordine di lettura (box verdi numerati)</td></tr>
-        <tr><td>🧹 Reset zone</td><td>Rimuove tutte le zone della pagina corrente</td></tr>
-      </table>
+      <h3>Pannello sinistro — originale</h3>
+      <p>Mostra la pagina del PDF così com'è, con l'indice (TOC) opzionale. Lo zoom
+      è condiviso con il pannello di destra, così i due lati restano allineati.</p>
 
-      <h3>Pannello destro (testo)</h3>
-      <p>Tre tab, in alto a destra:</p>
+      <h3>Pannello destro — clone tradotto</h3>
+      <p>In alto c'è la <strong>fascia dei motori</strong> con i radio button
+      <strong>Google / Bing / LLM</strong> e il pulsante <strong>▶ Traduci</strong>.
+      La fascia è <strong>collassabile</strong> (chevron in alto a destra): al
+      collasso lo spazio torna alla pagina, che si riadatta, e lo stato è ricordato
+      tra le sessioni.</p>
       <ul>
-        <li><strong>📄 Originale</strong> — il testo estratto (auto o manuale).</li>
-        <li><strong>🇫🇷 … (bandiera + lingua)</strong> — la traduzione della
-          pagina nella lingua di destinazione scelta nelle Impostazioni.</li>
-        <li><strong>🖼️ Immagini</strong> — la galleria delle figure estratte.</li>
+        <li><strong>Striscia “motore mancante”</strong> — se il motore non è
+          installato, compare una striscia con il pulsante <em>Installa motore</em>.</li>
+        <li><strong>Striscia “chiave mancante”</strong> — se scegli il motore LLM
+          senza chiave, una striscia propone <em>Inserisci chiave</em> oppure
+          <em>Usa Google/Bing</em>.</li>
       </ul>
-      <p>Le due tab di testo (📄 Originale e la traduzione) sono finestre
-      editabili: puoi digitare, selezionare, copiare e incollare liberamente
-      (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Ogni finestra ha la sua mini
-      toolbar con <strong>A−</strong>, la dimensione corrente e
-      <strong>A+</strong> per ridurre o aumentare il testo dal vivo, più
-      <strong>↺</strong> per ripristinare la dimensione delle Impostazioni e
-      <strong>💾</strong> per esportare il testo della finestra come
-      <code>.md</code> o <code>.txt</code> (con le tue modifiche, senza
-      l'header). Con il salvataggio attivo, un punto arancione
-      <strong>●</strong> accanto ai pulsanti avvisa di modifiche non ancora
-      scritte su disco.
-      Le due finestre si ingrandiscono in modo indipendente. Dopo una
-      modifica il testo è mostrato come testo semplice. Le modifiche vengono
-      salvate per pagina (cartella dati dell'app) e tornano alla riapertura
-      del documento.</p>
 
       <h3>Barra di stato</h3>
-      <p>In basso mostra la pagina corrente, il documento e il tempo di
-      estrazione, oltre ai messaggi relativi alle zone.</p>
+      <p>In basso mostra lo stato della traduzione (in corso, in cache, completata,
+      errore o annullata) e il messaggio del motore in uso.</p>
 
       <!-- ═══════════════ NAVIGAZIONE ═══════════════ -->
 
@@ -174,328 +162,357 @@
       <ul>
         <li><strong>Pulsanti</strong> ◀ Prec. / Succ. ▶ e casella del numero pagina.</li>
         <li><strong>Tastiera</strong>: frecce ← → e PagSu/PagGiù.</li>
-        <li><strong>Indice (TOC)</strong>: clicca 📑 Indice e scegli una voce
-          per saltare al capitolo.</li>
-        <li><strong>Zoom</strong>: pulsanti 🔍−/🔍+, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
+        <li><strong>Indice (TOC)</strong>: clicca 📑 Indice e scegli una voce per
+          saltare al capitolo.</li>
+        <li><strong>Zoom</strong>: 🔍−/🔍+, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
           <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> per
-          ripristinare. 1.00× adatta la pagina alla finestra; l'etichetta
-          mostra la scala corrente (0.25×–8.00×).</li>
-        <li><strong>Ripresa</strong>: se attivo nelle Impostazioni, l'app
-          riapre il documento sull'ultima pagina letta.</li>
+          ripristinare. Il valore 1.00× adatta la pagina alla finestra; l'etichetta
+          mostra la scala corrente.</li>
+        <li><strong>Ripresa</strong>: se attivo nelle Impostazioni, l'app riapre il
+          documento sull'ultima pagina letta.</li>
       </ul>
-
-      <!-- ═══════════════ ESTRAZIONE ═══════════════ -->
-
-      <h2 id="extraction">Estrazione del testo</h2>
-      <p>Il testo viene estratto con <strong>PyMuPDF4LLM</strong> e poi
-      riordinato dall'<strong>engine adattativo</strong>, che sceglie
-      automaticamente il piano di lettura (profilo → piano → pipeline):
-      riordino delle colonne, riconoscimento delle tabelle, gestione di box,
-      legende e didascalie, de-duplicazione dei titoli e delle spaziature.</p>
-
-      <div class="note"><strong>PDF scansionati</strong> Le pagine senza
-        livello di testo vengono riconosciute con l'<strong>OCR Tesseract</strong>
-        incluso nell'app (pacchetti Windows/macOS/Linux); la lingua OCR segue
-        l'impostazione della lingua del documento (rilevamento automatico di
-        default). L'estrazione gira in background, quindi l'interfaccia resta
-        reattiva, e i risultati sono memorizzati per pagina.</div>
-
-      <h3>Header di estrazione</h3>
-      <p>Se attivo (Impostazioni → "Mostra l'header di estrazione"), sopra il
-      testo compare una riga informativa:</p>
-      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 caratteri │ Fix: Engine adattativo │ OCR: 🌐 Auto │ Trad: Google Translate ──</code></pre>
-      <p>Il nome del motore nell'header riflette sempre il motore
-      attivo: cambiarlo al volo aggiorna la riga sopra il testo originale e
-      sopra quello tradotto.</p>
-
-      <h3>Rendering Markdown</h3>
-      <p>Il testo è mostrato come Markdown renderizzato (tabelle e formattazione
-      incluse). Con <strong>📝 MD ✓</strong> puoi passare al testo semplice.
-      Scorciatoia: <kbd>Ctrl</kbd>+<kbd>M</kbd>.</p>
-
-      <div class="note"><strong>Nota</strong> L'estrazione lavora sul
-        <em>testo</em> della pagina. Le immagini che contengono testo al loro
-        interno possono generare rumore: usa le
-        <a href="#zones-exclude">zone di esclusione</a> per rimuoverle.</div>
-
-      <!-- ═══════════════ ZONE DI ESCLUSIONE ═══════════════ -->
-
-      <h2 id="zones-exclude">Zone di esclusione (rosse)</h2>
-      <p>Quando una pagina contiene elementi che non fanno parte della lettura
-      (header, footer, numeri di pagina, immagini con testo, didascalie,
-      pubblicità), puoi escluderli manualmente:</p>
-      <ol>
-        <li>Clicca su <strong>🚫 Escludi zona</strong>.</li>
-        <li>Trascina col mouse un <strong>box rosso</strong> sul contenuto da
-          rimuovere.</li>
-        <li>Il testo viene ricalcolato immediatamente senza quel contenuto.</li>
-        <li>Premi di nuovo il pulsante per terminare.</li>
-      </ol>
-
-      <h3>Escludi + estrai in un solo gesto</h3>
-      <p>Se la zona rossa contiene un'immagine incorporata, l'<strong>intera
-      zona selezionata</strong> viene catturata automaticamente nella tab
-      🖼️ Immagini (le figure composite — più immagini, immagine + didascalia
-      — sono conservate per intero, non solo un frammento; il focus resta
-      sulla finestra di testo <strong>Originale</strong>). La barra di stato
-      conferma l'operazione.</p>
-
-      <div class="warning"><strong>Attenzione</strong> L'esclusione è
-        per-pagina e vive solo in memoria: chiudendo l'app le zone vengono
-        perse.</div>
-
-      <!-- ═══════════════ ZONE DI INCLUSIONE ═══════════════ -->
-
-      <h2 id="zones-include">Zone di inclusione (verdi)</h2>
-      <p>Per le pagine a layout complesso (es. più colonne o box sparsi) puoi
-      definire tu l'ordine di lettura con i <strong>box verdi numerati</strong>:</p>
-      <ol>
-        <li>Clicca su <strong>🟩 Includi zona</strong>.</li>
-        <li>Trascina un box verde sulla prima colonna/regione di lettura
-          (compare il numero <strong>1</strong>).</li>
-        <li>Disegna il box successivo nell'ordine di lettura (2, 3, …).</li>
-        <li>Il testo viene ricostruito seguendo la numerazione.</li>
-      </ol>
-
-      <h3>Regole</h3>
-      <ul>
-        <li><strong>Un box verde = una colonna/regione</strong>. Non usare un
-          solo box per abbracciare due colonne.</li>
-        <li><strong>Whitelist</strong>: con almeno un box verde, tutto ciò che
-          è fuori dai box viene scartato.</li>
-        <li><strong>Dentro un box</strong>: ordine alto→basso, poi
-          sinistra→destra.</li>
-        <li><strong>Composizione</strong>: le rosse tolgono il rumore prima,
-          le verdi ordinano ciò che resta; dove si sovrappongono vince il rosso.</li>
-      </ul>
-
-      <!-- ═══════════════ ESTRAZIONE IMMAGINI ═══════════════ -->
-
-      <h2 id="images">Estrazione immagini</h2>
-      <p>Puoi ritagliare una figura direttamente dalla pagina:</p>
-      <ol>
-        <li>Clicca su <strong>🖱️ Seleziona zona</strong>.</li>
-        <li>Trascina un rettangolo sulla figura.</li>
-        <li>L'immagine viene salvata nella tab <strong>🖼️ Immagini</strong>.</li>
-      </ol>
-      <p>Nella galleria ogni immagine ha i pulsanti:</p>
-      <ul>
-        <li><strong>💾 Salva</strong> — salva su file (PNG/JPEG).</li>
-        <li><strong>📋 Copia</strong> — copia negli appunti.</li>
-        <li><strong>🗑️ Rimuovi</strong> — elimina dalla galleria.</li>
-        <li>Clic sull'anteprima per ingrandire.</li>
-      </ul>
-      <p>Le immagini estratte sono salvate nella cartella dati dell'app e
-      vengono mantenute tra un avvio e l'altro.</p>
 
       <!-- ═══════════════ TRADUZIONE ═══════════════ -->
 
       <h2 id="translation">Traduzione</h2>
-      <p>Il pannello destro può mostrare la pagina tradotta nella lingua di
-      destinazione scelta (default: italiano).</p>
+      <p>La traduzione è <strong>pagina per pagina</strong> e parte
+      <strong>solo</strong> dal pulsante ▶ Traduci: navigare non traduce
+      automaticamente.</p>
       <ol>
-        <li>Apri <strong>⚙️ Impostazioni</strong> → sezione <em>Lingua</em>.</li>
-        <li>Scegli la <strong>lingua del documento</strong> (origine; "auto"
-          per il rilevamento automatico) e la <strong>lingua della
-          traduzione</strong> (destinazione).</li>
-        <li>Clicca sulla tab con <strong>bandiera + nome</strong> della lingua
-          di destinazione nel pannello destro.</li>
+        <li>Apri <strong>⚙️ Impostazioni</strong> → <em>Lingua</em> e scegli lingua
+          del documento (origine) e lingua di destinazione.</li>
+        <li>Scegli il motore nella fascia del pannello destro.</li>
+        <li>Premi <strong>▶ Traduci</strong> (o <kbd>Ctrl</kbd>+<kbd>E</kbd> per
+          esportare).</li>
       </ol>
 
       <h3>Come funziona</h3>
       <ul>
-        <li>La traduzione parte in background usando il motore scelto in
-          ⚙️ Impostazioni — Google Translate (default) o Microsoft Edge,
-          entrambi gratuiti e senza chiave API. Puoi anche cambiare motore al
-          volo con i radio button Google / Microsoft a sinistra della barra
-          delle tab di traduzione: la scelta viene salvata, la pagina corrente
-          viene ritradotta e un toast conferma il cambio per 2 secondi.</li>
-        <li>Mentre la traduzione viene prodotta, un toast (⏳ Traducendo con <em>motore</em>…)
-          appare sopra il testo tradotto; scompare quando compare il
-          risultato.</li>
-        <li>La cache su disco evita di ritradurre la stessa pagina: è indicizzata
-          per pagina e lingua di destinazione.</li>
-        <li>Durante il disegno delle zone la traduzione è rinviata di una
-          pausa di 600 ms (nessuna raffica di richieste).</li>
-        <li>Se cambi lingua di destinazione, la tab si aggiorna e la pagina
-          viene ritradotta.</li>
+        <li>Mentre la pagina viene prodotta, un <strong>riempimento “liquido”</strong>
+          mostra il progresso stimato sopra la preview, con un pulsante
+          <strong>Annulla</strong> che interrompe subito il subprocess.</li>
+        <li>Un <strong>toast</strong> indica il motore in uso (⏳ Traducendo con
+          <em>motore</em>…) e scompare quando arriva il risultato.</li>
+        <li>La <strong>cache su disco</strong> evita di ritradurre la stessa
+          pagina: è indicizzata per <em>documento + motore + coppia linguistica</em>.</li>
+        <li>Se <strong>quella pagina</strong> è già tradotta in cache con un
+          <em>altro</em> motore e cambi motore, l'app chiede conferma prima di
+          eliminarla per lasciare posto alla nuova traduzione.</li>
+        <li>La catena gratuita di Google può ripiegare su <strong>Microsoft</strong>
+          e poi <strong>LLM</strong>: un avviso segnala il fallback.</li>
       </ul>
 
-      <div class="warning"><strong>Attenzione</strong> La traduzione richiede
-        una connessione Internet e invia il testo della pagina a un servizio
-        esterno. Non tradurre documenti riservati senza averne il diritto.</div>
+      <div class="warning"><strong>Attenzione</strong> La traduzione richiede una
+        connessione Internet e invia il testo della pagina a un servizio esterno.
+        Non tradurre documenti riservati senza averne il diritto.</div>
+
+      <!-- ═══════════════ MOTORI ═══════════════ -->
+
+      <h2 id="engines">Motori di traduzione</h2>
+      <table>
+        <tr><th>Motore</th><th>Descrizione</th><th>Chiave</th></tr>
+        <tr>
+          <td><strong>Google</strong></td>
+          <td>Catena gratuita <code>gtranslate_cli.py</code>:
+            <code>dict-chrome-ex → translate-pa → gtx</code>, con fallback su
+            Microsoft e poi LLM.</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td><strong>Bing</strong></td>
+          <td>Traduttore Bing integrato in <code>pdf2zh_next</code>.</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td><strong>LLM</strong></td>
+          <td>Percorso OpenAI-compatibile (<code>--openai</code>) puntato a
+            <strong>OpenRouter</strong>.</td>
+          <td>Sì</td>
+        </tr>
+      </table>
+      <p>Il motore si cambia al volo dalla fascia o da ⚙️ Impostazioni: la scelta
+      viene salvata. Google e Bing sono gratuiti e non richiedono registrazione;
+      la chiave OpenRouter serve solo per il motore <strong>LLM</strong> e per
+      l'ultimo fallback della catena gratuita.</p>
+
+      <!-- ═══════════════ CHIAVE OPENROUTER ═══════════════ -->
+
+      <h2 id="apikey">Chiave OpenRouter</h2>
+      <p>Per il motore LLM serve una chiave <code>OPENROUTER_API_KEY</code>. Puoi
+      inserirla da ⚙️ Impostazioni → <em>Motore di clonazione</em>, dove trovi
+      anche il pulsante <strong>Verifica</strong>.</p>
+
+      <h3>Dove viene salvata e quale vince</h3>
+      <ul>
+        <li>La chiave è salvata in un <strong>file per-utente</strong> protetto
+          (<code>keystore.py</code>, permessi <code>0600</code>) nella cartella
+          dati dell'app — mai in <code>config.json</code>, nei log o negli
+          argomenti dei comandi.</li>
+        <li><strong>La chiave salvata ha la precedenza</strong> sulla variabile di
+          sistema <code>OPENROUTER_API_KEY</code>, che resta il <em>fallback</em>.
+          Impostazioni mostra quale chiave è attiva; se la variabile è impostata
+          ma ignorata, l'app lo segnala.</li>
+        <li>Se la variabile è stata impostata dopo l'avvio dell'app (tipico su
+          Windows), l'app avvisa che la variabile non è stata ereditata.</li>
+      </ul>
+
+      <h3>Verifica ed errori</h3>
+      <p>Prima di tradurre con l'LLM la chiave viene verificata senza bloccare la
+      GUI. Gli errori sono classificati con un consiglio:</p>
+      <table>
+        <tr><th>Esito</th><th>Significato</th></tr>
+        <tr><td>Chiave non valida</td><td>La chiave è errata o revocata.</td></tr>
+        <tr><td>Accesso negato</td><td>La chiave non ha i permessi per il modello.</td></tr>
+        <tr><td>Credito esaurito</td><td>Il credito OpenRouter è terminato.</td></tr>
+        <tr><td>Troppe richieste</td><td>Rate limit: riprova tra poco.</td></tr>
+        <tr><td>Modello non disponibile</td><td>Il modello non è raggiungibile.</td></tr>
+        <tr><td>Errore di rete</td><td>Connessione assente o instabile.</td></tr>
+      </table>
+      <div class="note"><strong>In caso di problemi</strong> puoi sempre ripiegare
+        sul motore <strong>Google</strong> o <strong>Bing</strong>, che non
+        richiedono chiave.</div>
+
+      <!-- ═══════════════ ESPORTAZIONE ═══════════════ -->
+
+      <h2 id="export">Esportazione</h2>
+      <p>Con 💾 <strong>Esporta</strong> si apre una <strong>procedura guidata in
+      5 passi</strong>: <em>File → Pagine → Lingue → Motore → Output</em>.</p>
+      <ol>
+        <li><strong>File</strong> — il documento di partenza.</li>
+        <li><strong>Pagine</strong> — pagina corrente o intervallo, con
+          <strong>anteprime grandi e live</strong> della prima e dell'ultima
+          pagina della selezione. Ogni anteprima mostra il numero
+          <strong>fisico</strong> e quello <strong>stampato</strong>
+          (<code>/PageLabels</code>) quando differiscono.</li>
+        <li><strong>Lingue</strong> — lingua di origine e di destinazione.</li>
+        <li><strong>Motore</strong> — il motore di traduzione e la stima del tempo.</li>
+        <li><strong>Output</strong> — <strong>un unico PDF</strong> oppure
+          <strong>pagine singole in un archivio ZIP</strong>, e il percorso di
+          salvataggio.</li>
+      </ol>
+
+      <h3>Traduzione preventiva e avanzamento</h3>
+      <p>Le pagine non ancora in cache possono essere tradotte prima dell'export,
+      con annullamento immediato. La finestra di avanzamento mostra la pagina
+      correntemente in lavorazione, che avanza pagina per pagina; a fine processo
+      trovi il pulsante <strong>⬇ Salva in Download</strong>.</p>
+
+      <h3>Export rapido</h3>
+      <p>Dal menu del pulsante 💾 è disponibile l'export della <strong>sola pagina
+      corrente</strong>, senza passare dal wizard.</p>
 
       <!-- ═══════════════ IMPOSTAZIONI ═══════════════ -->
 
       <h2 id="settings">Impostazioni</h2>
-      <p>Il menu <strong>⚙️ Impostazioni</strong> (in alto a destra) raccoglie
-      tutto ciò che riguarda lingua e preferenze. È mostrato nella lingua
-      dell'interfaccia scelta e l'anteprima della lingua è dal vivo.</p>
+      <p>Il menu <strong>⚙️ Impostazioni</strong> raccoglie lingua, motore e
+      preferenze; è mostrato nella lingua dell'interfaccia scelta.</p>
 
       <h3>Lingua</h3>
       <ul>
-        <li><strong>Lingua interfaccia</strong> — it/en/fr/de/es; cambia
-          subito tutta la UI (il testo del PDF resta nella lingua originale).</li>
-        <li><strong>Lingua del documento (origine)</strong> — la lingua del
-          PDF; "auto" per il rilevamento automatico.</li>
-        <li><strong>Lingua della traduzione (destinazione)</strong> — la
-          lingua in cui tradurre il testo.</li>
+        <li><strong>Lingua interfaccia</strong> — it/en/fr/de/es; cambia subito
+          tutta la UI.</li>
+        <li><strong>Lingua del documento (origine)</strong> — la lingua del PDF;
+          <em>auto</em> per il rilevamento automatico.</li>
+        <li><strong>Lingua della traduzione (destinazione)</strong> — la lingua in
+          cui tradurre.</li>
       </ul>
 
       <h3>Traduzione</h3>
       <ul>
-        <li><strong>Motore di traduzione</strong> — Google Translate (default)
-          o Microsoft Edge (gratuito), senza chiave API. Cambiarlo ritraduce
-          la pagina corrente. Google Translate commuta automaticamente tra
-          tre endpoint gratuiti (dict-chrome-ex → translate-pa → gtx): se il servizio è
-          bloccato sulla tua rete, appare un avviso invece di mostrare
-          silenziosamente il testo non tradotto.</li>
+        <li><strong>Motore di traduzione</strong> — Google, Bing o LLM.</li>
+      </ul>
+
+      <h3>Motore di clonazione</h3>
+      <ul>
+        <li><strong>Percorso di <code>pdf2zh_next</code></strong> — vuoto per
+          l'auto-rilevamento; altrimenti il percorso del binario.</li>
+        <li><strong>Installa motore</strong> — installa il motore accanto
+          all'eseguibile (o nella cartella dati, se la prima non è scrivibile).</li>
+        <li><strong>Chiave OpenRouter</strong> — inserimento e <em>Verifica</em>
+          (vedi <a href="#apikey">Chiave OpenRouter</a>).</li>
       </ul>
 
       <h3>Testo</h3>
       <ul>
         <li><strong>Dimensione font</strong> — 10–16 pt.</li>
         <li><strong>Rendering Markdown</strong> — on/off.</li>
-        <li><strong>Mostra l'header di estrazione</strong> — on/off.</li>
-        <li><strong>Salva le modifiche ai testi</strong> — salva le modifiche
-          fatte nelle finestre Originale/Tradotto per documento (attivo di
-          default).</li>
-        <li><strong>🗑️ Cancella modifiche salvate</strong> — elimina le
-          modifiche salvate del documento corrente (con conferma).</li>
+        <li><strong>Salva le modifiche ai testi</strong> — salva per documento le
+          modifiche fatte nelle finestre di testo.</li>
+        <li><strong>🗑️ Cancella modifiche salvate</strong> — elimina le modifiche
+          salvate del documento corrente (con conferma).</li>
       </ul>
 
-      <h3>Visualizzazione</h3>
+      <h3>Visualizzazione e comportamento</h3>
       <ul>
-        <li><strong>Zoom di avvio</strong> — risoluzione di base del render,
-          0.5×–4.0× (incide sulla nitidezza; la scala visibile parte da
-          1.00× = adatta).</li>
-      </ul>
-
-      <h3>Comportamento</h3>
-      <ul>
+        <li><strong>Zoom di avvio</strong> — risoluzione di base del render
+          (0.5×–4.0×).</li>
         <li><strong>Riprendi dall'ultima pagina</strong> — per documento.</li>
         <li><strong>Ricorda l'ultima tab</strong> — del pannello destro.</li>
       </ul>
 
-      <p>Tutto è salvato nel file <code>config.json</code> nella cartella dati
-      dell'app (creato al primo avvio con la lingua dell'OS o italiano) e
-      sopravvive agli aggiornamenti. Vedi <a href="#uninstall">Disinstallazione</a>
-      per la posizione esatta per piattaforma.</p>
+      <p>Tutto è salvato in <code>config.json</code> nella cartella dati dell'app
+      (creata al primo avvio con la lingua dell'OS o italiano) e sopravvive agli
+      aggiornamenti. Vedi <a href="#uninstall">Disinstallazione</a> per la posizione
+      per piattaforma.</p>
 
       <!-- ═══════════════ INSTALLAZIONE ═══════════════ -->
 
       <h2 id="install">Installazione</h2>
-      <p>Il programma è <strong>portatile</strong>: non esiste un vero
-      installatore. Scarichi il pacchetto della tua piattaforma dalla pagina
-      delle release del progetto su GitHub e lo esegui.</p>
+      <p>I pacchetti sono compilati con <strong>PyInstaller</strong> su runner
+      nativi e pubblicati nella <a
+      href="https://github.com/vigliafg/noesis-pdf-cloner/releases">pagina delle
+      release</a>. Il binario include la GUI <em>e</em> <code>uv</code>: il motore
+      si installa accanto all'eseguibile (vedi
+      <a href="#engine">Motore di clonazione</a>).</p>
 
       <h3>Windows (x64)</h3>
       <ol>
-        <li>Scarica <code>NoesisPDFReaderLite-windows-x64.exe</code>.</li>
-        <li>Doppio clic sul file per avviare l'app (può restare nella cartella
-          Download).</li>
-        <li>Nessuna installazione, nessun servizio, nessuna voce di registro
-          obbligatoria.</li>
+        <li>Scarica <code>NoesisPDFCloner-windows-x64-setup.exe</code>
+          (installer) oppure <code>NoesisPDFCloner-windows-x64.exe</code>
+          (portabile).</li>
+        <li>Avvia l'installer oppure esegui il file portabile.</li>
+        <li>Potrebbe essere necessario consentire l'esecuzione al primo avvio
+          (SmartScreen).</li>
       </ol>
-      <p><strong>Requisiti</strong>: Windows 10/11 x64. Potrebbe essere
-      necessario consentire l'esecuzione al primo avvio (SmartScreen).</p>
+      <p><strong>Requisiti</strong>: Windows 10/11 x64.</p>
 
       <h3>macOS (x64 / Apple Silicon)</h3>
       <ol>
-        <li>Scarica <code>NoesisPDFReaderLite-macos-x64.dmg</code> (Mac Intel)
-          oppure <code>NoesisPDFReaderLite-macos-arm64.dmg</code> (Apple
-          Silicon).</li>
-        <li>Apri il <code>.dmg</code> e trascina l'app nella cartella
+        <li>Scarica <code>NoesisPDFCloner-macos-x64.dmg</code> (Intel) oppure
+          <code>NoesisPDFCloner-macos-arm64.dmg</code> (Apple Silicon).</li>
+        <li>Apri il <code>.dmg</code> e trascina l'app in
           <strong>Applicazioni</strong>.</li>
-        <li>Al primo avvio, l'app non è firmata: fai <strong>tasto destro
-          sull'app → Apri</strong> e conferma per aggirare Gatekeeper.</li>
+        <li>Al primo avvio, se l'app non è firmata: <strong>tasto destro → Apri</strong>
+          e conferma per aggirare Gatekeeper.</li>
       </ol>
       <p><strong>Requisiti</strong>: macOS 11 o successivo.</p>
 
       <h3>Linux (x86_64)</h3>
       <ol>
-        <li>Scarica <code>NoesisPDFReaderLite-x86_64.AppImage</code>.</li>
+        <li>Scarica <code>NoesisPDFCloner-x86_64.AppImage</code>.</li>
         <li>Rendilo eseguibile:
-          <pre><code>chmod +x NoesisPDFReaderLite-x86_64.AppImage</code></pre></li>
-        <li>Avvialo con doppio clic o dal terminale:
-          <pre><code>./NoesisPDFReaderLite-x86_64.AppImage</code></pre></li>
+          <pre><code>chmod +x NoesisPDFCloner-x86_64.AppImage</code></pre></li>
+        <li>Avvialo:
+          <pre><code>./NoesisPDFCloner-x86_64.AppImage</code></pre></li>
       </ol>
-      <p><strong>Requisiti</strong>: Linux x86_64 con FUSE (per l'AppImage) e
-      le librerie Qt6. Se FUSE non è disponibile, estrai l'AppImage con
+      <p><strong>Requisiti</strong>: Linux x86_64 con FUSE e le librerie Qt6. Se
+      FUSE non è disponibile, usa
       <code>--appimage-extract-and-run</code>.</p>
 
       <h3>Da sorgente (sviluppatori)</h3>
-      <pre><code>python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python main.py</code></pre>
+      <p>Serve <strong>Python 3.12</strong> e <a
+      href="https://docs.astral.sh/uv/">uv</a>. Lo script crea i due venv e apre
+      la GUI:</p>
+      <pre><code>./run.sh
+./run.sh /percorso/file.pdf</code></pre>
 
       <div class="note"><strong>Nota</strong> Ogni aggiornamento si applica
-        scaricando e avviando il nuovo pacchetto della stessa piattaforma. Le
-        preferenze (config.json, cache, immagini) restano nella cartella dati
-        dell'app e non vengono toccate.</div>
+        scaricando il nuovo pacchetto della stessa piattaforma. Preferenze, cache
+        e chiave restano nella cartella dati dell'app e non vengono toccate.</div>
+
+      <!-- ═══════════════ MOTORE DI CLONAZIONE ═══════════════ -->
+
+      <h2 id="engine">Motore di clonazione</h2>
+      <p>Il motore è <code>pdf2zh_next</code> v2 (BabelDOC), installato in un
+      ambiente dedicato <code>.venv2</code> (Python 3.12) e invocato come
+      <strong>subprocess CLI</strong>. Il binario della GUI include <code>uv</code>,
+      quindi non serve installare nulla a mano.</p>
+
+      <h3>Installazione dall'app</h3>
+      <ul>
+        <li>⚙️ Impostazioni → <em>Motore di clonazione</em> →
+          <strong>Installa motore</strong>.</li>
+        <li>Oppure dal pulsante <strong>Installa motore</strong> nella striscia di
+          avviso che compare nel pannello destro finché il motore manca.</li>
+      </ul>
+      <p>L'installazione avviene <strong>accanto all'eseguibile</strong>. Se la
+      cartella dell'app non è scrivibile (es. <code>C:\Program Files</code>, o
+      l'AppImage che gira da un mount in sola lettura), il motore viene installato
+      nella <strong>cartella dati per-utente</strong> e l'app lo rileva comunque.</p>
+
+      <h3>Installazione dagli script della release</h3>
+      <pre><code>./setup_engine.sh                                              # Linux / macOS
+powershell -ExecutionPolicy Bypass -File .\setup_engine.ps1    # Windows</code></pre>
+      <p>Se <code>uv</code> non è presente, lo script lo scarica da solo.</p>
+
+      <h3>Rilevamento del binario</h3>
+      <p>L'app cerca <code>pdf2zh_next</code> in quest'ordine:</p>
+      <ol>
+        <li>il percorso indicato in ⚙️ Impostazioni;</li>
+        <li>la variabile d'ambiente <code>PDF2ZH_BIN</code>;</li>
+        <li>la cartella <code>.venv2</code> accanto all'app/repository.</li>
+      </ol>
+
+      <h3>Dati e log</h3>
+      <ul>
+        <li><strong>Cache</strong>: nella cartella dati dell'app, sottocartella
+          <code>clones/</code>, con chiave per documento + motore + coppia
+          linguistica.</li>
+        <li><strong>Log</strong>: <code>&lt;cartella dati&gt;/logs/noesis-pdf-cloner.log</code>.</li>
+        <li><strong>Posizione cartella dati</strong>: Windows
+          <code>%APPDATA%\noesis-pdf-cloner\</code>, macOS
+          <code>~/Library/Application Support/noesis-pdf-cloner/</code>, Linux
+          <code>~/.local/share/noesis-pdf-cloner/</code>.</li>
+      </ul>
 
       <!-- ═══════════════ DISINSTALLAZIONE ═══════════════ -->
 
       <h2 id="uninstall">Disinstallazione</h2>
-      <p>Essendo portatile, la disinstallazione consiste nel rimuovere i file
-      del programma e, se vuoi, la cartella dati utente.</p>
+      <p>La disinstallazione consiste nel rimuovere il programma e, se vuoi, la
+      cartella dati utente (config, cache, chiave, log).</p>
 
       <h3>Windows</h3>
       <ol>
-        <li>Elimina <code>NoesisPDFReaderLite-windows-x64.exe</code>.</li>
-        <li>Per rimuovere anche i dati utente, elimina la cartella
-          <code>%APPDATA%\noesis-pdf-cloner\</code> (config, cache
-          traduzioni, immagini).</li>
+        <li>Disinstalla dal Pannello di controllo, oppure elimina l'eseguibile
+          portabile.</li>
+        <li>Per rimuovere anche i dati utente, elimina
+          <code>%APPDATA%\noesis-pdf-cloner\</code>.</li>
       </ol>
 
       <h3>macOS</h3>
       <ol>
-        <li>Trascina l'app nella cartella <strong>Applicazioni</strong> nel
-          Cestino.</li>
-        <li>Per rimuovere anche i dati utente, elimina la cartella
+        <li>Trascina l'app nel Cestino.</li>
+        <li>Per rimuovere anche i dati utente, elimina
           <code>~/Library/Application Support/noesis-pdf-cloner/</code>.</li>
       </ol>
 
       <h3>Linux</h3>
       <ol>
-        <li>Elimina il file <code>NoesisPDFReaderLite-x86_64.AppImage</code>.</li>
-        <li>Per rimuovere anche i dati utente, elimina la cartella
+        <li>Elimina il file <code>NoesisPDFCloner-x86_64.AppImage</code>.</li>
+        <li>Per rimuovere anche i dati utente, elimina
           <code>~/.local/share/noesis-pdf-cloner/</code>.</li>
       </ol>
 
-      <div class="warning"><strong>Attenzione</strong> La cartella dati
-        contiene le tue preferenze e le immagini estratte: eliminarla è
-        irreversibile. Se intendi reinstallare, puoi conservarla.</div>
+      <div class="warning"><strong>Attenzione</strong> La cartella dati contiene
+        preferenze, cache e chiave: eliminarla è irreversibile. Se intendi
+        reinstallare, puoi conservarla.</div>
 
       <!-- ═══════════════ DISCLAIMER ═══════════════ -->
 
       <h2 id="legal">Disclaimer uso lecito</h2>
       <div class="legal">
         <strong>Responsabilità dell'utente</strong>
-        <p>Noesis PDF Cloner è uno strumento di lettura e di estrazione di
-        testo e immagini da documenti PDF. L'utente è l'unico responsabile
-        dell'uso che fa del programma e dei documenti che elabora.</p>
-        <p>Prima di estrarre, copiare, tradurre o ridistribuire contenuti,
-        verifica di avere il diritto di farlo:</p>
+        <p>Noesis PDF Cloner è uno strumento di lettura e di traduzione di
+        documenti PDF. L'utente è l'unico responsabile dell'uso che fa del
+        programma e dei documenti che elabora.</p>
+        <p>Prima di tradurre, copiare o ridistribuire contenuti, verifica di avere
+        il diritto di farlo:</p>
         <ul>
-          <li>utilizza il programma solo su documenti di cui possiedi i diritti
-            o per i quali hai ottenuto l'autorizzazione;</li>
+          <li>utilizza il programma solo su documenti di cui possiedi i diritti o
+            per i quali hai ottenuto l'autorizzazione;</li>
           <li>rispetta il diritto d'autore e i termini di licenza dei materiali
             (libri, articoli, pubblicazioni scientifiche, manuali);</li>
-          <li>non utilizzare il programma per aggirare protezioni, violare
-            termini di servizio o facilitare la pirateria;</li>
-          <li>non ridistribuire contenuti estratti o tradotti senza
-            autorizzazione;</li>
-          <li>rispetta le leggi del tuo paese sulla proprietà intellettuale e
-            sulla privacy.</li>
+          <li>non utilizzare il programma per aggirare protezioni, violare termini
+            di servizio o facilitare la pirateria;</li>
+          <li>non ridistribuire contenuti tradotti senza autorizzazione;</li>
+          <li>rispetta le leggi del tuo paese sulla proprietà intellettuale e sulla
+            privacy.</li>
         </ul>
         <p>La traduzione invia il testo a un servizio esterno: non tradurre
         documenti riservati o protetti senza averne il diritto.</p>
         <p>Questo testo è un invito alla prudenza e <strong>non costituisce
-        consulenza legale</strong>. Per casi specifici, consulta un
-        professionista abilitato o le leggi vigenti nel tuo paese.</p>
-        <p>Il programma è fornito "così com'è", senza garanzie di alcun tipo,
-        esplicite o implicite.</p>
+        consulenza legale</strong>. Il programma è fornito “così com'è”, senza
+        garanzie di alcun tipo.</p>
       </div>
 
       <!-- ═══════════════ SCORCIATOIE & FAQ ═══════════════ -->
@@ -508,40 +525,49 @@
         <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd></td><td>Zoom avanti / indietro</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Ripristina zoom</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Attiva/disattiva Markdown</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Esporta la pagina tradotta</td></tr>
       </table>
 
       <h3>FAQ</h3>
-      <h4>Perché il testo estratto contiene parole che non vedo nella pagina?</h4>
-      <p>Probabilmente sono testo dentro immagini (figure, diagrammi), passato
-      all'OCR. Usa una <a href="#zones-exclude">zona di esclusione</a> sul box
-      dell'immagine per rimuoverle.</p>
+      <h4>Il pulsante ▶ Traduci non fa nulla / dice che il motore manca.</h4>
+      <p>Il motore di clonazione non è installato: usa <strong>Installa motore</strong>
+      nella striscia del pannello destro o in ⚙️ Impostazioni (vedi
+      <a href="#engine">Motore di clonazione</a>).</p>
 
-      <h4>L'ordine di lettura non è corretto su una pagina complessa.</h4>
-      <p>Usa le <a href="#zones-include">zone di inclusione</a> verdi per
-      definire manualmente l'ordine delle colonne.</p>
+      <h4>Ho scelto il motore LLM ma chiede una chiave.</h4>
+      <p>Il motore LLM usa OpenRouter e richiede <code>OPENROUTER_API_KEY</code>.
+      Inseriscila in ⚙️ Impostazioni e premi <strong>Verifica</strong>, oppure
+      ripiega su Google/Bing (vedi <a href="#apikey">Chiave OpenRouter</a>).</p>
 
-      <h4>Le mie zone spariscono quando chiudo l'app.</h4>
-      <p>Sì: le zone (rosse e verdi) vivono in memoria e sono per-pagina. Le
-      preferenze, invece, restano salvate nel config.</p>
+      <h4>La traduzione non parte o è lenta.</h4>
+      <p>Controlla la connessione Internet e che il motore sia selezionato. La
+      catena gratuita può ripiegare su Microsoft/LLM: guarda l'avviso nella barra
+      di stato. Puoi annullare con il pulsante <strong>Annulla</strong>.</p>
+
+      <h4>Perché una pagina è già tradotta?</h4>
+      <p>La cache conserva per <em>documento + motore + coppia linguistica</em>. Se
+      cambi motore su una pagina già in cache con un altro motore, l'app chiede
+      conferma prima di sostituirla.</p>
 
       <h4>Come cambio la lingua dell'interfaccia?</h4>
       <p>⚙️ Impostazioni → Lingua → Lingua interfaccia.</p>
 
-      <h4>La traduzione non parte.</h4>
-      <p>Controlla la connessione Internet e che la tab della lingua di
-      destinazione sia attiva. La traduzione è rinviata durante il disegno
-      delle zone.</p>
+      <h4>L'app non rileva <code>pdf2zh_next</code>.</h4>
+      <p>Indica il percorso del binario in ⚙️ Impostazioni, oppure imposta la
+      variabile <code>PDF2ZH_BIN</code>. L'app cerca anche <code>.venv2</code>
+      accanto all'eseguibile (vedi <a href="#engine">Motore di clonazione</a>).</p>
 
       <h4>È disponibile una nuova versione?</h4>
-      <p>Le release sono pubblicate sulla pagina GitHub del progetto: scarica
-      il pacchetto della tua piattaforma e avvialo. Le preferenze restano
-      intatte.</p>
+      <p>Le release sono pubblicate sulla pagina GitHub del progetto: scarica il
+      pacchetto della tua piattaforma. Preferenze, cache e chiave restano intatte.</p>
     </main>
   </div>
 
   <footer>
-    Noesis PDF Cloner — Guida · Documentazione del progetto ·
-    <a href="https://github.com/vigliafg/noesis-pdf-cloner">Repository GitHub</a>
+    Noesis PDF Cloner — Guida ·
+    <a href="../../">Sito del progetto</a> ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner">Repository GitHub</a> ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner/releases">Release</a>
   </footer>
 
   <script src="../js/help.js"></script>

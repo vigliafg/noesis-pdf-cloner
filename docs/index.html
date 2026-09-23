@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Noesis PDF Cloner — PDF tradotti con il layout intatto</title>
+  <meta name="description" content="App desktop PyQt6 che apre un PDF e mostra a fianco la stessa pagina tradotta, con il layout preservato. Motori Google, Bing e LLM (OpenRouter).">
+  <link rel="icon" href="assets/noesispdf-256.png">
+  <link rel="stylesheet" href="help/css/help.css">
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="./">
+      <img src="assets/noesispdf-256.png" alt="">
+      Noesis PDF Cloner
+      <span class="tag">clone tradotto</span>
+    </a>
+    <nav>
+      <a href="#features">Panoramica</a>
+      <a href="#engines">Motori</a>
+      <a href="#export">Esportazione</a>
+      <a href="#install">Download</a>
+      <a href="help/it/">📖 Guida</a>
+      <a href="https://github.com/vigliafg/noesis-pdf-cloner/releases/latest" class="cta">⬇ Release</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <img class="logo" src="assets/noesispdf-256.png" alt="Noesis PDF Cloner">
+    <h1>PDF tradotti con il layout intatto</h1>
+    <p class="lead">Apri un PDF e vedi <strong>a sinistra la pagina originale</strong> e
+    <strong>a destra la stessa pagina tradotta</strong>: testo, immagini, colonne,
+    tabelle e formule restano al loro posto. La traduzione è <em>on-demand</em>,
+    pagina per pagina, con cache su disco.</p>
+    <div class="badges">
+      <span class="badge">🖥️ Desktop PyQt6</span>
+      <span class="badge">🧩 pdf2zh_next v2 · BabelDOC</span>
+      <span class="badge">🌐 Google · Bing · LLM</span>
+      <span class="badge">⚡ Cache per motore e lingua</span>
+      <span class="badge">💾 Export PDF o ZIP</span>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/vigliafg/noesis-pdf-cloner/releases/latest">⬇ Scarica l'ultima release</a>
+      <a class="btn" href="help/it/">📖 Leggi la guida</a>
+      <a class="btn" href="https://github.com/vigliafg/noesis-pdf-cloner">🐙 GitHub</a>
+    </div>
+  </div>
+
+  <!-- ═══════════════ PANORAMICA ═══════════════ -->
+
+  <section class="block" id="features">
+    <h2>Panoramica</h2>
+    <p class="sub">Un lettore PDF affiancato a un motore di clonazione che ricostruisce
+    la pagina tradotta senza perdere l'impaginazione.</p>
+    <div class="cards">
+      <div class="card"><h4>📖 Vista affiancata</h4><p>Pagina originale a sinistra,
+        clone tradotto a destra, con zoom sincronizzato sui due pannelli.</p></div>
+      <div class="card"><h4>🧩 Layout preservato</h4><p>Il clone è prodotto da
+        <strong>pdf2zh_next v2</strong> (typesetter BabelDOC): colonne, tabelle,
+        figure e formule restano dove sono.</p></div>
+      <div class="card"><h4>🌐 Tre motori</h4><p><strong>Google</strong> (catena
+        gratuita con fallback), <strong>Bing</strong> e <strong>LLM</strong> via
+        OpenRouter. Si cambiano al volo.</p></div>
+      <div class="card"><h4>▶ Traduzione on-demand</h4><p>Niente traduzione automatica
+        cambiando pagina: la pagina parte solo quando premi <strong>▶ Traduci</strong>.
+        Al secondo accesso è istantanea, dalla cache.</p></div>
+      <div class="card"><h4>🗂️ Cache intelligente</h4><p>Una cache per
+        <em>documento + motore + coppia linguistica</em>. Cambiando motore su una
+        pagina già tradotta, l'app chiede conferma prima di sostituirla.</p></div>
+      <div class="card"><h4>💾 Esportazione guidata</h4><p>Un wizard a 5 passi per
+        esportare la pagina corrente o un intervallo: <strong>un PDF unito</strong>
+        o <strong>pagine singole in ZIP</strong>.</p></div>
+      <div class="card"><h4>🔑 Chiave OpenRouter</h4><p>Salvata in un file
+        per-utente protetto (<code>0600</code>), con verifica e messaggi d'errore
+        chiari. Vince sulla variabile di sistema.</p></div>
+      <div class="card"><h4>🌍 Interfaccia multilingue</h4><p>Italiano, English,
+        Français, Deutsch, Español — cambiabile al volo senza riavviare.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ MOTORI ═══════════════ -->
+
+  <section class="block" id="engines">
+    <h2>Motori di traduzione</h2>
+    <p class="sub">Si scelgono dalla fascia nel pannello destro o da ⚙️ Impostazioni.</p>
+    <table>
+      <tr><th>Motore</th><th>Come funziona</th><th>Chiave API</th></tr>
+      <tr>
+        <td><strong>Google</strong></td>
+        <td>Catena gratuita <code>gtranslate_cli.py</code>:
+          <code>dict-chrome-ex → translate-pa → gtx</code>, con fallback
+          automatico su Microsoft e poi LLM. Un avviso segnala i fallback.</td>
+        <td>No</td>
+      </tr>
+      <tr>
+        <td><strong>Bing</strong></td>
+        <td>Traduttore Bing integrato in <code>pdf2zh_next</code>.</td>
+        <td>No</td>
+      </tr>
+      <tr>
+        <td><strong>LLM</strong></td>
+        <td>Percorso OpenAI-compatibile di <code>pdf2zh_next</code> (<code>--openai</code>)
+          puntato a <strong>OpenRouter</strong>.</td>
+        <td>Sì (<code>OPENROUTER_API_KEY</code>)</td>
+      </tr>
+    </table>
+    <div class="note"><strong>Nessuna chiave per iniziare</strong> Google e Bing sono
+      gratuiti e non richiedono registrazione. La chiave OpenRouter serve solo per il
+      motore <strong>LLM</strong> e per l'ultimo fallback della catena gratuita.</div>
+  </section>
+
+  <!-- ═══════════════ COME FUNZIONA ═══════════════ -->
+
+  <section class="block" id="how">
+    <h2>Come funziona</h2>
+    <p class="sub">Quattro passi, dal PDF all'export.</p>
+    <div class="steps">
+      <div class="step"><h4>Apri il PDF</h4><p>La pagina originale compare a
+        sinistra, con indice, navigazione e zoom.</p></div>
+      <div class="step"><h4>Scegli lingua e motore</h4><p>Lingua del documento
+        (anche <em>auto</em>) e lingua di destinazione, più il motore di traduzione.</p></div>
+      <div class="step"><h4>Premi ▶ Traduci</h4><p>Il clone arriva nel pannello
+        destro con il layout intatto; un riempimento “liquido” mostra il progresso
+        e puoi annullare in ogni momento.</p></div>
+      <div class="step"><h4>Esporta</h4><p>Salva la pagina o un intervallo come PDF
+        unico o come pagine singole in uno ZIP, direttamente in Download.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ ESPORTAZIONE ═══════════════ -->
+
+  <section class="block" id="export">
+    <h2>Esportazione</h2>
+    <p class="sub">Procedura guidata in 5 passi: <em>File → Pagine → Lingue → Motore → Output</em>.</p>
+    <div class="cards">
+      <div class="card"><h4>📄 Pagine</h4><p>Pagina corrente o intervallo, con
+        anteprime grandi e live della prima e dell'ultima pagina.</p></div>
+      <div class="card"><h4>🔢 Doppia numerazione</h4><p>Il numero <em>fisico</em> e
+        quello <em>stampato</em> (<code>/PageLabels</code>) quando differiscono.</p></div>
+      <div class="card"><h4>📦 Formato</h4><p><strong>Un unico PDF</strong> oppure
+        <strong>pagine singole in un archivio ZIP</strong>.</p></div>
+      <div class="card"><h4>⬇ Salva in Download</h4><p>A fine processo un pulsante
+        copia il risultato nella cartella Download.</p></div>
+    </div>
+    <p>Dal menu del pulsante 💾 è disponibile anche l'<strong>export rapido della
+    sola pagina corrente</strong>, senza wizard.</p>
+  </section>
+
+  <!-- ═══════════════ DOWNLOAD ═══════════════ -->
+
+  <section class="block" id="install">
+    <h2>Download e installazione</h2>
+    <p class="sub">I pacchetti sono compilati con PyInstaller su runner nativi.
+    Scaricali dalla <a href="https://github.com/vigliafg/noesis-pdf-cloner/releases/latest">pagina
+    delle release</a>.</p>
+    <div class="dl-grid">
+      <div class="dl">
+        <h4>🪟 Windows x64</h4>
+        <p>Windows 10/11. Installer o versione portabile.</p>
+        <code>NoesisPDFCloner-windows-x64-setup.exe</code><br>
+        <code>NoesisPDFCloner-windows-x64.exe</code>
+      </div>
+      <div class="dl">
+        <h4>🍎 macOS</h4>
+        <p>macOS 11+. Scegli l'architettura del tuo Mac.</p>
+        <code>NoesisPDFCloner-macos-x64.dmg</code> (Intel)<br>
+        <code>NoesisPDFCloner-macos-arm64.dmg</code> (Apple Silicon)
+      </div>
+      <div class="dl">
+        <h4>🐧 Linux x86_64</h4>
+        <p>AppImage. Rendilo eseguibile e avvialo.</p>
+        <code>NoesisPDFCloner-x86_64.AppImage</code>
+      </div>
+    </div>
+
+    <h3>Motore di clonazione</h3>
+    <p>Il binario include la GUI e <strong><code>uv</code></strong>; il motore
+    <code>pdf2zh_next</code> si installa <strong>accanto all'eseguibile</strong>.
+    Puoi farlo <strong>dall'app</strong> (⚙️ Impostazioni → <em>Installa motore</em>),
+    oppure con lo script incluso nella release:</p>
+    <pre><code>./setup_engine.sh                                              # Linux / macOS
+powershell -ExecutionPolicy Bypass -File .\setup_engine.ps1    # Windows</code></pre>
+    <p>L'app rileva automaticamente la cartella <code>.venv2</code> accanto
+    all'eseguibile; in alternativa puoi indicare il percorso del binario in
+    ⚙️ Impostazioni.</p>
+
+    <h3>Da sorgente</h3>
+    <p>Serve Python 3.12 e <a href="https://docs.astral.sh/uv/">uv</a>: lo script
+    <code>run.sh</code> crea i due ambienti virtuali e apre la GUI.</p>
+    <pre><code>git clone https://github.com/vigliafg/noesis-pdf-cloner.git
+cd noesis-pdf-cloner
+./run.sh</code></pre>
+    <div class="note"><strong>Due venv separati</strong> <code>.venv</code> ospita
+      l'app (PyQt6 + PyMuPDF), <code>.venv2</code> il motore
+      <code>pdf2zh_next</code> (Python 3.12): non convivono, e il motore viene
+      invocato come subprocess CLI.</div>
+  </section>
+
+  <!-- ═══════════════ GUIDA ═══════════════ -->
+
+  <section class="block" id="guide">
+    <h2>Guida</h2>
+    <p class="sub">La guida completa (funzionalità, motori, chiave, esportazione,
+    installazione) è disponibile in cinque lingue.</p>
+    <div class="cards">
+      <div class="card"><h4>🇮🇹 <a href="help/it/">Italiano</a></h4><p>Guida completa in italiano.</p></div>
+      <div class="card"><h4>🇬🇧 <a href="help/en/">English</a></h4><p>Full guide in English.</p></div>
+      <div class="card"><h4>🇫🇷 <a href="help/fr/">Français</a></h4><p>Guide complète en français.</p></div>
+      <div class="card"><h4>🇩🇪 <a href="help/de/">Deutsch</a></h4><p>Vollständige Anleitung auf Deutsch.</p></div>
+      <div class="card"><h4>🇪🇸 <a href="help/es/">Español</a></h4><p>Guía completa en español.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    Noesis PDF Cloner · App desktop per tradurre PDF preservando il layout ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner">Repository GitHub</a> ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner/releases/latest">Release</a> ·
+    <a href="help/it/">Guida</a><br>
+    <span style="font-size:12px">Il programma è fornito “così com'è”, senza garanzie.
+    Usa la traduzione solo su documenti che hai il diritto di elaborare.</span>
+  </footer>
+
+</body>
+</html>

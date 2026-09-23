@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hilfe — Noesis PDF Cloner</title>
+  <link rel="icon" href="../../assets/noesispdf-256.png">
   <link rel="stylesheet" href="../css/help.css">
 </head>
 <body>
 
   <header class="topbar">
-    <div class="brand">Noesis PDF Reader <span class="lite">Lite</span> — <em>Hilfe</em></div>
+    <a class="brand" href="../../">
+      <img src="../../assets/noesispdf-256.png" alt="">
+      Noesis PDF Cloner — <em>Hilfe</em>
+    </a>
     <div class="lang-switch">
       <a href="../it/" lang="it">🇮🇹 Italiano</a>
       <a href="../en/" lang="en">🇬🇧 English</a>
@@ -22,557 +26,546 @@
   <div class="wrap">
     <nav class="sidebar">
       <div class="group-label">Produkt</div>
-      <a href="#features">Funktionen</a>
+      <a href="#features">Überblick</a>
       <a href="#getting-started">Erste Schritte</a>
       <a href="#interface">Oberfläche</a>
-      <div class="group-label">Nutzung</div>
+      <div class="group-label">Verwendung</div>
       <a href="#navigation">Navigation</a>
-      <a href="#extraction">Textextraktion</a>
-      <a href="#zones-exclude">Ausschlusszonen</a>
-      <a href="#zones-include">Einschlusszonen</a>
-      <a href="#images">Bildextraktion</a>
       <a href="#translation">Übersetzung</a>
+      <a href="#engines">Übersetzungsdienste</a>
+      <a href="#apikey">OpenRouter-Schlüssel</a>
+      <a href="#export">Export</a>
       <a href="#settings">Einstellungen</a>
       <div class="group-label">Plattformen</div>
       <a href="#install">Installation</a>
+      <a href="#engine">Klon-Engine</a>
       <a href="#uninstall">Deinstallation</a>
       <div class="group-label">Rechtliches</div>
-      <a href="#legal">Hinweis zur rechtmäßigen Nutzung</a>
-      <div class="group-label">Nachschlagen</div>
+      <a href="#legal">Haftungsausschluss zur rechtmäßigen Nutzung</a>
+      <div class="group-label">Referenz</div>
       <a href="#shortcuts">Tastenkürzel &amp; FAQ</a>
     </nav>
 
     <main class="content">
       <h1>Noesis PDF Cloner — Hilfe</h1>
-      <p>Willkommen in der vollständigen Hilfe. Hier finden Sie die
-      Beschreibung aller Funktionen, Installations- und
-      Deinstallationshinweise für jede Plattform sowie Informationen zur
-      rechtmäßigen Nutzung des Programms.</p>
+      <p>Willkommen in der vollständigen Hilfe. Noesis PDF Cloner öffnet ein PDF und zeigt
+      <strong>links die Originalseite</strong> und <strong>rechts dieselbe
+      Seite mit erhaltenem Layout übersetzt</strong>. Hier findest du die Beschreibung
+      der Funktionen, die Verwendung der Übersetzungsdienste, die Verwaltung des
+      OpenRouter-Schlüssels, den Export, die Installation und die rechtmäßige Nutzung des Programms.</p>
 
-      <!-- ═══════════════ PRODUKT ═══════════════ -->
+      <!-- ═══════════════ PRODOTTO ═══════════════ -->
 
-      <h2 id="features">Funktionen</h2>
-      <p>Noesis PDF Cloner ist ein PDF-Reader mit einer adaptiven
-      Textextraktions-Engine, die die Lesereihenfolge der Seite automatisch
-      rekonstruiert. Im Vergleich zum Mutterprojekt verwendet diese Version
-      eine einzige Rendering-Engine (<strong>PyMuPDF</strong>) und eine
-      einzige Extraktions-Engine (<strong>PyMuPDF4LLM</strong>), ohne
-      Laufzeitauswahl: alles ist automatisch, mit der Möglichkeit, bei Bedarf
-      manuell einzugreifen.</p>
+      <h2 id="features">Überblick</h2>
+      <p>Der übersetzte Klon wird von
+      <strong>pdf2zh_next v2</strong> (Typesetter <strong>BabelDOC</strong>) erzeugt:
+      Text, Bilder, Spalten, Tabellen und Formeln bleiben an ihrem Platz, während
+      der Text in die gewählte Sprache übersetzt wird. Die Übersetzung erfolgt
+      <strong>on-demand</strong>, Seite für Seite, mit einem <strong>Festplatten-Cache</strong>,
+      der nach Übersetzungsdienst und Sprachpaar getrennt ist.</p>
 
       <div class="cards">
-        <div class="card"><h4>📄 Intelligente Extraktion</h4><p>Der Seitentext
-          wird als Markdown mit der korrekten Lesereihenfolge extrahiert:
-          Spalten, Tabellen, Überschriften, Bildunterschriften.</p></div>
-        <div class="card"><h4>🔍 Ansicht nebeneinander</h4><p>Gerenderte Seite
-          links, extrahierter Text rechts, mit Navigation,
-          Inhaltsverzeichnis (TOC) und Zoom.</p></div>
-        <div class="card"><h4>🚫 Ausschlusszonen</h4><p>Ziehen Sie ein rotes
-          Feld über Rauschen (Kopfzeilen, Fußzeilen, Bilder,
-          Bildunterschriften), um es aus dem Text zu entfernen.</p></div>
-        <div class="card"><h4>🟩 Einschlusszonen</h4><p>Nummerierte grüne
-          Felder legen die manuelle Lesereihenfolge für komplexe Seiten
-          fest.</p></div>
-        <div class="card"><h4>🖼️ Bildextraktion</h4><p>Wählen Sie einen
-          Seitenbereich aus und speichern Sie die ausgeschnittene Abbildung in
-          der Galerie.</p></div>
-        <div class="card"><h4>🌐 Übersetzung</h4><p>Übersetzen Sie die Seite in
-          die gewählte Zielsprache, mit Cache auf der Festplatte.</p></div>
-        <div class="card"><h4>⚙️ Einstellungen</h4><p>Oberflächensprache,
-          Übersetzungssprachen, Zoom, Schriftart, Kopfzeile und
-          Leseverhalten.</p></div>
-        <div class="card"><h4>🌍 Mehrsprachige Oberfläche</h4><p>Italiano,
-          English, Français, Deutsch, Español — jederzeit umschaltbar.</p></div>
+        <div class="card"><h4>📖 Gegenüberliegende Ansicht</h4><p>Originalseite
+          links, übersetzter Klon rechts, mit synchronisiertem Zoom.</p></div>
+        <div class="card"><h4>🧩 Erhaltenes Layout</h4><p>Der Klon behält
+          Seitensatz, Abbildungen, Tabellen und Formeln der Seite bei.</p></div>
+        <div class="card"><h4>🌐 Drei Dienste</h4><p>Google (kostenlose Kette mit
+          Fallback), Bing und LLM über OpenRouter.</p></div>
+        <div class="card"><h4>▶ Übersetzung on-demand</h4><p>Die Seite startet nur
+          über die Schaltfläche ▶ Übersetzen: keine automatische Übersetzung beim Navigieren.</p></div>
+        <div class="card"><h4>🗂️ Cache pro Dienst</h4><p>Beim zweiten Zugriff ist die
+          Seite sofort da; beim Wechsel des Dienstes fragt die App nach Bestätigung.</p></div>
+        <div class="card"><h4>💾 Geführter Export</h4><p>Assistent in 5 Schritten: ein
+          zusammengeführtes PDF oder einzelne Seiten im ZIP.</p></div>
+        <div class="card"><h4>🔑 Geschützter Schlüssel</h4><p>Der OpenRouter-Schlüssel wird
+          in einer benutzerspezifischen Datei (<code>0600</code>) mit Prüfung gespeichert.</p></div>
+        <div class="card"><h4>🌍 Mehrsprachige Oberfläche</h4><p>Italienisch, English,
+          Français, Deutsch, Español — jederzeit umschaltbar.</p></div>
       </div>
 
-      <h3>Kurz gesagt</h3>
+      <h3>Auf einen Blick</h3>
       <ul>
-        <li><strong>Standardmäßig automatisch</strong>: die adaptive Engine
-          entscheidet den Leseplan für jede Seite.</li>
-        <li><strong>Manuell bei Bedarf</strong>: rote und grüne Zonen greifen
-          nur ein, wenn Sie sie zeichnen.</li>
-        <li><strong>Null Konfiguration zum Starten</strong>: PDF öffnen und
-          lesen.</li>
+        <li><strong>Gegenüberstellung</strong>: Original und Klon immer im Vergleich.</li>
+        <li><strong>Kontrolle</strong>: Die Übersetzung startet nur, wenn du es willst.</li>
+        <li><strong>Keine Schlüssel für den Anfang</strong>: Google und Bing sind kostenlos.</li>
       </ul>
 
-      <!-- ═══════════════ ERSTE SCHRITTE ═══════════════ -->
+      <!-- ═══════════════ PER INIZIARE ═══════════════ -->
 
       <h2 id="getting-started">Erste Schritte</h2>
       <ol>
-        <li>Starten Sie die Anwendung (siehe <a href="#install">Installation</a>
-          für Ihre Plattform).</li>
-        <li>Klicken Sie in der Symbolleiste auf <strong>📂 PDF öffnen</strong>
-          und wählen Sie eine PDF-Datei.</li>
-        <li>Die Seite erscheint links, der extrahierte Text rechts.</li>
-        <li>Verwenden Sie <strong>◀ Zurück</strong> / <strong>Weiter ▶</strong>,
-          die Pfeiltasten oder das <strong>📑 Inhaltsverzeichnis</strong>, um
-          sich im Dokument zu bewegen.</li>
-        <li>Wenn der Text Rauschen enthält, probieren Sie die
-          <a href="#zones-exclude">Ausschlusszonen</a>.</li>
+        <li>Starte die Anwendung (siehe <a href="#install">Installation</a>) und
+          stelle sicher, dass die <a href="#engine">Klon-Engine</a>
+          installiert ist.</li>
+        <li>Klicke in der Symbolleiste auf <strong>📂 PDF öffnen</strong> und wähle eine Datei.</li>
+        <li>Wähle in ⚙️ Einstellungen die <strong>Dokumentsprache</strong>
+          (Ausgangssprache, auch <em>auto</em>) und die <strong>Sprache der
+          Übersetzung</strong> (Zielsprache).</li>
+        <li>Wähle den <a href="#engines">Dienst</a> in der Leiste des rechten
+          Bereichs (Google, Bing oder LLM).</li>
+        <li>Drücke <strong>▶ Übersetzen</strong>: Der Klon erscheint rechts mit
+          unverändertem Layout.</li>
+        <li>Mit 💾 <strong>Exportieren</strong> speicherst du die Seite oder einen Bereich (siehe
+          <a href="#export">Export</a>).</li>
       </ol>
 
-      <div class="note"><strong>Tipp</strong> Beim ersten Start öffnet die App
-        an der letzten Seite des Dokuments (wenn „An der letzten Seite
-        fortfahren" aktiv ist) und in der vom Betriebssystem erkannten
-        Sprache.</div>
+      <div class="note"><strong>Tipp</strong> Beim ersten Öffnen kann die App
+        von der letzten Seite des Dokuments fortsetzen (wenn die Option aktiv ist) und verwendet
+        die gewählte Oberflächensprache. Die Übersetzung startet <em>nicht</em> von
+        allein: Es braucht immer die Schaltfläche ▶ Übersetzen.</div>
 
-      <!-- ═══════════════ OBERFLÄCHE ═══════════════ -->
+      <!-- ═══════════════ INTERFACCIA ═══════════════ -->
 
       <h2 id="interface">Oberfläche</h2>
-      <p>Das Fenster ist in drei Hauptbereiche unterteilt:</p>
+      <p>Das Fenster ist in zwei nebeneinanderliegende Bereiche unterteilt: <strong>Original</strong>
+      links, <strong>übersetzter Klon</strong> rechts.</p>
 
       <h3>Obere Symbolleiste</h3>
       <table>
         <tr><th>Element</th><th>Funktion</th></tr>
         <tr><td>📂 PDF öffnen</td><td>Öffnet ein PDF-Dokument</td></tr>
-        <tr><td>📑 Inhaltsverzeichnis</td><td>Zeigt/verbirgt das Inhaltsverzeichnis (TOC) links</td></tr>
-        <tr><td>◀ Zurück / Weiter ▶ + Zahlen</td><td>Navigation zwischen den Seiten</td></tr>
-        <tr><td>🔍− / Skalierung / 🔍+</td><td>Zoom der Seite</td></tr>
-        <tr><td>📝 MD ✓</td><td>Schaltet das Markdown-Rendering des Textes um</td></tr>
-        <tr><td>⚙️ Einstellungen</td><td>Sprachen, Einstellungen und Verhalten</td></tr>
+        <tr><td>📑 Inhalt</td><td>Zeigt/verbirgt das Inhaltsverzeichnis (TOC) links</td></tr>
+        <tr><td>◀ Zurück / Weiter ▶ + Nummer</td><td>Navigation zwischen den Seiten</td></tr>
+        <tr><td>🔍− / Skala / 🔍+</td><td>Synchronisierter Zoom der beiden Bereiche</td></tr>
+        <tr><td>📝 MD ✓</td><td>Markdown-Rendering an/aus (für den Text)</td></tr>
+        <tr><td>▶ Übersetzen</td><td>Übersetzt die aktuelle Seite (on-demand)</td></tr>
+        <tr><td>💾 Exportieren</td><td>Export-Assistent (Menü: Schnellexport)</td></tr>
+        <tr><td>⚙️ Einstellungen</td><td>Sprachen, Dienst, Schlüssel und Voreinstellungen</td></tr>
         <tr><td>❓ Hilfe</td><td>Öffnet diese Hilfe im Browser</td></tr>
       </table>
 
-      <h3>Seitenbereich (links)</h3>
-      <p>Über der Seite befinden sich die Zonen-Werkzeuge:</p>
-      <table>
-        <tr><th>Element</th><th>Funktion</th></tr>
-        <tr><td>🖱️ Bereich auswählen</td><td>Extrahiert das Bild des gezeichneten Bereichs</td></tr>
-        <tr><td>🚫 Bereich ausschließen</td><td>Schließt den Bereich aus dem Text aus (rotes Feld)</td></tr>
-        <tr><td>🟩 Bereich einschließen</td><td>Legt die Lesereihenfolge fest (nummerierte grüne Felder)</td></tr>
-        <tr><td>🧹 Zonen zurücksetzen</td><td>Entfernt alle Zonen der aktuellen Seite</td></tr>
-      </table>
+      <h3>Linker Bereich — Original</h3>
+      <p>Zeigt die PDF-Seite unverändert an, mit optionalem Inhaltsverzeichnis (TOC). Der Zoom
+      wird mit dem rechten Bereich geteilt, sodass beide Seiten ausgerichtet bleiben.</p>
 
-      <h3>Rechter Bereich (Text)</h3>
-      <p>Drei Tabs oben rechts:</p>
+      <h3>Rechter Bereich — übersetzter Klon</h3>
+      <p>Oben befindet sich die <strong>Leiste der Dienste</strong> mit den Radio-Buttons
+      <strong>Google / Bing / LLM</strong> und der Schaltfläche <strong>▶ Übersetzen</strong>.
+      Die Leiste ist <strong>einklappbar</strong> (Chevron oben rechts): Beim
+      Einklappen geht der Platz an die Seite zurück, die sich neu anpasst, und der Zustand wird
+      zwischen den Sitzungen beibehalten.</p>
       <ul>
-        <li><strong>📄 Original</strong> — der extrahierte Text (auto oder manuell).</li>
-        <li><strong>🇫🇷 … (Flagge + Sprache)</strong> — die Übersetzung der
-          Seite in die in den Einstellungen gewählte Zielsprache.</li>
-        <li><strong>🖼️ Bilder</strong> — die Galerie der extrahierten
-          Abbildungen.</li>
+        <li><strong>Leiste „Dienst fehlt“</strong> — wenn der Dienst nicht
+          installiert ist, erscheint eine Leiste mit der Schaltfläche <em>Dienst installieren</em>.</li>
+        <li><strong>Leiste „Schlüssel fehlt“</strong> — wenn du den LLM-Dienst
+          ohne Schlüssel wählst, schlägt eine Leiste <em>Schlüssel eingeben</em> oder
+          <em>Google/Bing verwenden</em> vor.</li>
       </ul>
-      <p>Die beiden Text-Tabs (📄 Original und die Übersetzung) sind
-      editierbare Fenster: Sie können frei tippen, auswählen, kopieren und
-      einfügen (Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+Z). Jedes Fenster hat seine
-      eigene Mini-Symbolleiste mit <strong>A−</strong>, der aktuellen Größe
-      und <strong>A+</strong>, um den Text live zu verkleinern oder zu
-      vergrößern, plus <strong>↺</strong>, um die Größe aus den Einstellungen
-      wiederherzustellen, und <strong>💾</strong>, um den Fenstertext als
-      <code>.md</code> oder <code>.txt</code> zu exportieren (mit Ihren
-      Änderungen, ohne die Kopfzeile). Bei aktiviertem Speichern weist ein
-      orangener Punkt <strong>●</strong> neben den Schaltflächen auf
-      Änderungen hin, die noch nicht auf die Festplatte geschrieben wurden. Die beiden Fenster zoomen unabhängig voneinander.
-      Nach einer Bearbeitung wird der Text als Klartext angezeigt und die
-      Änderungen werden pro Seite gespeichert (Datenspeicherordner der App)
-      und erscheinen beim erneuten Öffnen des Dokuments wieder.</p>
 
       <h3>Statusleiste</h3>
-      <p>Unten zeigt sie die aktuelle Seite, das Dokument und die
-      Extraktionszeit sowie die Meldungen zu den Zonen.</p>
+      <p>Unten zeigt sie den Status der Übersetzung (in Arbeit, im Cache, abgeschlossen,
+      Fehler oder abgebrochen) und die Meldung des verwendeten Dienstes an.</p>
 
-      <!-- ═══════════════ NAVIGATION ═══════════════ -->
+      <!-- ═══════════════ NAVIGAZIONE ═══════════════ -->
 
       <h2 id="navigation">Navigation</h2>
       <ul>
-        <li><strong>Schaltflächen</strong>: ◀ Zurück / Weiter ▶ und das
-          Seitenzahlfeld.</li>
-        <li><strong>Tastatur</strong>: Pfeile ← → und BildAuf/BildAb.</li>
-        <li><strong>Inhaltsverzeichnis (TOC)</strong>: Klicken Sie auf 📑
-          Inhaltsverzeichnis und wählen Sie einen Eintrag, um zum Kapitel zu
-          springen.</li>
-        <li><strong>Zoom</strong>: Schaltflächen 🔍−/🔍+,
-          <kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd>,
-          <kbd>Strg</kbd>+<kbd>0</kbd> zum Zurücksetzen. 1,00× passt die
-          Seite an das Fenster an; das Etikett zeigt die aktuelle Skalierung
-          (0,25×–8,00×).</li>
-        <li><strong>Fortsetzen</strong>: wenn in den Einstellungen aktiviert,
-          öffnet die App das Dokument an der zuletzt gelesenen Seite.</li>
+        <li><strong>Schaltflächen</strong> ◀ Zurück / Weiter ▶ und das Feld für die Seitenzahl.</li>
+        <li><strong>Tastatur</strong>: Pfeiltasten ← → und BildAuf/BildAb.</li>
+        <li><strong>Inhaltsverzeichnis (TOC)</strong>: Klicke auf 📑 Inhalt und wähle einen Eintrag,
+          um zum Kapitel zu springen.</li>
+        <li><strong>Zoom</strong>: 🔍−/🔍+, <kbd>Ctrl</kbd>+<kbd>+</kbd> /
+          <kbd>Ctrl</kbd>+<kbd>−</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> zum
+          Zurücksetzen. Der Wert 1.00× passt die Seite ans Fenster an; die Beschriftung
+          zeigt die aktuelle Skalierung.</li>
+        <li><strong>Fortsetzen</strong>: Wenn in den Einstellungen aktiv, öffnet die App das
+          Dokument auf der zuletzt gelesenen Seite.</li>
       </ul>
 
-      <!-- ═══════════════ TEXTEXTRAKTION ═══════════════ -->
-
-      <h2 id="extraction">Textextraktion</h2>
-      <p>Der Text wird mit <strong>PyMuPDF4LLM</strong> extrahiert und dann
-      von der <strong>adaptiven Engine</strong> neu geordnet, die automatisch
-      den Leseplan wählt (Profil → Plan → Pipeline): Neuanordnung der Spalten,
-      Tabellenerkennung, Behandlung von Feldern, Legenden und
-      Bildunterschriften, Deduplizierung von Überschriften und
-      Abständen.</p>
-
-      <div class="note"><strong>Gescannte PDFs</strong> Seiten ohne
-        Textebene werden über die in der App enthaltene
-        <strong>Tesseract-OCR</strong> erkannt (Windows/macOS/Linux-Pakete);
-        die OCR-Sprache folgt der Dokumentensprache-Einstellung (Standard:
-        automatische Erkennung). Die Extraktion läuft im Hintergrund, die
-        Oberfläche bleibt also reaktionsfähig, und die Ergebnisse werden pro
-        Seite zwischengespeichert.</div>
-
-      <h3>Extraktions-Header</h3>
-      <p>Wenn aktiviert (Einstellungen → „Extraktions-Header anzeigen"),
-      erscheint über dem Text eine Informationszeile:</p>
-      <pre><code>── Backend: PyMuPDF4LLM ⚡ │ 210 ms │ 12.345 Zeichen │ Fix: Adaptive Engine │ OCR: 🌐 Auto │ Übers.: Google Translate ──</code></pre>
-      <p>Der Engine-Name im Header entspricht immer der aktiven
-      Engine: Ein Wechsel aktualisiert die Zeile über dem Original- und dem
-      übersetzten Text.</p>
-
-      <h3>Markdown-Rendering</h3>
-      <p>Der Text wird als gerendertes Markdown angezeigt (einschließlich
-      Tabellen und Formatierung). Mit <strong>📝 MD ✓</strong> können Sie zu
-      Klartext wechseln. Tastenkürzel: <kbd>Strg</kbd>+<kbd>M</kbd>.</p>
-
-      <div class="note"><strong>Hinweis</strong> Die Extraktion arbeitet mit
-        dem <em>Text</em> der Seite. Bilder mit Text im Inneren können
-        Rauschen erzeugen: Verwenden Sie die
-        <a href="#zones-exclude">Ausschlusszonen</a>, um sie zu entfernen.</div>
-
-      <!-- ═══════════════ AUSSCHLUSSZONEN ═══════════════ -->
-
-      <h2 id="zones-exclude">Ausschlusszonen (rot)</h2>
-      <p>Wenn eine Seite Elemente enthält, die nicht zur Lesung gehören
-      (Kopfzeilen, Fußzeilen, Seitenzahlen, Bilder mit Text,
-      Bildunterschriften, Werbung), können Sie sie manuell ausschließen:</p>
-      <ol>
-        <li>Klicken Sie auf <strong>🚫 Bereich ausschließen</strong>.</li>
-        <li>Ziehen Sie mit der Maus ein <strong>rotes Feld</strong> über den
-          zu entfernenden Inhalt.</li>
-        <li>Der Text wird sofort ohne diesen Inhalt neu berechnet.</li>
-        <li>Drücken Sie die Schaltfläche erneut, um zu beenden.</li>
-      </ol>
-
-      <h3>Ausschließen + Extrahieren in einem Schritt</h3>
-      <p>Wenn die rote Zone ein eingebettetes Bild enthält, wird die
-      <strong>gesamte ausgewählte Zone</strong> automatisch in den Tab 🖼️
-      Bilder übernommen (zusammengesetzte Abbildungen — mehrere Bilder,
-      Bild + Beschriftung — werden vollständig erfasst, nicht nur ein
-      Fragment; der Fokus bleibt auf dem Textfenster
-      <strong>Original</strong>). Die Statusleiste bestätigt den Vorgang.</p>
-
-      <div class="warning"><strong>Achtung</strong> Der Ausschluss gilt pro
-        Seite und existiert nur im Speicher: Beim Schließen der App gehen die
-        Zonen verloren.</div>
-
-      <!-- ═══════════════ EINSCHLUSSZONEN ═══════════════ -->
-
-      <h2 id="zones-include">Einschlusszonen (grün)</h2>
-      <p>Für Seiten mit komplexem Layout (z. B. mehrere Spalten oder verstreute
-      Felder) können Sie die Lesereihenfolge selbst mit den
-      <strong>nummerierten grünen Feldern</strong> festlegen:</p>
-      <ol>
-        <li>Klicken Sie auf <strong>🟩 Bereich einschließen</strong>.</li>
-        <li>Ziehen Sie ein grünes Feld über die erste Lesespalte/-region (die
-          Zahl <strong>1</strong> erscheint).</li>
-        <li>Zeichnen Sie das nächste Feld in Lesereihenfolge (2, 3, …).</li>
-        <li>Der Text wird gemäß der Nummerierung neu aufgebaut.</li>
-      </ol>
-
-      <h3>Regeln</h3>
-      <ul>
-        <li><strong>Ein grünes Feld = eine Spalte/Region</strong>. Verwenden
-          Sie kein einzelnes Feld für zwei Spalten.</li>
-        <li><strong>Whitelist</strong>: Bei mindestens einem grünen Feld wird
-          alles außerhalb der Felder verworfen.</li>
-        <li><strong>Innerhalb eines Felds</strong>: Reihenfolge von oben nach
-          unten, dann von links nach rechts.</li>
-        <li><strong>Zusammensetzung</strong>: Die roten Zonen entfernen zuerst
-          das Rauschen, die grünen ordnen den Rest; bei Überlappung gewinnt
-          Rot.</li>
-      </ul>
-
-      <!-- ═══════════════ BILDEXTRAKTION ═══════════════ -->
-
-      <h2 id="images">Bildextraktion</h2>
-      <p>Sie können eine Abbildung direkt von der Seite ausschneiden:</p>
-      <ol>
-        <li>Klicken Sie auf <strong>🖱️ Bereich auswählen</strong>.</li>
-        <li>Ziehen Sie ein Rechteck über die Abbildung.</li>
-        <li>Das Bild wird im Tab <strong>🖼️ Bilder</strong> gespeichert.</li>
-      </ol>
-      <p>In der Galerie hat jedes Bild die Schaltflächen:</p>
-      <ul>
-        <li><strong>💾 Speichern</strong> — speichert in eine Datei (PNG/JPEG).</li>
-        <li><strong>📋 Kopieren</strong> — kopiert in die Zwischenablage.</li>
-        <li><strong>🗑️ Entfernen</strong> — löscht aus der Galerie.</li>
-        <li>Klicken Sie auf die Vorschau zum Vergrößern.</li>
-      </ul>
-      <p>Extrahierte Bilder werden im Datenordner der App gespeichert und
-      bleiben zwischen den Starts erhalten.</p>
-
-      <!-- ═══════════════ ÜBERSETZUNG ═══════════════ -->
+      <!-- ═══════════════ TRADUZIONE ═══════════════ -->
 
       <h2 id="translation">Übersetzung</h2>
-      <p>Der rechte Bereich kann die Seite in der gewählten Zielsprache
-      anzeigen (Standard: Italienisch).</p>
+      <p>Die Übersetzung erfolgt <strong>Seite für Seite</strong> und startet
+      <strong>nur</strong> über die Schaltfläche ▶ Übersetzen: Beim Navigieren wird nicht
+      automatisch übersetzt.</p>
       <ol>
-        <li>Öffnen Sie <strong>⚙️ Einstellungen</strong> → Abschnitt
-          <em>Sprache</em>.</li>
-        <li>Wählen Sie die <strong>Dokumentensprache</strong> (Quelle; „auto"
-          für automatische Erkennung) und die <strong>Übersetzungssprache</strong>
-          (Ziel).</li>
-        <li>Klicken Sie im rechten Bereich auf den Tab mit <strong>Flagge +
-          Name</strong> der Zielsprache.</li>
+        <li>Öffne <strong>⚙️ Einstellungen</strong> → <em>Sprache</em> und wähle die Sprache
+          des Dokuments (Ausgangssprache) und die Zielsprache.</li>
+        <li>Wähle den Dienst in der Leiste des rechten Bereichs.</li>
+        <li>Drücke <strong>▶ Übersetzen</strong> (oder <kbd>Ctrl</kbd>+<kbd>E</kbd> zum
+          Exportieren).</li>
       </ol>
 
       <h3>So funktioniert es</h3>
       <ul>
-        <li>Die Übersetzung läuft im Hintergrund mit der in ⚙️ Einstellungen
-          gewählten Engine — Google Translate (Standard) oder Microsoft Edge,
-          beide kostenlos und ohne API-Schlüssel. Sie können die Engine auch
-          live mit den Radio-Buttons Google / Microsoft links der
-          Übersetzungs-Tab-Leiste wechseln: Die Wahl wird gespeichert, die
-          aktuelle Seite neu übersetzt und ein Toast bestätigt den Wechsel für
-          2 Sekunden.</li>
-        <li>Während eine Übersetzung erstellt wird, schwebt ein Toast (⏳ Übersetzen mit <em>Engine</em>…) über dem
-          übersetzten Text; er verschwindet, sobald
-          das Ergebnis erscheint.</li>
-        <li>Der Cache auf der Festplatte vermeidet das erneute Übersetzen
-          derselben Seite: Er ist nach Seite und Zielsprache indiziert.</li>
-        <li>Beim Zeichnen von Zonen wird die Übersetzung um eine Pause von
-          600 ms verschoben (keine Anfrage-Salven).</li>
-        <li>Wenn Sie die Zielsprache ändern, aktualisiert sich der Tab und die
-          Seite wird neu übersetzt.</li>
+        <li>Während die Seite erzeugt wird, zeigt eine <strong>„flüssige“ Füllung</strong>
+          den geschätzten Fortschritt über der Vorschau an, mit einer Schaltfläche
+          <strong>Abbrechen</strong>, die den Subprozess sofort unterbricht.</li>
+        <li>Ein <strong>Toast</strong> zeigt den verwendeten Dienst an (⏳ Übersetzen mit
+          <em>Dienst</em>…) und verschwindet, wenn das Ergebnis eintrifft.</li>
+        <li>Der <strong>Festplatten-Cache</strong> verhindert erneutes Übersetzen derselben
+          Seite: Er ist nach <em>Dokument + Dienst + Sprachpaar</em> indiziert.</li>
+        <li>Wenn <strong>diese Seite</strong> bereits mit einem
+          <em>anderen</em> Dienst im Cache übersetzt ist und du den Dienst wechselst, fragt die App nach
+          Bestätigung, bevor sie gelöscht wird, um der neuen Übersetzung Platz zu machen.</li>
+        <li>Die kostenlose Google-Kette kann auf <strong>Microsoft</strong>
+          und dann auf <strong>LLM</strong> zurückgreifen: Eine Warnung weist auf den Fallback hin.</li>
       </ul>
 
-      <div class="warning"><strong>Achtung</strong> Die Übersetzung erfordert
-        eine Internetverbindung und sendet den Seitentext an einen externen
-        Dienst. Übersetzen Sie keine vertraulichen Dokumente, wenn Sie nicht
-        das Recht dazu haben.</div>
+      <div class="warning"><strong>Achtung</strong> Die Übersetzung erfordert eine
+        Internetverbindung und sendet den Text der Seite an einen externen Dienst.
+        Übersetze keine vertraulichen Dokumente, wenn du dazu nicht berechtigt bist.</div>
 
-      <!-- ═══════════════ EINSTELLUNGEN ═══════════════ -->
+      <!-- ═══════════════ MOTORI ═══════════════ -->
+
+      <h2 id="engines">Übersetzungsdienste</h2>
+      <table>
+        <tr><th>Dienst</th><th>Beschreibung</th><th>Schlüssel</th></tr>
+        <tr>
+          <td><strong>Google</strong></td>
+          <td>Kostenlose Kette <code>gtranslate_cli.py</code>:
+            <code>dict-chrome-ex → translate-pa → gtx</code>, mit Fallback auf
+            Microsoft und dann LLM.</td>
+          <td>Nein</td>
+        </tr>
+        <tr>
+          <td><strong>Bing</strong></td>
+          <td>In <code>pdf2zh_next</code> integrierter Bing-Übersetzer.</td>
+          <td>Nein</td>
+        </tr>
+        <tr>
+          <td><strong>LLM</strong></td>
+          <td>OpenAI-kompatibler Pfad (<code>--openai</code>), ausgerichtet auf
+            <strong>OpenRouter</strong>.</td>
+          <td>Ja</td>
+        </tr>
+      </table>
+      <p>Der Dienst lässt sich jederzeit über die Leiste oder über ⚙️ Einstellungen wechseln: Die Auswahl
+      wird gespeichert. Google und Bing sind kostenlos und erfordern keine Registrierung;
+      der OpenRouter-Schlüssel wird nur für den Dienst <strong>LLM</strong> und für
+      den letzten Fallback der kostenlosen Kette benötigt.</p>
+
+      <!-- ═══════════════ CHIAVE OPENROUTER ═══════════════ -->
+
+      <h2 id="apikey">OpenRouter-Schlüssel</h2>
+      <p>Für den LLM-Dienst ist ein Schlüssel <code>OPENROUTER_API_KEY</code> erforderlich. Du kannst ihn
+      unter ⚙️ Einstellungen → <em>Klon-Engine</em> eingeben, wo du
+      auch die Schaltfläche <strong>Prüfen</strong> findest.</p>
+
+      <h3>Wo er gespeichert wird und welcher gilt</h3>
+      <ul>
+        <li>Der Schlüssel wird in einer <strong>benutzerspezifischen Datei</strong> gespeichert, die
+          geschützt ist (<code>keystore.py</code>, Berechtigungen <code>0600</code>) im Datenordner
+          der App — nie in <code>config.json</code>, in Logs oder in den
+          Befehlsargumenten.</li>
+        <li><strong>Der gespeicherte Schlüssel hat Vorrang</strong> vor der Systemvariable
+          <code>OPENROUTER_API_KEY</code>, die der <em>Fallback</em> bleibt.
+          Die Einstellungen zeigen, welcher Schlüssel aktiv ist; wenn die Variable gesetzt,
+          aber ignoriert wird, weist die App darauf hin.</li>
+        <li>Wenn die Variable nach dem Start der App gesetzt wurde (typisch unter
+          Windows), warnt die App, dass die Variable nicht übernommen wurde.</li>
+      </ul>
+
+      <h3>Prüfung und Fehler</h3>
+      <p>Vor dem Übersetzen mit dem LLM wird der Schlüssel geprüft, ohne die
+      GUI zu blockieren. Die Fehler werden mit einem Hinweis klassifiziert:</p>
+      <table>
+        <tr><th>Ergebnis</th><th>Bedeutung</th></tr>
+        <tr><td>Ungültiger Schlüssel</td><td>Der Schlüssel ist falsch oder widerrufen.</td></tr>
+        <tr><td>Zugriff verweigert</td><td>Der Schlüssel hat keine Berechtigung für das Modell.</td></tr>
+        <tr><td>Guthaben aufgebraucht</td><td>Das OpenRouter-Guthaben ist aufgebraucht.</td></tr>
+        <tr><td>Zu viele Anfragen</td><td>Rate Limit: Versuche es gleich noch einmal.</td></tr>
+        <tr><td>Modell nicht verfügbar</td><td>Das Modell ist nicht erreichbar.</td></tr>
+        <tr><td>Netzwerkfehler</td><td>Keine oder instabile Verbindung.</td></tr>
+      </table>
+      <div class="note"><strong>Bei Problemen</strong> kannst du jederzeit auf
+        den Dienst <strong>Google</strong> oder <strong>Bing</strong> zurückgreifen, die keinen
+        Schlüssel erfordern.</div>
+
+      <!-- ═══════════════ ESPORTAZIONE ═══════════════ -->
+
+      <h2 id="export">Export</h2>
+      <p>Mit 💾 <strong>Exportieren</strong> öffnet sich ein <strong>Assistent in
+      5 Schritten</strong>: <em>Datei → Seiten → Sprachen → Dienst → Ausgabe</em>.</p>
+      <ol>
+        <li><strong>Datei</strong> — das Ausgangsdokument.</li>
+        <li><strong>Seiten</strong> — aktuelle Seite oder Bereich, mit
+          <strong>großen Live-Vorschauen</strong> der ersten und letzten
+          Seite der Auswahl. Jede Vorschau zeigt die <strong>physische</strong>
+          und die <strong>gedruckte</strong> Nummer
+          (<code>/PageLabels</code>), wenn sie sich unterscheiden.</li>
+        <li><strong>Sprachen</strong> — Ausgangs- und Zielsprache.</li>
+        <li><strong>Dienst</strong> — der Übersetzungsdienst und die Zeitschätzung.</li>
+        <li><strong>Ausgabe</strong> — <strong>ein einziges PDF</strong> oder
+          <strong>einzelne Seiten in einem ZIP-Archiv</strong> und der Speicherpfad.</li>
+      </ol>
+
+      <h3>Vorabübersetzung und Fortschritt</h3>
+      <p>Seiten, die noch nicht im Cache sind, können vor dem Export übersetzt werden,
+      mit sofortigem Abbruch. Das Fortschrittsfenster zeigt die
+      aktuell in Bearbeitung befindliche Seite, die Seite für Seite voranschreitet; am Ende
+      findest du die Schaltfläche <strong>⬇ In Downloads speichern</strong>.</p>
+
+      <h3>Schnellexport</h3>
+      <p>Über das Menü der Schaltfläche 💾 ist der Export der <strong>nur aktuellen
+      Seite</strong> verfügbar, ohne den Assistenten zu durchlaufen.</p>
+
+      <!-- ═══════════════ IMPOSTAZIONI ═══════════════ -->
 
       <h2 id="settings">Einstellungen</h2>
-      <p>Das Menü <strong>⚙️ Einstellungen</strong> (oben rechts) bündelt alles
-      rund um Sprache und Einstellungen. Es wird in der gewählten
-      Oberflächensprache angezeigt und die Sprachenvorschau ist live.</p>
+      <p>Das Menü <strong>⚙️ Einstellungen</strong> bündelt Sprache, Dienst und
+      Voreinstellungen; es wird in der gewählten Oberflächensprache angezeigt.</p>
 
       <h3>Sprache</h3>
       <ul>
-        <li><strong>Oberflächensprache</strong> — it/en/fr/de/es; sie ändert
-          sofort die gesamte Oberfläche (der PDF-Text bleibt in der
-          Originalsprache).</li>
-        <li><strong>Dokumentensprache (Quelle)</strong> — die PDF-Sprache;
-          „auto" für automatische Erkennung.</li>
-        <li><strong>Übersetzungssprache (Ziel)</strong> — die Sprache, in die
-          der Text übersetzt werden soll.</li>
+        <li><strong>Oberflächensprache</strong> — it/en/fr/de/es; ändert sofort
+          die gesamte UI.</li>
+        <li><strong>Dokumentsprache (Ausgangssprache)</strong> — die Sprache des PDFs;
+          <em>auto</em> für die automatische Erkennung.</li>
+        <li><strong>Sprache der Übersetzung (Zielsprache)</strong> — die Sprache, in
+          die übersetzt wird.</li>
       </ul>
 
       <h3>Übersetzung</h3>
       <ul>
-        <li><strong>Übersetzungs-Engine</strong> — Google Translate
-          (Standard) oder Microsoft Edge (kostenlos), ohne API-Schlüssel. Ein
-          Wechsel übersetzt die aktuelle Seite neu. Google Translate wechselt
-          automatisch zwischen drei kostenlosen Endpunkten
-          (dict-chrome-ex → translate-pa → gtx): Ist der Dienst in Ihrem Netzwerk blockiert,
-          erscheint eine Warnung, statt stillschweigend unübersetzten Text zu
-          zeigen.</li>
+        <li><strong>Übersetzungsdienst</strong> — Google, Bing oder LLM.</li>
+      </ul>
+
+      <h3>Klon-Engine</h3>
+      <ul>
+        <li><strong>Pfad zu <code>pdf2zh_next</code></strong> — leer für
+          die automatische Erkennung; andernfalls der Pfad zur Binärdatei.</li>
+        <li><strong>Dienst installieren</strong> — installiert den Dienst neben
+          der ausführbaren Datei (oder im Datenordner, falls Ersterer nicht beschreibbar ist).</li>
+        <li><strong>OpenRouter-Schlüssel</strong> — Eingabe und <em>Prüfen</em>
+          (siehe <a href="#apikey">OpenRouter-Schlüssel</a>).</li>
       </ul>
 
       <h3>Text</h3>
       <ul>
         <li><strong>Schriftgröße</strong> — 10–16 pt.</li>
-        <li><strong>Markdown-Rendering</strong> — ein/aus.</li>
-        <li><strong>Extraktions-Header anzeigen</strong> — ein/aus.</li>
-        <li><strong>Textänderungen speichern</strong> — speichert die
-          Änderungen in den Fenstern Original/Übersetzung pro Dokument
-          (standardmäßig aktiv).</li>
-        <li><strong>🗑️ Gespeicherte Änderungen löschen</strong> — löscht die
-          gespeicherten Änderungen des aktuellen Dokuments (mit Bestätigung).</li>
+        <li><strong>Markdown-Rendering</strong> — an/aus.</li>
+        <li><strong>Textänderungen speichern</strong> — speichert pro Dokument die
+          in den Textfenstern vorgenommenen Änderungen.</li>
+        <li><strong>🗑️ Gespeicherte Änderungen löschen</strong> — löscht die gespeicherten
+          Änderungen des aktuellen Dokuments (mit Bestätigung).</li>
       </ul>
 
-      <h3>Anzeige</h3>
+      <h3>Anzeige und Verhalten</h3>
       <ul>
-        <li><strong>Start-Zoom</strong> — Basis-Renderauflösung, 0,5×–4,0×
-          (beeinflusst die Schärfe; die sichtbare Skalierung startet bei
-          1,00× = anpassen).</li>
-      </ul>
-
-      <h3>Verhalten</h3>
-      <ul>
-        <li><strong>An der letzten Seite fortfahren</strong> — pro Dokument.</li>
+        <li><strong>Startzoom</strong> — Basisauflösung des Renderings
+          (0.5×–4.0×).</li>
+        <li><strong>Von der letzten Seite fortsetzen</strong> — pro Dokument.</li>
         <li><strong>Letzten Tab merken</strong> — des rechten Bereichs.</li>
       </ul>
 
-      <p>Alles wird in der Datei <code>config.json</code> im Datenordner der
-      App gespeichert (beim ersten Start mit der OS-Sprache oder Italienisch
-      erstellt) und übersteht Updates. Siehe
-      <a href="#uninstall">Deinstallation</a> für den genauen Speicherort pro
-      Plattform.</p>
+      <p>Alles wird in <code>config.json</code> im Datenordner der App gespeichert
+      (beim ersten Start mit der Sprache des Betriebssystems oder Italienisch angelegt) und bleibt bei
+      Aktualisierungen erhalten. Siehe <a href="#uninstall">Deinstallation</a> für den Speicherort
+      je Plattform.</p>
 
-      <!-- ═══════════════ INSTALLATION ═══════════════ -->
+      <!-- ═══════════════ INSTALLAZIONE ═══════════════ -->
 
       <h2 id="install">Installation</h2>
-      <p>Das Programm ist <strong>portabel</strong>: Es gibt keinen echten
-      Installer. Sie laden das Paket für Ihre Plattform von der
-      Versionsseite des Projekts auf GitHub herunter und führen es aus.</p>
+      <p>Die Pakete werden mit <strong>PyInstaller</strong> auf nativen Runnern
+      kompiliert und auf der <a
+      href="https://github.com/vigliafg/noesis-pdf-cloner/releases">Release-Seite</a>
+      veröffentlicht. Die Binärdatei enthält die GUI <em>und</em> <code>uv</code>: Der Dienst
+      wird neben der ausführbaren Datei installiert (siehe
+      <a href="#engine">Klon-Engine</a>).</p>
 
       <h3>Windows (x64)</h3>
       <ol>
-        <li>Laden Sie <code>NoesisPDFReaderLite-windows-x64.exe</code>
-          herunter.</li>
-        <li>Doppelklicken Sie auf die Datei, um die App zu starten (sie kann im
-          Ordner Downloads bleiben).</li>
-        <li>Keine Installation, kein Dienst, kein verpflichtender
-          Registrierungseintrag.</li>
+        <li>Lade <code>NoesisPDFCloner-windows-x64-setup.exe</code>
+          (Installer) oder <code>NoesisPDFCloner-windows-x64.exe</code>
+          (portabel) herunter.</li>
+        <li>Starte den Installer oder führe die portable Datei aus.</li>
+        <li>Möglicherweise muss die Ausführung beim ersten Start erlaubt werden
+          (SmartScreen).</li>
       </ol>
-      <p><strong>Anforderungen</strong>: Windows 10/11 x64. SmartScreen kann
-      beim ersten Start eine Bestätigung verlangen.</p>
+      <p><strong>Voraussetzungen</strong>: Windows 10/11 x64.</p>
 
       <h3>macOS (x64 / Apple Silicon)</h3>
       <ol>
-        <li>Laden Sie <code>NoesisPDFReaderLite-macos-x64.dmg</code> (Intel
-          Mac) oder <code>NoesisPDFReaderLite-macos-arm64.dmg</code> (Apple
-          Silicon) herunter.</li>
-        <li>Öffnen Sie die <code>.dmg</code> und ziehen Sie die App in den
-          Ordner <strong>Programme</strong>.</li>
-        <li>Beim ersten Start ist die App nicht signiert:
-          <strong>Rechtsklick auf die App → Öffnen</strong> und bestätigen,
-          um Gatekeeper zu umgehen.</li>
+        <li>Lade <code>NoesisPDFCloner-macos-x64.dmg</code> (Intel) oder
+          <code>NoesisPDFCloner-macos-arm64.dmg</code> (Apple Silicon) herunter.</li>
+        <li>Öffne die <code>.dmg</code> und ziehe die App in
+          <strong>Programme</strong>.</li>
+        <li>Beim ersten Start, falls die App nicht signiert ist: <strong>Rechtsklick → Öffnen</strong>
+          und bestätigen, um Gatekeeper zu umgehen.</li>
       </ol>
-      <p><strong>Anforderungen</strong>: macOS 11 oder neuer.</p>
+      <p><strong>Voraussetzungen</strong>: macOS 11 oder neuer.</p>
 
       <h3>Linux (x86_64)</h3>
       <ol>
-        <li>Laden Sie <code>NoesisPDFReaderLite-x86_64.AppImage</code>
-          herunter.</li>
-        <li>Machen Sie es ausführbar:
-          <pre><code>chmod +x NoesisPDFReaderLite-x86_64.AppImage</code></pre></li>
-        <li>Starten Sie es per Doppelklick oder über das Terminal:
-          <pre><code>./NoesisPDFReaderLite-x86_64.AppImage</code></pre></li>
+        <li>Lade <code>NoesisPDFCloner-x86_64.AppImage</code> herunter.</li>
+        <li>Mache es ausführbar:
+          <pre><code>chmod +x NoesisPDFCloner-x86_64.AppImage</code></pre></li>
+        <li>Starte es:
+          <pre><code>./NoesisPDFCloner-x86_64.AppImage</code></pre></li>
       </ol>
-      <p><strong>Anforderungen</strong>: Linux x86_64 mit FUSE (für das
-      AppImage) und den Qt6-Bibliotheken. Wenn FUSE nicht verfügbar ist,
-      extrahieren Sie das AppImage mit
+      <p><strong>Voraussetzungen</strong>: Linux x86_64 mit FUSE und den Qt6-Bibliotheken. Wenn
+      FUSE nicht verfügbar ist, verwende
       <code>--appimage-extract-and-run</code>.</p>
 
       <h3>Aus dem Quellcode (Entwickler)</h3>
-      <pre><code>python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python main.py</code></pre>
+      <p>Erforderlich sind <strong>Python 3.12</strong> und <a
+      href="https://docs.astral.sh/uv/">uv</a>. Das Skript erstellt die beiden venv und öffnet
+      die GUI:</p>
+      <pre><code>./run.sh
+./run.sh /percorso/file.pdf</code></pre>
 
-      <div class="note"><strong>Hinweis</strong> Jedes Update wird
-        angewendet, indem Sie das neue Paket für dieselbe Plattform
-        herunterladen und ausführen. Die Einstellungen (config.json, Cache,
-        Bilder) bleiben im Datenordner der App und werden nicht
-        angetastet.</div>
+      <div class="note"><strong>Hinweis</strong> Jede Aktualisierung erfolgt durch
+        Herunterladen des neuen Pakets derselben Plattform. Voreinstellungen, Cache
+        und Schlüssel bleiben im Datenordner der App und werden nicht angetastet.</div>
 
-      <!-- ═══════════════ DEINSTALLATION ═══════════════ -->
+      <!-- ═══════════════ MOTORE DI CLONAZIONE ═══════════════ -->
+
+      <h2 id="engine">Klon-Engine</h2>
+      <p>Die Engine ist <code>pdf2zh_next</code> v2 (BabelDOC), installiert in einer
+      dedizierten Umgebung <code>.venv2</code> (Python 3.12) und aufgerufen als
+      <strong>Subprozess-CLI</strong>. Die GUI-Binärdatei enthält <code>uv</code>,
+      daher muss nichts von Hand installiert werden.</p>
+
+      <h3>Installation aus der App</h3>
+      <ul>
+        <li>⚙️ Einstellungen → <em>Klon-Engine</em> →
+          <strong>Dienst installieren</strong>.</li>
+        <li>Oder über die Schaltfläche <strong>Dienst installieren</strong> in der Warnleiste,
+          die im rechten Bereich erscheint, solange die Engine fehlt.</li>
+      </ul>
+      <p>Die Installation erfolgt <strong>neben der ausführbaren Datei</strong>. Wenn der
+      App-Ordner nicht beschreibbar ist (z. B. <code>C:\Program Files</code> oder
+      das AppImage, das von einem schreibgeschützten Mount ausgeführt wird), wird die Engine in
+      den <strong>benutzerspezifischen Datenordner</strong> installiert und die App erkennt sie trotzdem.</p>
+
+      <h3>Installation über die Release-Skripte</h3>
+      <pre><code>./setup_engine.sh                                              # Linux / macOS
+powershell -ExecutionPolicy Bypass -File .\setup_engine.ps1    # Windows</code></pre>
+      <p>Wenn <code>uv</code> nicht vorhanden ist, lädt das Skript es selbst herunter.</p>
+
+      <h3>Erkennung der Binärdatei</h3>
+      <p>Die App sucht <code>pdf2zh_next</code> in dieser Reihenfolge:</p>
+      <ol>
+        <li>den unter ⚙️ Einstellungen angegebenen Pfad;</li>
+        <li>die Umgebungsvariable <code>PDF2ZH_BIN</code>;</li>
+        <li>den Ordner <code>.venv2</code> neben der App/dem Repository.</li>
+      </ol>
+
+      <h3>Daten und Logs</h3>
+      <ul>
+        <li><strong>Cache</strong>: im Datenordner der App, Unterordner
+          <code>clones/</code>, mit Schlüssel pro Dokument + Dienst + Sprachpaar.</li>
+        <li><strong>Logs</strong>: <code>&lt;cartella dati&gt;/logs/noesis-pdf-cloner.log</code>.</li>
+        <li><strong>Speicherort des Datenordners</strong>: Windows
+          <code>%APPDATA%\noesis-pdf-cloner\</code>, macOS
+          <code>~/Library/Application Support/noesis-pdf-cloner/</code>, Linux
+          <code>~/.local/share/noesis-pdf-cloner/</code>.</li>
+      </ul>
+
+      <!-- ═══════════════ DISINSTALLAZIONE ═══════════════ -->
 
       <h2 id="uninstall">Deinstallation</h2>
-      <p>Da es portabel ist, besteht die Deinstallation darin, die
-      Programmdateien und, falls gewünscht, den Benutzerdatenordner zu
-      entfernen.</p>
+      <p>Die Deinstallation besteht darin, das Programm und, falls gewünscht, den
+      Benutzer-Datenordner zu entfernen (Konfiguration, Cache, Schlüssel, Logs).</p>
 
       <h3>Windows</h3>
       <ol>
-        <li>Löschen Sie <code>NoesisPDFReaderLite-windows-x64.exe</code>.</li>
-        <li>Um auch Benutzerdaten zu entfernen, löschen Sie den Ordner
-          <code>%APPDATA%\noesis-pdf-cloner\</code> (config,
-          Übersetzungs-Cache, Bilder).</li>
+        <li>Deinstalliere über die Systemsteuerung oder lösche die portable
+          ausführbare Datei.</li>
+        <li>Um auch die Benutzerdaten zu entfernen, lösche
+          <code>%APPDATA%\noesis-pdf-cloner\</code>.</li>
       </ol>
 
       <h3>macOS</h3>
       <ol>
-        <li>Ziehen Sie die App aus dem Ordner <strong>Programme</strong> in
-          den Papierkorb.</li>
-        <li>Um auch Benutzerdaten zu entfernen, löschen Sie den Ordner
+        <li>Ziehe die App in den Papierkorb.</li>
+        <li>Um auch die Benutzerdaten zu entfernen, lösche
           <code>~/Library/Application Support/noesis-pdf-cloner/</code>.</li>
       </ol>
 
       <h3>Linux</h3>
       <ol>
-        <li>Löschen Sie die Datei
-          <code>NoesisPDFReaderLite-x86_64.AppImage</code>.</li>
-        <li>Um auch Benutzerdaten zu entfernen, löschen Sie den Ordner
+        <li>Lösche die Datei <code>NoesisPDFCloner-x86_64.AppImage</code>.</li>
+        <li>Um auch die Benutzerdaten zu entfernen, lösche
           <code>~/.local/share/noesis-pdf-cloner/</code>.</li>
       </ol>
 
       <div class="warning"><strong>Achtung</strong> Der Datenordner enthält
-        Ihre Einstellungen und extrahierten Bilder: Das Löschen ist
-        irreversibel. Wenn Sie neu installieren möchten, können Sie ihn
-        behalten.</div>
+        Voreinstellungen, Cache und Schlüssel: Ihn zu löschen ist unwiderruflich. Wenn du
+        eine Neuinstallation planst, kannst du ihn behalten.</div>
 
-      <!-- ═══════════════ HINWEIS ZUR RECHTMÄSSIGEN NUTZUNG ═══════════════ -->
+      <!-- ═══════════════ DISCLAIMER ═══════════════ -->
 
-      <h2 id="legal">Hinweis zur rechtmäßigen Nutzung</h2>
+      <h2 id="legal">Haftungsausschluss zur rechtmäßigen Nutzung</h2>
       <div class="legal">
-        <strong>Verantwortung des Benutzers</strong>
-        <p>Noesis PDF Cloner ist ein Lese-Werkzeug, das Text und Bilder
-        aus PDF-Dokumenten extrahiert. Der Benutzer ist allein für die Nutzung
-        des Programms und für die von ihm verarbeiteten Dokumente
-        verantwortlich.</p>
-        <p>Bevor Sie Inhalte extrahieren, kopieren, übersetzen oder
-        weitergeben, prüfen Sie, ob Sie dazu berechtigt sind:</p>
+        <strong>Verantwortung des Nutzers</strong>
+        <p>Noesis PDF Cloner ist ein Werkzeug zum Lesen und Übersetzen von
+        PDF-Dokumenten. Der Nutzer ist allein verantwortlich für die Verwendung des
+        Programms und der von ihm verarbeiteten Dokumente.</p>
+        <p>Bevor du Inhalte übersetzt, kopierst oder weitergibst, prüfe, ob du
+        dazu berechtigt bist:</p>
         <ul>
-          <li>verwenden Sie das Programm nur für Dokumente, an denen Sie die
-            Rechte besitzen oder für die Sie eine Genehmigung erhalten
-            haben;</li>
-          <li>respektieren Sie das Urheberrecht und die Lizenzbedingungen der
-            Materialien (Bücher, Artikel, wissenschaftliche Veröffentlichungen,
-            Handbücher);</li>
-          <li>verwenden Sie das Programm nicht, um Schutzmaßnahmen zu
-            umgehen, Nutzungsbedingungen zu verletzen oder Piraterie zu
-            erleichtern;</li>
-          <li>geben Sie extrahierte oder übersetzte Inhalte nicht ohne
-            Genehmigung weiter;</li>
-          <li>respektieren Sie die Gesetze Ihres Landes zu geistigem Eigentum
-            und Datenschutz.</li>
+          <li>Verwende das Programm nur für Dokumente, deren Rechte du besitzt oder
+            für die du eine Genehmigung erhalten hast;</li>
+          <li>respektiere das Urheberrecht und die Lizenzbedingungen der Materialien
+            (Bücher, Artikel, wissenschaftliche Publikationen, Handbücher);</li>
+          <li>verwende das Programm nicht, um Schutzmaßnahmen zu umgehen, Nutzungsbedingungen
+            zu verletzen oder Piraterie zu erleichtern;</li>
+          <li>gib übersetzte Inhalte nicht ohne Genehmigung weiter;</li>
+          <li>respektiere die Gesetze deines Landes zum geistigen Eigentum und zum
+            Datenschutz.</li>
         </ul>
-        <p>Die Übersetzung sendet den Text an einen externen Dienst:
-        Übersetzen Sie keine vertraulichen oder geschützten Dokumente, wenn
-        Sie nicht das Recht dazu haben.</p>
+        <p>Die Übersetzung sendet den Text an einen externen Dienst: Übersetze keine
+        vertraulichen oder geschützten Dokumente, wenn du dazu nicht berechtigt bist.</p>
         <p>Dieser Text ist ein Aufruf zur Vorsicht und <strong>stellt keine
-        Rechtsberatung dar</strong>. Für konkrete Fälle wenden Sie sich an
-        eine qualifizierte Fachperson oder an die in Ihrem Land geltenden
-        Gesetze.</p>
-        <p>Das Programm wird „wie besehen" ohne jegliche ausdrückliche oder
-        stillschweigende Gewährleistung bereitgestellt.</p>
+        Rechtsberatung dar</strong>. Das Programm wird „wie besehen“ bereitgestellt, ohne
+        Gewährleistung jeglicher Art.</p>
       </div>
 
-      <!-- ═══════════════ TASTENKÜRZEL & FAQ ═══════════════ -->
+      <!-- ═══════════════ SCORCIATOIE & FAQ ═══════════════ -->
 
       <h2 id="shortcuts">Tastenkürzel</h2>
       <table>
-        <tr><th>Kürzel</th><th>Aktion</th></tr>
+        <tr><th>Tastenkürzel</th><th>Aktion</th></tr>
         <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Nächste / vorherige Seite</td></tr>
-        <tr><td><kbd>BildAb</kbd> / <kbd>BildAuf</kbd></td><td>Nächste / vorherige Seite</td></tr>
-        <tr><td><kbd>Strg</kbd>+<kbd>+</kbd> / <kbd>Strg</kbd>+<kbd>−</kbd></td><td>Vergrößern / Verkleinern</td></tr>
-        <tr><td><kbd>Strg</kbd>+<kbd>0</kbd></td><td>Zoom zurücksetzen</td></tr>
-        <tr><td><kbd>Strg</kbd>+<kbd>M</kbd></td><td>Markdown umschalten</td></tr>
+        <tr><td><kbd>PagGiù</kbd> / <kbd>PagSu</kbd></td><td>Nächste / vorherige Seite</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd></td><td>Zoom vor / zurück</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Zoom zurücksetzen</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Markdown ein-/ausschalten</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Die übersetzte Seite exportieren</td></tr>
       </table>
 
       <h3>FAQ</h3>
-      <h4>Warum enthält der extrahierte Text Wörter, die ich auf der Seite nicht sehe?</h4>
-      <p>Es handelt sich wahrscheinlich um Text in Bildern (Abbildungen,
-      Diagramme), der durch die OCR läuft. Verwenden Sie eine
-      <a href="#zones-exclude">Ausschlusszone</a> auf dem Bildfeld, um sie zu
-      entfernen.</p>
+      <h4>Die Schaltfläche ▶ Übersetzen tut nichts / meldet, dass der Dienst fehlt.</h4>
+      <p>Die Klon-Engine ist nicht installiert: Verwende <strong>Dienst installieren</strong>
+      in der Leiste des rechten Bereichs oder in ⚙️ Einstellungen (siehe
+      <a href="#engine">Klon-Engine</a>).</p>
 
-      <h4>Die Lesereihenfolge ist auf einer komplexen Seite falsch.</h4>
-      <p>Verwenden Sie die grünen <a href="#zones-include">Einschlusszonen</a>,
-      um die Spaltenreihenfolge manuell festzulegen.</p>
+      <h4>Ich habe den LLM-Dienst gewählt, aber es wird ein Schlüssel verlangt.</h4>
+      <p>Der LLM-Dienst verwendet OpenRouter und erfordert <code>OPENROUTER_API_KEY</code>.
+      Gib ihn in ⚙️ Einstellungen ein und drücke <strong>Prüfen</strong>, oder
+      greife auf Google/Bing zurück (siehe <a href="#apikey">OpenRouter-Schlüssel</a>).</p>
 
-      <h4>Meine Zonen verschwinden, wenn ich die App schließe.</h4>
-      <p>Ja: Die Zonen (rot und grün) leben im Speicher und gelten pro Seite.
-      Die Einstellungen werden dagegen im Config gespeichert.</p>
+      <h4>Die Übersetzung startet nicht oder ist langsam.</h4>
+      <p>Prüfe die Internetverbindung und ob der Dienst ausgewählt ist. Die
+      kostenlose Kette kann auf Microsoft/LLM zurückgreifen: Sieh dir die Warnung in der Statusleiste
+      an. Du kannst mit der Schaltfläche <strong>Abbrechen</strong> abbrechen.</p>
 
-      <h4>Wie ändere ich die Oberflächensprache?</h4>
+      <h4>Warum ist eine Seite bereits übersetzt?</h4>
+      <p>Der Cache speichert nach <em>Dokument + Dienst + Sprachpaar</em>. Wenn
+      du den Dienst bei einer Seite änderst, die bereits mit einem anderen Dienst im Cache liegt, fragt die App
+      vor dem Ersetzen nach Bestätigung.</p>
+
+      <h4>Wie ändere ich die Sprache der Oberfläche?</h4>
       <p>⚙️ Einstellungen → Sprache → Oberflächensprache.</p>
 
-      <h4>Die Übersetzung startet nicht.</h4>
-      <p>Prüfen Sie die Internetverbindung und dass der Tab der Zielsprache
-      aktiv ist. Die Übersetzung wird während des Zeichnens von Zonen
-      verschoben.</p>
+      <h4>Die App erkennt <code>pdf2zh_next</code> nicht.</h4>
+      <p>Gib den Pfad zur Binärdatei in ⚙️ Einstellungen an oder setze die
+      Variable <code>PDF2ZH_BIN</code>. Die App sucht auch <code>.venv2</code>
+      neben der ausführbaren Datei (siehe <a href="#engine">Klon-Engine</a>).</p>
 
       <h4>Ist eine neue Version verfügbar?</h4>
-      <p>Die Versionen werden auf der GitHub-Seite des Projekts veröffentlicht:
-      Laden Sie das Paket für Ihre Plattform herunter und führen Sie es aus.
-      Die Einstellungen bleiben erhalten.</p>
+      <p>Die Releases werden auf der GitHub-Seite des Projekts veröffentlicht: Lade das
+      Paket für deine Plattform herunter. Voreinstellungen, Cache und Schlüssel bleiben unberührt.</p>
     </main>
   </div>
 
   <footer>
-    Noesis PDF Cloner — Hilfe · Projektdokumentation ·
-    <a href="https://github.com/vigliafg/noesis-pdf-cloner">GitHub-Repository</a>
+    Noesis PDF Cloner — Hilfe ·
+    <a href="../../">Projekt-Website</a> ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner">GitHub-Repository</a> ·
+    <a href="https://github.com/vigliafg/noesis-pdf-cloner/releases">Releases</a>
   </footer>
 
   <script src="../js/help.js"></script>

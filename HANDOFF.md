@@ -11,13 +11,13 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.2** (Windows x64 + macOS x64/arm64 + Linux AppImage); in
-  preparazione **v0.1.3** (traduzione on demand + purga della sola pagina).
-- Guida pubblicata su GitHub Pages (build da workflow): <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
-- Test: **300 OK** (24 skip, regressioni su PDF reali non versionati).
+- Ultima release: **v0.1.5** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Sito del progetto su GitHub Pages (build da workflow): landing a
+  <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
+  <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
+- Test: **375 OK** (24 skip, regressioni su PDF reali non versionati).
 
 ### Cosa NON è ancora fatto
-- I contenuti di `docs/help/` sono **rebrandati** ma descrivono ancora l'estrazione markdown di lite.
 - Il motore **Docling** e gli strumenti a zone (dormienti) non sono reintegrati.
 
 ---
@@ -305,8 +305,11 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
    `.mono.pdf` → status `error`. La UI mostra il messaggio senza bloccare la navigazione.~~
    **Risolto (v0.1.2)**: il motore copia l'originale in cache (`empty`) e la UI mostra
    la nota "nessun testo da tradurre" (allineato al servizio).
-3. **`docs/help/`**: contenuti ancora orientati all'estrazione markdown di lite; da
-   riscrivere per il flusso di clonazione.
+3. ~~**`docs/help/`**: contenuti ancora orientati all'estrazione markdown di lite; da
+   riscrivere per il flusso di clonazione.~~ **Fatto (v0.1.5)**: riscritta per il
+   cloner in 5 lingue, con landing del sito alla radice delle Pages
+   (`docs/index.html`) e pulsante ❓ Guida che apre la lingua dell'interfaccia
+   (`help_url()`).
 4. **`NEXT_STEPS-cattura-manuale.md`**: nota di lite (cattura manuale immagini); valutare
    se rimuoverla (la feature è dormiente).
 5. **Overlap residuo BabelDOC** in casi limite (noto da pdfcloner, es. pagina 449): bug
@@ -391,7 +394,7 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 | `vendor/fetch_uv.py` | Scarica `uv` pinnato + verifica `sha256` (incluso nel bundle) |
 | `vendor/uv-licenses/` | Licenze MIT/Apache-2.0 di `uv` |
 | `.github/workflows/release.yml` | Release multipiattaforma (PyInstaller + NSIS + AppImage) |
-| `.github/workflows/pages.yml` | Pubblica `docs/help/` su GitHub Pages |
+| `.github/workflows/pages.yml` | Pubblica il sito del progetto: landing (`docs/index.html`) alla radice e guida multilingue in `/help/` |
 | `assets/` | Logo sorgente `assets/PDFCLONER.jpeg` e icone di release (`noesispdf.ico`/`.icns`/`-256.png`) generate da esso; l'icona è usata anche a runtime (`app.setWindowIcon`) |
 | `installer.nsi` | Installer Windows (rebrandato) |
 | `ha22.pdf` | PDF di test (300 MB, **gitignored**, copyright McGraw-Hill) |
@@ -402,7 +405,8 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 
 - Remote: `git@github.com:vigliafg/noesis-pdf-cloner.git` (SSH), branch `main`.
 - Visibilità: **pubblica**.
-- GitHub Pages: abilitato con `build_type=workflow`; guida a
+- GitHub Pages: abilitato con `build_type=workflow`; sito a
+  <https://vigliafg.github.io/noesis-pdf-cloner/> (landing) e guida a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**; per pubblicarne una
   nuova creare un tag `v*` e pusharlo (`git tag v0.1.5 && git push origin v0.1.5`).

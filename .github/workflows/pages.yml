@@ -24,12 +24,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Only docs/help is published (under /help/). The internal technical
-      # document docs/PDF-reflow-tecnica.md stays in the repo but off-site.
+      # The project site is published at the root (landing page) with the
+      # multilingual guide under /help/. Internal technical documents stay in
+      # the repo but off-site.
       - name: Build site
         run: |
-          mkdir -p _site
+          mkdir -p _site/assets
+          cp docs/index.html _site/index.html
+          cp -r docs/css _site/css
           cp -r docs/help _site/help
+          cp assets/noesispdf-256.png _site/assets/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

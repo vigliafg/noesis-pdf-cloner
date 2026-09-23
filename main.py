@@ -123,12 +123,24 @@ from PyQt6.QtWidgets import (
     QFrame,
 )
 
-# URL della guida online (sito statico pubblicato su GitHub Pages).
+# URL base della guida online (sito statico pubblicato su GitHub Pages).
+# La landing del progetto è alla radice del sito; la guida è in /help/<lingua>/.
 # Aprire con QDesktopServices.openUrl apre il browser di sistema: nessuna
 # dipendenza QtWebEngine, nessuna pagina incorporata.
 HELP_URL = (
     "https://vigliafg.github.io/noesis-pdf-cloner/help/"
 )
+
+
+def help_url(lang: str | None = None) -> str:
+    """URL della guida nella lingua dell'interfaccia (fallback: italiano).
+
+    ``lang`` esplicito è utile nei test; se assente si usa la lingua attiva.
+    """
+    code = lang or get_language()
+    if code not in LANGUAGES:
+        code = "it"
+    return f"{HELP_URL}{code}/"
 
 # Stima indicativa del tempo di traduzione per pagina (il desktop non ha un
 # backend di stima): usata dal box del passo "Motore" e dall'overlay liquido.
@@ -7128,8 +7140,11 @@ class MainWindow(QMainWindow):
             self._apply_settings(dlg.values())
 
     def _on_open_help(self):
-        """Open the online help site in the system browser."""
-        QDesktopServices.openUrl(QUrl(HELP_URL))
+        """Open the online help site in the system browser.
+
+        Apre la guida nella lingua dell'interfaccia (fallback italiano).
+        """
+        QDesktopServices.openUrl(QUrl(help_url()))
 
     def _apply_settings(self, values: dict):
         """Apply the settings dialog choices (languages + preferences)."""

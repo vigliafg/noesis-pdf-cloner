@@ -47,11 +47,17 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
 }
 
+.topbar a.brand,
 .topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 18px;
   font-weight: 600;
   color: var(--text);
 }
+.topbar a.brand:hover { text-decoration: none; }
+.topbar .brand img { width: 24px; height: 24px; border-radius: 5px; }
 .topbar .brand .lite { color: var(--text-dim); font-weight: 400; }
 .topbar .brand em { font-style: normal; color: var(--accent); }
 

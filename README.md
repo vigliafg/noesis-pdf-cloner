@@ -47,7 +47,10 @@ lasciare il posto alla nuova traduzione.
   (progresso stimato) sopra la pagina, con un pulsante **Annulla** che interrompe
   subito il subprocess; la finestra di progresso export mostra la **pagina
   correntemente in lavorazione** che avanza pagina per pagina.
-- ❓ Guida online (`docs/help/`, pubblicata su GitHub Pages).
+- ❓ Guida online: il **sito del progetto** (`docs/`, pubblicato su GitHub Pages)
+  con landing a <https://vigliafg.github.io/noesis-pdf-cloner/> e guida
+  multilingue in `docs/help/` a <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
+  Il pulsante apre la guida nella lingua dell'interfaccia.
 - 🔑 **Chiave OpenRouter**: se il motore LLM è selezionato senza chiave, l'app la
   chiede (dialogo dedicato) e la salva in un **file per-utente** protetto
   (`keystore.py`, 0600, nella cartella dati). Il campo è in

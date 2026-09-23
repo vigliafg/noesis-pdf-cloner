@@ -1,0 +1,271 @@
+/* Noesis PDF Cloner — landing site stylesheet.
+   Dark theme coherent with docs/help/css/help.css (the guide).
+   The guide's own stylesheet is reused for the shared chrome; this file
+   only adds the landing-specific blocks (hero, badges, CTA, steps). */
+
+:root {
+  --bg: #1e1e1e;
+  --bg-panel: #262626;
+  --bg-sidebar: #2b2b2b;
+  --border: #3a3a3a;
+  --text: #e8e8e8;
+  --text-dim: #9a9a9a;
+  --accent: #4a90d9;
+  --accent-strong: #3a6bc5;
+  --green: #4caf50;
+  --amber: #e0a030;
+  --red: #d9534f;
+  --code-bg: #141414;
+  --kbd-bg: #333;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  font-size: 16px;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── top bar (shared with the guide) ─────────────────── */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 24px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+.topbar .brand img { width: 28px; height: 28px; border-radius: 6px; }
+.topbar .brand .tag { color: var(--text-dim); font-weight: 400; font-size: 14px; }
+
+.topbar nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.topbar nav a {
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+.topbar nav a:hover { background: var(--bg-panel); color: var(--text); text-decoration: none; }
+.topbar nav a.cta {
+  background: var(--accent-strong);
+  border: 1px solid var(--accent-strong);
+  color: #fff;
+}
+.topbar nav a.cta:hover { background: var(--accent); }
+
+/* ── hero ────────────────────────────────────────────── */
+
+.hero {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 64px 24px 40px;
+  text-align: center;
+}
+
+.hero .logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.hero h1 {
+  font-size: 40px;
+  line-height: 1.2;
+  margin: 18px 0 8px;
+  color: #fff;
+}
+
+.hero .lead {
+  font-size: 19px;
+  color: var(--text-dim);
+  max-width: 760px;
+  margin: 0 auto 22px;
+}
+
+.badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 26px; }
+.badge {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.btn {
+  display: inline-block;
+  padding: 11px 22px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+.btn:hover { border-color: var(--accent); text-decoration: none; }
+.btn.primary {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+.btn.primary:hover { background: var(--accent); }
+
+/* ── generic section ─────────────────────────────────── */
+
+section.block {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 34px 24px;
+}
+
+section.block > h2 {
+  font-size: 26px;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+
+section.block > p.sub {
+  color: var(--text-dim);
+  margin: 0 0 22px;
+}
+
+/* ── cards ───────────────────────────────────────────── */
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+.card h4 { margin: 0 0 6px; color: var(--accent); font-size: 16px; }
+.card p { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+/* ── steps (how it works) ────────────────────────────── */
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; counter-reset: step; }
+.step {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 16px 14px;
+}
+.step::before {
+  counter-increment: step;
+  content: counter(step);
+  position: absolute;
+  top: -12px;
+  left: 16px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.step h4 { margin: 6px 0 4px; color: var(--text); font-size: 15px; }
+.step p { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+/* ── tables / code (shared look) ─────────────────────── */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 6px 0;
+  font-size: 15px;
+}
+th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+th { background: var(--bg-panel); color: var(--accent); }
+tr:nth-child(even) td { background: #232323; }
+
+code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.9em;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+pre code { background: none; border: none; padding: 0; }
+
+/* ── callouts ────────────────────────────────────────── */
+
+.note, .warning, .legal {
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 15px;
+}
+.note { background: #1e2a3a; border-left: 4px solid var(--accent); }
+.warning { background: #3a2a1e; border-left: 4px solid var(--amber); }
+.legal { background: #2a1e1e; border-left: 4px solid var(--red); }
+.note > strong, .warning > strong, .legal > strong { display: block; margin-bottom: 4px; }
+
+/* ── download grid ───────────────────────────────────── */
+
+.dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.dl {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+.dl h4 { margin: 0 0 4px; font-size: 16px; }
+.dl p { margin: 0 0 10px; font-size: 14px; color: var(--text-dim); }
+.dl code { font-size: 12.5px; word-break: break-all; }
+
+/* ── footer ──────────────────────────────────────────── */
+
+footer {
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+  padding: 22px 24px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+footer a { color: var(--accent); }
+
+@media (max-width: 640px) {
+  .hero { padding: 40px 16px 24px; }
+  .hero h1 { font-size: 30px; }
+  section.block { padding: 24px 16px; }
+}
