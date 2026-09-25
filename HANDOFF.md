@@ -392,6 +392,61 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
   formato "pagine singole in una cartella" (`CloneEngine.export_folder`); il
   pulsante di fine export è diventato **⬇ Copia in Download** (è una copia).
 
+### Fatto il 25/09 (rifiniture desktop — Fase 1 + Fase 2)
+
+Implementati i 7 punti richiesti (solo **desktop**: allineamento al servizio
+**rimandato**, vedi TODO sotto).
+
+1. **Riduzione a icona**: tasto minimizza su wizard di export e finestra di
+   avanzamento; la finestra di avanzamento **non è più application-modal** e il
+   batch continua mentre l'app è ridotta. Le azioni in conflitto sono bloccate
+   dal flag `MainWindow._batch_busy` ("esportazione già in corso").
+2. **Pulsante "Azioni pagina"** come **overlay del pannello** in alto a destra,
+   **indipendente dalla barra motori**: resta visibile anche con la fascia
+   collassata (si affianca al chevron). Non più flottante in basso: così non
+   può finire dietro le scrollbar. **Glow intermittente** (drop-shadow animato,
+   colore dal tema: blu su chiaro, blu tenue su scuro) ben visibile su pagine
+   chiare e scure; bordo 2px; resta il pallino-badge.
+3. **Avvisi di fine batch** (`notifications.py`): notifica di sistema
+   (`QSystemTrayIcon`), flash della taskbar (`QApplication.alert`) e **suono
+   nativo** discreto (Windows `winsound`, macOS `afplay`, Linux
+   `pw-play`/`paplay`/`aplay`/`ffplay` con un **WAV generato dall'app**,
+   fallback `QApplication.beep`) in background. Icona nel system tray con
+   Mostra/Esci. Opzioni: avviso e suono on/off + **🔔 Prova suono**. L'avviso
+   scatta anche a fine **singola pagina** se la finestra non è in primo piano
+   (`_notify_page_done`).
+4. **Standby** (`power.py`): `SleepInhibitor` impedisce lo standby durante i job
+   (`systemd-inhibit` / `SetThreadExecutionState` / `caffeinate`);
+   `ResumeWatch` rileva il risveglio (orologio da parete vs monotono) e gli
+   errori transitori (rete/timeout) vengono **ritentati** (`_is_transient_error`).
+5. **Tema chiaro/scuro/sistema** (`theme.py`): due tavolozze di token e QSS
+   generati; scelta in ⚙️ Impostazioni → Aspetto, default scuro, "come il
+   sistema" segue `QStyleHints.colorScheme()`.
+6. **Velocità LLM** (senza parallelizzare le pagine): `--no-auto-extract-glossary`
+   (un giro LLM in meno per pagina), `--openai-timeout` e `--pool-max-workers`
+   (setting `llm_pool_workers`, richieste LLM in parallelo *dentro* una pagina).
+   La traduzione delle pagine resta **sequenziale, una alla volta**.
+7. **Sequenziale**: `CloneExportThread` traduce le pagine una per una (nessun
+   pool tra pagine, nessun batch a più pagine). La UI mostra ogni pagina con la
+   sua anteprima, l'etichetta "Pagina N (pos di tot)" e la barra di avanzamento.
+
+Extra: il dialog **Impostazioni** ora scorre (`QScrollArea`) invece di
+comprimere i controlli quando la finestra è bassa; i pulsanti OK/Annulla
+restano fissi in fondo. Nel registro degli export restano **solo gli esiti**
+✓/✗ (niente righe "in lavorazione" fuorvianti).
+
+Nuovi test: `test_theme.py`, `test_notifications.py`, `test_power.py`,
+`test_ui_refinements.py`, `test_export_retry.py`, più flag LLM in
+`test_clone_engine.py`. Suite: **477 OK** (24 skip).
+
+> **TODO allineamento servizio (richiesto dall'utente)**: le modifiche al
+> *motore* (`_translator_flags` LLM: `--no-auto-extract-glossary`,
+> `--openai-timeout`, `--pool-max-workers`) **non** sono state riverberate in
+> `noesis-pdf-cloner-service` (`app/engine.py`, `app/pipeline.py`). Da fare
+> **dopo** il collaudo sul campo del desktop.
+> I punti 1–5 e la scelta "tutto sequenziale" sono specifici del desktop:
+> non da riverberare.
+
 ---
 
 ## 8. File chiave
@@ -401,6 +456,9 @@ verifica pre-volo, errori classificati). Restano in coda i punti 8 e 10
 | `main.py` | GUI PyQt6: `MainWindow`, `TranslatedPagePanel` (barra collassabile), `PdfPageView`, navigazione/zoom, Impostazioni, i18n runtime |
 | `clone_engine.py` | `CloneEngine`: split, subprocess pdf2zh_next, flag per engine, cache, stato, fallback log, auto-rilevamento binario; `export_pdf`/`export_zip`/`export_folder` |
 | `pages.py` | Parsing della specifica pagine (campo libero), allineato a `app/pages.py` del servizio |
+| `theme.py` | Tavolozze (chiaro/scuro) e QSS generati per finestra/dialoghi/wizard |
+| `notifications.py` | Suono d'avviso nativo (Windows/macOS/Linux) senza dipendenze pesanti |
+| `power.py` | Inibizione standby cross-platform e rilevamento risveglio |
 | `gtranslate_cli.py` | Catena gratuita Google→Microsoft→LLM per `--clitranslator` |
 | `i18n.py` | Stringhe UI (it/en/fr/de/es), `TRANSLATION_ENGINES = (google, bing, openai)`, config/`DEFAULTS` |
 | `layout_engine.py` | Engine adattativo dei fix di layout (dormiente) |

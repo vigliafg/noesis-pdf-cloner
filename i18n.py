@@ -95,6 +95,11 @@ DEFAULTS: dict = {
     "resume_last_page": True,  # riprendi dall'ultima pagina del documento
     "save_edits": True,      # salva le modifiche ai testi (per documento)
     "font_size": 12,         # dimensione font testo estratto (10–16 pt)
+    "theme": "dark",         # tema UI: dark | light | system
+    "notify_on_finish": True,  # avviso (notifica + suono) a fine batch
+    "notify_sound": True,      # suono d'avviso a fine batch
+    "prevent_sleep": True,     # impedisci lo standby durante la traduzione
+    "llm_pool_workers": 4,     # richieste LLM in parallelo dentro una pagina
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -1204,6 +1209,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Ouvrez d'abord un PDF", "de": "Öffnen Sie zuerst ein PDF",
         "es": "Abre primero un PDF",
     },
+    "export.busy": {
+        "it": "Un'esportazione è già in corso: attendi che finisca.",
+        "en": "An export is already running: wait for it to finish.",
+        "fr": "Une exportation est déjà en cours : attendez la fin.",
+        "de": "Ein Export läuft bereits: Warten Sie, bis er fertig ist.",
+        "es": "Ya hay una exportación en curso: espera a que termine.",
+    },
     "export.progress.title": {
         "it": "Traduzione delle pagine mancanti",
         "en": "Translating missing pages",
@@ -2022,6 +2034,147 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Letzten Tab des rechten Bereichs merken",
         "es": "Recordar la última pestaña del panel derecho",
     },
+    # ── aspetto (tema) ──────────────────────────────────────────────────────
+    "settings.group.appearance": {
+        "it": "Aspetto", "en": "Appearance", "fr": "Apparence",
+        "de": "Erscheinungsbild", "es": "Apariencia",
+    },
+    "settings.appearance.theme": {
+        "it": "Tema", "en": "Theme", "fr": "Thème",
+        "de": "Design", "es": "Tema",
+    },
+    "settings.theme.dark": {
+        "it": "Scuro", "en": "Dark", "fr": "Sombre",
+        "de": "Dunkel", "es": "Oscuro",
+    },
+    "settings.theme.light": {
+        "it": "Chiaro", "en": "Light", "fr": "Clair",
+        "de": "Hell", "es": "Claro",
+    },
+    "settings.theme.system": {
+        "it": "Come il sistema", "en": "Follow system", "fr": "Comme le système",
+        "de": "Wie das System", "es": "Como el sistema",
+    },
+    # ── notifiche di fine batch ─────────────────────────────────────────────
+    "settings.group.notifications": {
+        "it": "Avvisi", "en": "Notifications", "fr": "Notifications",
+        "de": "Benachrichtigungen", "es": "Avisos",
+    },
+    "settings.notify.on_finish": {
+        "it": "Avvisa quando un batch è terminato",
+        "en": "Notify when a batch finishes",
+        "fr": "Notifier à la fin d'un lot",
+        "de": "Benachrichtigen, wenn ein Stapel fertig ist",
+        "es": "Avisar cuando termina un lote",
+    },
+    "settings.notify.sound": {
+        "it": "Suono d'avviso a fine batch",
+        "en": "Alert sound at batch end",
+        "fr": "Son d'alerte à la fin d'un lot",
+        "de": "Signalton am Ende eines Stapels",
+        "es": "Sonido de aviso al terminar un lote",
+    },
+    "settings.notify.prevent_sleep": {
+        "it": "Impedisci lo standby durante la traduzione",
+        "en": "Prevent sleep while translating",
+        "fr": "Empêcher la veille pendant la traduction",
+        "de": "Standby während der Übersetzung verhindern",
+        "es": "Evitar la suspensión durante la traducción",
+    },
+    "settings.notify.test": {
+        "it": "🔔 Prova suono",
+        "en": "🔔 Test sound",
+        "fr": "🔔 Tester le son",
+        "de": "🔔 Ton testen",
+        "es": "🔔 Probar sonido",
+    },
+    "settings.notify.player": {
+        "it": "Riproduttore audio rilevato: {player}",
+        "en": "Detected audio player: {player}",
+        "fr": "Lecteur audio détecté : {player}",
+        "de": "Erkannter Audioplayer: {player}",
+        "es": "Reproductor de audio detectado: {player}",
+    },
+    # ── prestazioni ─────────────────────────────────────────────────────────
+    "settings.group.performance": {
+        "it": "Prestazioni", "en": "Performance", "fr": "Performances",
+        "de": "Leistung", "es": "Rendimiento",
+    },
+    "settings.performance.llm_workers": {
+        "it": "Richieste LLM in parallelo (per pagina)",
+        "en": "Parallel LLM requests (per page)",
+        "fr": "Requêtes LLM en parallèle (par page)",
+        "de": "Parallele LLM-Anfragen (pro Seite)",
+        "es": "Solicitudes LLM en paralelo (por página)",
+    },
+    "settings.performance.llm_workers.tip": {
+        "it": "Quante parti di testo tradurre insieme nel motore LLM. Valori alti sono più veloci ma possono toccare i limiti del servizio.",
+        "en": "How many text chunks to translate at once in the LLM engine. Higher is faster but may hit service rate limits.",
+        "fr": "Combien de portions de texte traduire en même temps avec le moteur LLM. Plus élevé = plus rapide, mais peut atteindre les limites du service.",
+        "de": "Wie viele Textabschnitte die LLM-Engine gleichzeitig übersetzt. Höher ist schneller, kann aber die Dienstlimits erreichen.",
+        "es": "Cuántos fragmentos de texto traducir a la vez con el motor LLM. Más alto es más rápido, pero puede alcanzar los límites del servicio.",
+    },
+    # ── notifiche (contenuti) ───────────────────────────────────────────────
+    "notify.batch.title": {
+        "it": "Traduzione completata", "en": "Translation complete",
+        "fr": "Traduction terminée", "de": "Übersetzung abgeschlossen",
+        "es": "Traducción completada",
+    },
+    "notify.batch.done": {
+        "it": "Batch terminato: {count} pagine tradotte.",
+        "en": "Batch finished: {count} pages translated.",
+        "fr": "Lot terminé : {count} pages traduites.",
+        "de": "Stapel fertig: {count} Seiten übersetzt.",
+        "es": "Lote terminado: {count} páginas traducidas.",
+    },
+    "notify.page.done": {
+        "it": "Pagina {page} tradotta.",
+        "en": "Page {page} translated.",
+        "fr": "Page {page} traduite.",
+        "de": "Seite {page} übersetzt.",
+        "es": "Página {page} traducida.",
+    },
+    "notify.batch.partial": {
+        "it": "Batch terminato: {count} tradotte, {failed} non riuscite.",
+        "en": "Batch finished: {count} translated, {failed} failed.",
+        "fr": "Lot terminé : {count} traduites, {failed} échouées.",
+        "de": "Stapel fertig: {count} übersetzt, {failed} fehlgeschlagen.",
+        "es": "Lote terminado: {count} traducidas, {failed} fallidas.",
+    },
+    "notify.batch.cancelled": {
+        "it": "Batch annullato dall'utente.",
+        "en": "Batch cancelled by the user.",
+        "fr": "Lot annulé par l'utilisateur.",
+        "de": "Stapel vom Benutzer abgebrochen.",
+        "es": "Lote cancelado por el usuario.",
+    },
+    "notify.batch.error": {
+        "it": "Batch terminato con errore.",
+        "en": "Batch finished with an error.",
+        "fr": "Lot terminé avec une erreur.",
+        "de": "Stapel mit Fehler beendet.",
+        "es": "Lote terminado con error.",
+    },
+    "power.resumed": {
+        "it": "Il computer si è risvegliato: la traduzione riprende dalla pagina interrotta.",
+        "en": "The computer woke up: translation resumes from the interrupted page.",
+        "fr": "L'ordinateur s'est réveillé : la traduction reprend à la page interrompue.",
+        "de": "Der Computer ist aufgewacht: Die Übersetzung wird ab der unterbrochenen Seite fortgesetzt.",
+        "es": "El equipo se ha reanudado: la traducción continúa desde la página interrumpida.",
+    },
+    "tray.tip": {
+        "it": "Noesis PDF Cloner", "en": "Noesis PDF Cloner",
+        "fr": "Noesis PDF Cloner", "de": "Noesis PDF Cloner",
+        "es": "Noesis PDF Cloner",
+    },
+    "tray.show": {
+        "it": "Mostra finestra", "en": "Show window", "fr": "Afficher la fenêtre",
+        "de": "Fenster anzeigen", "es": "Mostrar ventana",
+    },
+    "tray.quit": {
+        "it": "Esci", "en": "Quit", "fr": "Quitter",
+        "de": "Beenden", "es": "Salir",
+    },
     "settings.ok": {
         "it": "OK", "en": "OK", "fr": "OK", "de": "OK", "es": "OK",
     },
@@ -2197,6 +2350,16 @@ def set_setting(key: str, value) -> None:
             return
         except (TypeError, ValueError):
             pass
+    elif key == "llm_pool_workers":
+        try:
+            _CONFIG[key] = min(16, max(1, int(value)))
+            return
+        except (TypeError, ValueError):
+            pass
+    elif key == "theme":
+        value = str(value).strip().lower()
+        _CONFIG[key] = value if value in ("dark", "light", "system") else "dark"
+        return
     _CONFIG[key] = value
 
 

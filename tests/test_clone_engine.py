@@ -113,10 +113,40 @@ class FlagsTests(unittest.TestCase):
         self.assertIn(self.engine.llm_model, flags)
         self.assertTrue(name.startswith("llm"))
 
+    def test_llm_flags_do_not_expose_api_key(self):
+        # La chiave non deve finire in argv (leak via /proc/<pid>/cmdline):
+        # viene passata solo via ambiente (PDF2ZH_OPENAI_API_KEY).
+        with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "segreta"}):
+            flags, _ = self.engine._translator_flags("llm")
+        self.assertNotIn("--openai-api-key", flags)
+        self.assertTrue(all("segreta" not in str(f) for f in flags))
+
     def test_openai_alias_is_normalized(self):
         self.assertEqual(clone_engine.normalize_engine("openai"), "llm")
         flags, _ = self.engine._translator_flags("openai")
         self.assertIn("--openai", flags)
+
+    def test_llm_flags_skip_auto_glossary(self):
+        # Punto 6: un giro LLM in meno per pagina.
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertIn("--no-auto-extract-glossary", flags)
+        self.assertIn("--openai-timeout", flags)
+
+    def test_llm_flags_add_pool_workers(self):
+        self.engine.llm_pool_workers = 6
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertIn("--pool-max-workers", flags)
+        self.assertEqual(flags[flags.index("--pool-max-workers") + 1], "6")
+
+    def test_llm_flags_without_pool_workers(self):
+        self.engine.llm_pool_workers = 1
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertNotIn("--pool-max-workers", flags)
+
+    def test_google_flags_do_not_get_llm_workers(self):
+        self.engine.llm_pool_workers = 8
+        flags, _ = self.engine._translator_flags("google")
+        self.assertNotIn("--pool-max-workers", flags)
 
     def test_google_flags_use_clitranslator(self):
         flags, name = self.engine._translator_flags("google")

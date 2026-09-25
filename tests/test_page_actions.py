@@ -25,6 +25,7 @@ if _ROOT not in sys.path:
 
 try:
     from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import QPoint, QAbstractAnimation
     _HAS_QT = True
 except ImportError:  # pragma: no cover
     _HAS_QT = False
@@ -104,31 +105,31 @@ class PageActionsFabTests(unittest.TestCase):
         self.panel.show_translating(None, "…")
         self.assertFalse(self.panel.is_page_actions_visible())
 
-    def test_fab_sits_bottom_right(self):
+    def test_fab_is_independent_from_the_bar(self):
+        # Il pulsante Azioni è un overlay del pannello, non della barra: resta
+        # visibile anche collassando la fascia motori.
         self.panel.show_page_actions()
         self._app.processEvents()
         fab = self.panel._fab
-        self.assertGreaterEqual(fab.x(), self.panel.width() - fab.width() - 40)
-        self.assertGreaterEqual(fab.y(), self.panel.height() - fab.height() - 40)
+        self.assertIs(fab.parent(), self.panel)
+        self.panel.set_collapsed(True)
+        self._app.processEvents()
+        self.assertTrue(self.panel.is_page_actions_visible())
+        self.assertFalse(fab.isHidden())
+        top_left = fab.mapTo(self.panel, QPoint(0, 0))
+        self.assertLess(top_left.y(), self.panel.height() // 2)
+        self.panel.set_collapsed(False)
+        self._app.processEvents()
 
-    def test_entrance_starts_lower_then_slides_into_place(self):
+    def test_fab_visible_when_panel_is_small(self):
+        self.panel.resize(360, 300)
         self.panel.show_page_actions()
         self._app.processEvents()
+        self.assertTrue(self.panel.is_page_actions_visible())
         fab = self.panel._fab
-        final_y = self.panel.height() - fab.height() - 18
-        # Appare subito, ma 16px più in basso della posizione finale.
-        self.assertEqual(fab.y(), final_y + self.panel._FAB_SLIDE_PX)
-        self.assertIsNotNone(self.panel._fab_anim)
-        self.assertTrue(self.panel._fab_delay.isActive())
-        # Avviata l'animazione, si conclude esattamente nella posizione finale.
-        self.panel._launch_fab_animations()
-        self.panel._fab_anim.setCurrentTime(self.panel._fab_anim.duration())
-        self.assertEqual(fab.y(), final_y)
-
-    def test_entrance_animates_shadow_glow(self):
-        self.panel.show_page_actions()
-        self.assertIsNotNone(self.panel._fab_glow)
-        self.assertEqual(self.panel._fab_shadow.blurRadius(), 18.0)
+        top_left = fab.mapTo(self.panel, QPoint(0, 0))
+        self.assertGreaterEqual(top_left.x(), 0)
+        self.assertLessEqual(top_left.y() + fab.height(), self.panel.height())
 
     def test_badge_visible_on_show_and_cleared_on_menu_open(self):
         self.panel.show_page_actions()
@@ -147,15 +148,40 @@ class PageActionsFabTests(unittest.TestCase):
         self.assertTrue(self.panel._fab_dot.isVisible())
         self.assertGreater(self.panel._fab_dot.x(), 0)
 
-    def test_hide_stops_animations_and_badge(self):
+    def test_hide_clears_badge(self):
         self.panel.show_page_actions()
-        self.panel._launch_fab_animations()
         self.panel.hide_page_actions()
-        self.assertIsNone(self.panel._fab_anim)
-        self.assertIsNone(self.panel._fab_glow)
-        self.assertFalse(self.panel._fab_delay.isActive())
         self.assertFalse(self.panel._fab_dot.isVisible())
-        self.assertEqual(self.panel._fab_shadow.blurRadius(), 18.0)
+        self.assertFalse(self.panel._fab_badge_pending)
+
+    def test_fab_has_intermittent_glow(self):
+        # Glow intermittente: due animazioni in loop (blur + colore).
+        self.panel.show_page_actions()
+        self._app.processEvents()
+        self.assertIsNotNone(self.panel._fab.graphicsEffect())
+        anims = self.panel._fab_glow_anims
+        self.assertEqual(len(anims), 2)
+        for anim in anims:
+            self.assertEqual(anim.loopCount(), -1)  # loop infinito
+            self.assertEqual(
+                anim.state(), QAbstractAnimation.State.Running
+            )
+        self.panel.hide_page_actions()
+        self.assertEqual(self.panel._fab_glow_anims, ())
+
+    def test_fab_glow_color_follows_theme(self):
+        import theme
+        self.panel.show_page_actions()
+        theme.set_mode("dark")
+        self.panel.apply_theme()
+        dark = self.panel._fab_glow_effect.color().rgb()
+        theme.set_mode("light")
+        self.panel.apply_theme()
+        light = self.panel._fab_glow_effect.color().rgb()
+        theme.set_mode("dark")
+        self.panel.apply_theme()
+        self.assertNotEqual(dark, light)
+        self.panel.hide_page_actions()
 
     def test_menu_has_six_translated_actions(self):
         labels = [a.text() for a in self.panel._fab_menu.actions()]

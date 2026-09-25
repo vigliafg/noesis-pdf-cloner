@@ -46,14 +46,29 @@ lasciare il posto alla nuova traduzione.
   pulsante 💾 è disponibile anche l'export **rapido della sola pagina corrente**.
   A fine processo la finestra di avanzamento offre **⬇ Copia in Download**
   (copia il risultato; l'originale resta dove l'hai salvato).
-- ✓ **Azioni pagina**: a traduzione di una pagina completata compare un
-  **pulsante flottante** in basso a destra (non invasivo, sparisce cambiando
-  pagina) con: Salva in Download, Esporta…, Traduci la successiva, Ritraduci,
-  Apri con il visualizzatore di sistema, Cancella cache della pagina.
+- ✓ **Azioni pagina**: a traduzione di una pagina completata compare il pulsante
+  **Azioni** in alto a destra nel pannello tradotto (overlay **indipendente
+  dalla barra motori**: resta visibile anche con la fascia collassata), con un
+  **glow intermittente** ben visibile sia su tema chiaro sia scuro. Azioni:
+  Salva in Download, Esporta…, Traduci la successiva, Ritraduci, Apri con il
+  visualizzatore di sistema, Cancella cache della pagina.
 - 🌊 Durante la traduzione la preview di destra mostra un **riempimento "liquido"**
   (progresso stimato) sopra la pagina, con un pulsante **Annulla** che interrompe
   subito il subprocess; la finestra di progresso export mostra la **pagina
   correntemente in lavorazione** che avanza pagina per pagina.
+- 🎨 **Tema** chiaro / scuro / **come il sistema**, scelto in ⚙️ Impostazioni →
+  Aspetto (default: scuro).
+- 🔔 **Avviso di fine lavoro**: notifica di sistema + **suono discreto** + icona
+  lampeggiante. Scatta a fine **batch** e anche a fine **traduzione di una
+  singola pagina** quando la finestra non è in primo piano (ridotta a icona o in
+  background), così te ne accorgi anche se stai facendo altro. Il computer **non
+  va in standby** durante la traduzione e, se si risveglia, il lavoro riprende
+  ritentando la pagina interrotta. In ⚙️ Impostazioni → Avvisi c'è anche
+  **🔔 Prova suono** per verificare l'audio (col riproduttore rilevato).
+- ⚡ **Prestazioni (LLM)**: più **richieste LLM in parallelo** dentro una pagina,
+  regolabile in ⚙️ Impostazioni → Prestazioni. La traduzione delle **pagine**
+  resta comunque **sequenziale, una alla volta** (con anteprima e barra per
+  ogni pagina).
 - ❓ Guida online: il **sito del progetto** (`docs/`, pubblicato su GitHub Pages)
   con landing a <https://vigliafg.github.io/noesis-pdf-cloner/> e guida
   multilingue in `docs/help/` a <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -160,3 +175,16 @@ python3 -m unittest discover -s tests -v
 Le icone di release (`assets/noesispdf.ico` per Windows, `assets/noesispdf.icns`
 per macOS, `assets/noesispdf-256.png` per l'AppImage) sono generate dal logo
 `assets/PDFCLONER.jpeg`.
+
+## Licenza
+
+Il progetto è distribuito con licenza **AGPL-3.0** (vedi [`LICENSE`](LICENSE)).
+Termini aggiuntivi ai sensi della sezione 7 della AGPL in
+[`ADDITIONAL_TERMS.md`](ADDITIONAL_TERMS.md); componenti di terze parti in
+[`NOTICE`](NOTICE). Uso del nome e del marchio: [`TRADEMARK.md`](TRADEMARK.md).
+Contributi: [`CONTRIBUTING.md`](CONTRIBUTING.md) e [`CLA.md`](CLA.md).
+Vulnerabilità: [`SECURITY.md`](SECURITY.md).
+
+Il programma è fornito «così com'è», senza garanzie. Usa la traduzione solo su
+documenti che hai il diritto di elaborare.
+

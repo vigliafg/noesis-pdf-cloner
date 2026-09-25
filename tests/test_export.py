@@ -469,9 +469,10 @@ class ExportWizardDialogTests(unittest.TestCase):
     def test_qss_styles_the_wizard_controls(self):
         # Lo stile è ricalcato dal wizard del servizio: radio e schede motore
         # devono avere le regole dedicate (altrimenti testo scuro su scuro).
-        self.assertIn("QRadioButton", self.main._WIZARD_QSS)
-        self.assertIn("wizCardOpt", self.main._WIZARD_QSS)
-        self.assertIn("wizStep", self.main._WIZARD_QSS)
+        qss = self.main.theme.wizard_qss()
+        self.assertIn("QRadioButton", qss)
+        self.assertIn("wizCardOpt", qss)
+        self.assertIn("wizStep", qss)
 
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
@@ -869,6 +870,31 @@ class ExportProgressDialogTests(unittest.TestCase):
         text = dlg._log.toPlainText()
         self.assertIn("510", text)
         self.assertIn("511", text)
+
+    def test_begin_without_log_keeps_registry_clean(self):
+        # Nel batch la traduzione parte per più pagine insieme: niente riga
+        # "in lavorazione" nel registro (solo gli esiti ✓/✗).
+        dlg = self._dialog()
+        dlg.begin(510, log=False)
+        self.assertEqual(dlg._log.toPlainText().strip(), "")
+        self.assertIn("510", dlg._activity_lbl.text())
+        dlg.log_ok(510)
+        dlg.log_ok(511)
+        text = dlg._log.toPlainText()
+        self.assertNotIn(i18n.T("export.progress.activity_page_log", page=510), text)
+        self.assertEqual(text.count("✓"), 2)
+
+    def test_sequential_pages_show_their_own_position(self):
+        # Export sequenziale di due pagine: la UI mostra la prima (pos 1),
+        # poi la seconda (pos 2), ognuna con la sua etichetta.
+        dlg = self._dialog()
+        dlg.begin(515, log=False)
+        self.assertIn("515", dlg._page_lbl.text())
+        self.assertIn("1 di 11", dlg._page_lbl.text())
+        dlg.set_stats(1, 0, 11)
+        dlg.set_translating(516, log=False)
+        self.assertIn("516", dlg._page_lbl.text())
+        self.assertIn("2 di 11", dlg._page_lbl.text())
 
     def test_page_label_shows_position(self):
         dlg = self._dialog()

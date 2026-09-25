@@ -56,6 +56,7 @@ def normalize_engine(engine: str) -> str:
 DEFAULT_MODEL = "inception/mercury-2.5"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 PAGE_TIMEOUT = 900  # secondi: pdf2zh_next + BabelDOC su una pagina densa
+LLM_TIMEOUT = 90  # secondi: timeout per singola chiamata LLM
 
 # Versione dello schema di cache: incrementarla invalida la cache esistente
 # (evita di servire output prodotti da versioni diverse del motore).
@@ -491,6 +492,10 @@ class CloneEngine:
         self.llm_base_url: str = os.environ.get(
             "PDF_LLM_BASE_URL", DEFAULT_BASE_URL
         )
+        # Numero di richieste LLM in parallelo dentro una pagina (punto 6):
+        # alza il throughput. Impostato dall'app da ``llm_pool_workers``.
+        self.llm_pool_workers: int = 4
+        self.llm_timeout: int = LLM_TIMEOUT
 
         self._src_pdf: Path | None = None
         self._doc_key: str = ""
@@ -868,15 +873,23 @@ class CloneEngine:
     def _translator_flags(self, engine: str) -> tuple[list[str], str]:
         """Flag CLI di pdf2zh_next per l'engine scelto, + nome descrittivo."""
         if normalize_engine(engine) == "llm":
-            return (
-                [
-                    "--openai",
-                    "--openai-model", self.llm_model,
-                    "--openai-base-url", self.llm_base_url,
-                    "--openai-api-key", os.environ.get("OPENROUTER_API_KEY", ""),
-                ],
-                f"llm ({self.llm_model})",
-            )
+            # La chiave NON va passata come flag: finirebbe in argv
+            # (/proc/<pid>/cmdline). Viene iniettata nell'ambiente qui sotto
+            # (PDF2ZH_OPENAI_API_KEY).
+            flags = [
+                "--openai",
+                "--openai-model", self.llm_model,
+                "--openai-base-url", self.llm_base_url,
+                "--openai-timeout", str(int(self.llm_timeout)),
+                # Un giro LLM in meno per pagina (il glossary automatico
+                # estrae i termini con una chiamata extra): punto 6.
+                "--no-auto-extract-glossary",
+            ]
+            workers = max(1, int(getattr(self, "llm_pool_workers", 1) or 1))
+            if workers > 1:
+                # Più segmenti tradotti insieme dentro la stessa pagina.
+                flags += ["--pool-max-workers", str(workers)]
+            return (flags, f"llm ({self.llm_model})")
         if engine == "google":
             py = venv_python_for(self.pdf2zh_bin() or Path(sys.executable))
             cli = _gtranslate_cli_path()
@@ -968,6 +981,12 @@ class CloneEngine:
             # servizio).
             env["PDF_LLM_MODEL"] = self.llm_model
             env["PDF_LLM_BASE_URL"] = self.llm_base_url
+            # Chiave LLM: passata solo via ambiente, mai in argv. `OPENROUTER_API_KEY`
+            # serve al fallback LLM della catena gratuita (gtranslate_cli.py);
+            # `PDF2ZH_OPENAI_API_KEY` è la variabile letta da pdf2zh_next (prefisso PDF2ZH_).
+            llm_key = os.environ.get("OPENROUTER_API_KEY", "")
+            if llm_key:
+                env["PDF2ZH_OPENAI_API_KEY"] = llm_key
             try:
                 log.info("traduzione pagina %d via %s...", page, t_name)
                 r = self._run_engine(cmd, env, cancel_event)

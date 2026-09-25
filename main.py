@@ -44,6 +44,13 @@ from clone_engine import ENGINES as CLONE_ENGINES
 # Archivio per-utente della chiave OpenRouter (file, cross-platform).
 import keystore
 
+# Temi UI (chiaro/scuro/sistema) e avvisi di fine lavoro.
+import theme
+
+# Suono d'avviso nativo (nessuna dipendenza pesante) e gestione standby.
+import notifications
+import power
+
 # Internazionalizzazione della sola interfaccia (dict T(), nessuna dipendenza
 # Qt): le stringhe del chrome UI passano da qui, la lingua si cambia al volo
 # e il config (lingue + preferenze) è gestito da questo modulo.
@@ -58,6 +65,9 @@ from i18n import (
 import pages as page_spec
 
 _MD_EXTENSIONS = ["tables", "fenced_code", "codehilite"]
+
+# Logger del modulo (la configurazione su file avviene in ``_setup_logging``).
+log = logging.getLogger("main")
 
 try:
     import pymupdf4llm
@@ -123,6 +133,7 @@ from PyQt6.QtWidgets import (
     QGraphicsTextItem,
     QFrame,
     QGraphicsDropShadowEffect,
+    QSystemTrayIcon,
 )
 
 # URL base della guida online (sito statico pubblicato su GitHub Pages).
@@ -154,6 +165,33 @@ _PREVIEW_H = 300
 # ═══════════════════════════════════════════════════════════════════════════════
 #  helpers
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _status_style(kind: str) -> str:
+    """QSS per una label di stato: ``kind`` è un token colore del tema."""
+    return "color: %s; font-size: 12px;" % theme.color(kind)
+
+
+def _resolve_theme(mode: str) -> str:
+    """Risolve ``system`` nel tema effettivo del sistema operativo."""
+    mode = theme.normalize_mode(mode)
+    if mode != "system":
+        return mode
+    try:
+        scheme = QApplication.styleHints().colorScheme()
+        if scheme == Qt.ColorScheme.Light:
+            return "light"
+        if scheme == Qt.ColorScheme.Dark:
+            return "dark"
+    except Exception:  # noqa: BLE001 — in dubbio resta scuro
+        pass
+    return "dark"
+
+
+def apply_theme_mode(mode: str) -> None:
+    """Imposta il tema attivo (risolvendo ``system``) nel modulo ``theme``."""
+    theme.set_mode(mode)
+    theme.set_resolved(_resolve_theme(mode))
 
 
 def clean_text(text: str) -> str:
@@ -1661,6 +1699,20 @@ def _friendly_reason(message: str) -> str:
     return T("clone.failed", reason=message)
 
 
+# Errori ritentabili: dopo un risveglio da standby la rete può essere appena
+# tornata, o il servizio può aver risposto 429/timeout. Non sono colpa della
+# pagina, quindi vale la pena ritentarla (punto 4).
+_TRANSIENT_ERROR_MARKERS = (
+    "network", "timeout", "rate_limited", "rate limit", "connection",
+    "temporarily", "503", "502", "504",
+)
+
+
+def _is_transient_error(message: str) -> bool:
+    low = (message or "").lower()
+    return any(marker in low for marker in _TRANSIENT_ERROR_MARKERS)
+
+
 def _llm_key_source_text() -> str:
     """Descrive quale chiave OpenRouter è attiva (per Impostazioni)."""
     file_key = keystore.KeyStore(_keystore_path()).get()
@@ -1708,7 +1760,7 @@ class PdfPageView(QGraphicsView):
         super().__init__(parent)
         self.setMinimumWidth(300)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setBackgroundBrush(QColor(43, 43, 43))
+        self.setBackgroundBrush(QColor(theme.color("bg")))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -1788,6 +1840,10 @@ class PdfPageView(QGraphicsView):
         """Re-apply UI strings after a language switch."""
         if self._full_pixmap is None and self._start_hint:
             self._show_message_text(T("view.start_hint"))
+
+    def apply_theme(self):
+        """Sfondo della vista pagina coerente col tema attivo."""
+        self.setBackgroundBrush(QColor(theme.color("bg")))
 
     # ── selection mode ───────────────────────────────────────────────────
 
@@ -2487,13 +2543,14 @@ class CloneTranslateThread(QThread):
 class CloneExportThread(QThread):
     """Background thread: pre-translate the missing pages of an export range.
 
-    Iterates ``pages`` (0-based) **sequentially** through
-    ``CloneEngine.translate_page`` (cache-aware, per-page serialised) and emits
-    progress after each page. ``cancel`` interrompe subito il ``pdf2zh_next``
-    in corso (process group), non solo la pagina successiva.
+    Le pagine (0-based) passano da ``CloneEngine.translate_page`` in modo
+    **sequenziale**, una alla volta (cache-aware, serializzato per pagina) e il
+    progresso viene emesso dopo ogni pagina. ``cancel`` interrompe subito il
+    ``pdf2zh_next`` in corso (process group).
     """
 
     progress = pyqtSignal(int, int, int)        # done, total, page
+    page_started = pyqtSignal(int)              # page (0-based)
     page_error = pyqtSignal(int, str)           # page, message
     batch_finished = pyqtSignal(int, int, int)  # done, failed, total
 
@@ -2523,36 +2580,48 @@ class CloneExportThread(QThread):
         Se un altro thread sta già traducendo la stessa pagina (es. la
         traduzione della pagina corrente ancora in corso) ``translate_page``
         ritorna ``None`` con stato ``running``: si attende che la cache
-        compaia invece di segnarla come errore.
+        compaia invece di segnarla come errore. Gli errori **transitori**
+        (rete, timeout, rate limit — tipici dopo un risveglio da standby) sono
+        ritentati un paio di volte.
         """
-        for _ in range(600):  # ~5 minuti al massimo
-            path = self._engine.translate_page(
-                page, self._engine_name, self._cancel_event
-            )
-            if path is not None or self._cancelled:
-                return path, ""
-            status = self._engine.status(page, self._engine_name)
-            if status == "running":
-                time.sleep(0.5)
-                continue
-            if status.startswith("error:"):
-                return None, status.split("error:", 1)[-1]
-            return None, status
-        return None, "timeout"
+        last = ""
+        for attempt in range(3):
+            for _ in range(600):  # ~5 minuti al massimo
+                path = self._engine.translate_page(
+                    page, self._engine_name, self._cancel_event
+                )
+                if path is not None or self._cancelled:
+                    return path, ""
+                status = self._engine.status(page, self._engine_name)
+                if status == "running":
+                    time.sleep(0.5)
+                    continue
+                if status.startswith("error:"):
+                    last = status.split("error:", 1)[-1]
+                    break
+                return None, status
+            else:
+                return None, "timeout"
+            if self._cancelled or not _is_transient_error(last):
+                return None, last
+            time.sleep(1.0)
+        return None, last
 
     def run(self):
         done = failed = 0
         total = len(self._pages)
-        for index, page in enumerate(self._pages, start=1):
+        for page in self._pages:
             if self._cancelled:
                 break
+            # Annuncia l'avvio della pagina: la UI mostra anteprima e barra.
+            self.page_started.emit(page)
             path, message = self._translate_one(page)
             if path is not None:
                 done += 1
             elif not self._cancelled:
                 failed += 1
                 self.page_error.emit(page, message)
-            self.progress.emit(index, total, page)
+            self.progress.emit(done + failed, total, page)
         self.batch_finished.emit(done, failed, total)
 
 
@@ -3562,16 +3631,26 @@ class LiquidOverlay(QWidget):
         self._cancelable = False
         self._btn_cancel = QPushButton(T("settings.cancel"), self)
         self._btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_cancel.setStyleSheet(
-            "QPushButton { background: #1e2430; color: #e7ecf3;"
-            " border: 1px solid #4f8cff; border-radius: 8px;"
-            " padding: 7px 18px; font-size: 13px; }"
-            "QPushButton:hover { background: #24314a; }"
-            "QPushButton:disabled { color: #93a0b4; border-color: #2a3242; }"
-        )
         self._btn_cancel.clicked.connect(self._on_cancel_clicked)
         self._btn_cancel.hide()
+        self.apply_theme()
         self.hide()
+
+    def apply_theme(self):
+        """Applica i colori del tema attivo all'overlay e al pulsante Annulla."""
+        q = theme.color
+        self._btn_cancel.setStyleSheet(
+            "QPushButton { background: %s; color: %s;"
+            " border: 1px solid %s; border-radius: 8px;"
+            " padding: 7px 18px; font-size: 13px; }"
+            "QPushButton:hover { background: %s; }"
+            "QPushButton:disabled { color: %s; border-color: %s; }"
+            % (
+                q("wiz_panel"), q("wiz_title"), q("wiz_accent"),
+                q("wiz_sel_bg"), q("wiz_muted"), q("wiz_line"),
+            )
+        )
+        self.update()
 
     # ── ciclo di vita ────────────────────────────────────────────────
     def start(self, pixmap: QPixmap | None, caption: str,
@@ -3646,7 +3725,7 @@ class LiquidOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect()
-        painter.fillRect(rect, QColor(11, 14, 19, 235))
+        painter.fillRect(rect, QColor.fromString(theme.color("liquid_bg")))
 
         if self._pixmap is not None and not self._pixmap.isNull():
             scaled = self._pixmap.scaled(
@@ -3686,8 +3765,10 @@ class LiquidOverlay(QWidget):
             )
             box.adjust(-12, -8, 12, 8)
             box.moveCenter(rect.center())
-            painter.fillRect(box, QColor(20, 20, 20, 230))
-            painter.setPen(QColor(255, 255, 255))
+            painter.fillRect(
+                box, QColor.fromString(theme.color("liquid_caption_bg"))
+            )
+            painter.setPen(QColor.fromString(theme.color("liquid_text")))
             painter.drawText(box, flags, self._caption)
 
 
@@ -3929,65 +4010,43 @@ class TranslatedPagePanel(QWidget):
         self._collapse_btn.clicked.connect(self._toggle_collapsed)
         self._collapse_btn.raise_()
 
-        # ── Pulsante flottante "Azioni pagina" (appare a traduzione fatta) ──
-        # Figlio del pannello FUORI dal layout, in basso a destra: non consuma
-        # spazio alla pagina e non copre i controlli in alto (né il chevron).
+        # ── Pulsante "Azioni pagina" (appare a traduzione fatta) ────────
+        # Overlay figlio del PANNELLO (fuori layout), indipendente dalla barra
+        # motori: resta visibile anche quando la barra è collassata. Posizionato
+        # in alto a destra (sotto la barra, o accanto al chevron se collassata).
         self._fab = QPushButton(T("clone.fab.title"), self)
         self._fab.setObjectName("pageFab")
         self._fab.setCursor(Qt.CursorShape.PointingHandCursor)
         self._fab.setToolTip(T("clone.fab.tip"))
-        self._fab.setStyleSheet(
-            "QPushButton#pageFab {"
-            " background: rgba(43,43,43,235); color: #fff;"
-            " border: 1px solid #3a6bc5; border-radius: 17px;"
-            " padding: 7px 15px; font-size: 13px; font-weight: 600; }"
-            "QPushButton#pageFab:hover { background: #3a3a3a;"
-            " border-color: #4a90d9; }"
-        )
-        shadow = QGraphicsDropShadowEffect(self._fab)
-        shadow.setBlurRadius(18)
-        shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 160))
-        self._fab.setGraphicsEffect(shadow)
-        self._fab_shadow = shadow
         self._fab.clicked.connect(self._toggle_page_actions)
         self._fab.hide()
         self._fab.raise_()
 
+        # Glow intermittente (drop-shadow animato): rende il pulsante evidente
+        # su qualunque sfondo, pagina bianca o scura. Il colore viene dal tema.
+        self._fab_glow_effect = QGraphicsDropShadowEffect(self._fab)
+        self._fab_glow_effect.setOffset(0, 0)
+        self._fab_glow_effect.setBlurRadius(18.0)
+        glow_base = QColor(theme.color("fab_glow"))
+        glow_base.setAlpha(190)
+        self._fab_glow_effect.setColor(glow_base)
+        self._fab.setGraphicsEffect(self._fab_glow_effect)
+        self._fab_glow_anims: tuple = ()
+
         # Pallino persistente: cue che resta finché il menu non viene aperto.
-        # È figlio del pill (fuori layout), in alto a destra, e non intercetta
-        # i clic (che devono aprire il menu).
+        # È figlio del pulsante, in alto a destra, e non intercetta i clic
+        # (che devono aprire il menu).
         self._fab_dot = QLabel(self._fab)
         self._fab_dot.setObjectName("pageFabDot")
         self._fab_dot.setFixedSize(8, 8)
         self._fab_dot.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
         )
-        self._fab_dot.setStyleSheet(
-            "QLabel#pageFabDot { background: #4a90d9; border-radius: 4px; }"
-        )
         self._fab_dot.hide()
-
-        # Animazioni d'ingresso: riferimenti tenuti vivi (altrimenti il GC le
-        # distrugge) e un timer per il breve ritardo prima del movimento.
-        self._fab_anim: QPropertyAnimation | None = None
-        self._fab_glow: QPropertyAnimation | None = None
         self._fab_badge_pending = False
-        self._fab_delay = QTimer(self)
-        self._fab_delay.setSingleShot(True)
-        self._fab_delay.timeout.connect(self._launch_fab_animations)
 
         self._fab_menu = QMenu(self)
         self._fab_menu.setObjectName("pageFabMenu")
-        self._fab_menu.setStyleSheet(
-            "QMenu#pageFabMenu { background: #2b2b2b; color: #e8e8e8;"
-            " border: 1px solid #3a3a3a; padding: 6px; }"
-            "QMenu#pageFabMenu::item { padding: 7px 22px 7px 12px;"
-            " border-radius: 5px; }"
-            "QMenu#pageFabMenu::item:selected { background: #3a6bc5;"
-            " color: #fff; }"
-            "QMenu#pageFabMenu::item:disabled { color: #777; }"
-        )
         self._fab_actions: dict = {}
         for key, sig in (
             ("save_download", self.page_save_download_requested),
@@ -4002,6 +4061,9 @@ class TranslatedPagePanel(QWidget):
             self._fab_actions[key] = act
 
         self._view_zoom: float = 1.0
+
+        # Applica i colori del tema attivo a tutti gli stili inline del pannello.
+        self.apply_theme()
 
     # ── collapse / expand della barra motori ──────────────────────────
 
@@ -4048,31 +4110,28 @@ class TranslatedPagePanel(QWidget):
             if offset:
                 y = offset + 6
         b.move(x, y)
+        self._reposition_fab()
 
-    # ── pulsante flottante "Azioni pagina" ────────────────────────────
-
-    # Ingresso del FAB: distanza dello slide, ritardo e durata (ms).
-    _FAB_SLIDE_PX = 16
-    _FAB_ENTER_DELAY_MS = 180
-    _FAB_ENTER_MS = 280
+    # ── pulsante "Azioni pagina" (overlay indipendente dalla barra) ───
 
     def show_page_actions(self):
-        """Mostra il FAB delle azioni (chiamato a traduzione completata).
+        """Mostra il pulsante Azioni (a traduzione completata).
 
-        Il pill compare subito (visibilità immediata), ma 16px più in basso:
-        dopo un breve ritardo scatta lo slide-up con overshoot e un glow una
-        tantum dell'ombra. Il pallino-badge resta finché l'utente non apre il
-        menu.
+        Il pulsante è un overlay del pannello, indipendente dalla barra motori:
+        resta visibile anche con la barra collassata. Il pallino-badge resta
+        finché l'utente non apre il menu (nuovo esito da guardare).
         """
         self._fab_badge_pending = True
         self._fab.show()
         self._fab.raise_()
-        self._fab_dot.setVisible(True)
-        self._start_fab_entrance()
+        self._fab_dot.show()
+        self._reposition_fab()
+        self._reposition_fab_dot()
+        self._start_fab_glow()
 
     def hide_page_actions(self):
-        """Nasconde il FAB e chiude il menu (cambio pagina, nuova traduzione)."""
-        self._stop_fab_animations()
+        """Nasconde il pulsante Azioni (cambio pagina, nuova traduzione)."""
+        self._stop_fab_glow()
         self._clear_fab_badge()
         self._fab_menu.hide()
         self._fab.hide()
@@ -4086,64 +4145,94 @@ class TranslatedPagePanel(QWidget):
         if act is not None:
             act.setEnabled(bool(enabled))
 
-    def _start_fab_entrance(self):
-        """Prepara slide-up + glow d'ingresso; il movimento parte col ritardo."""
-        self._stop_fab_animations()
-        self._reposition_fab(final=True)
-        final = self._fab.pos()
-        self._fab.move(final.x(), final.y() + self._FAB_SLIDE_PX)
-        self._reposition_fab_dot()
-
-        slide = QPropertyAnimation(self._fab, b"pos", self)
-        slide.setDuration(self._FAB_ENTER_MS)
-        slide.setStartValue(self._fab.pos())
-        slide.setEndValue(final)
-        slide.setEasingCurve(QEasingCurve.Type.OutBack)
-        self._fab_anim = slide
-
-        glow = QPropertyAnimation(self._fab_shadow, b"blurRadius", self)
-        glow.setDuration(self._FAB_ENTER_MS + 220)
-        glow.setStartValue(18.0)
-        glow.setKeyValueAt(0.5, 30.0)
-        glow.setEndValue(18.0)
-        self._fab_glow = glow
-
-        self._fab_delay.start(self._FAB_ENTER_DELAY_MS)
-
-    def _launch_fab_animations(self):
-        """Avvia davvero le animazioni (dopo il ritardo), se ancora visibile."""
-        if self._fab.isHidden():
-            return
-        if self._fab_anim is not None:
-            self._fab_anim.start()
-        if self._fab_glow is not None:
-            self._fab_glow.start()
-
-    def _stop_fab_animations(self):
-        """Ferma le animazioni in corso e riporta l'ombra al valore base."""
-        if hasattr(self, "_fab_delay"):
-            self._fab_delay.stop()
-        for anim in (self._fab_anim, self._fab_glow):
-            if anim is not None:
-                anim.stop()
-        self._fab_anim = None
-        self._fab_glow = None
-        if getattr(self, "_fab_shadow", None) is not None:
-            self._fab_shadow.setBlurRadius(18.0)
-
     def _clear_fab_badge(self):
-        """Spegne il pallino: ha fatto il suo lavoro o il FAB è stato nascosto."""
+        """Spegne il pallino: ha fatto il suo lavoro o il pulsante è nascosto."""
         self._fab_badge_pending = False
         if getattr(self, "_fab_dot", None) is not None:
             self._fab_dot.hide()
 
     def _reposition_fab_dot(self):
-        """Posiziona il pallino nell'angolo alto-destro del pill."""
+        """Posiziona il pallino nell'angolo alto-destro del pulsante."""
         d = self._fab_dot
         if d is None or d.isHidden():
             return
-        d.move(max(0, self._fab.width() - d.width() - 5), 5)
+        d.move(max(0, self._fab.width() - d.width() - 2), 2)
         d.raise_()
+
+    def _reposition_fab(self):
+        """Posiziona l'overlay Azioni in alto a destra, sempre visibile.
+
+        - barra espansa: subito **sotto** la barra (e le strisce), così non
+          copre i controlli della barra;
+        - barra collassata: **accanto al chevron**, così segue il chevron
+          quando questo scende sotto le strisce informative.
+        """
+        b = getattr(self, "_fab", None)
+        if b is None or b.isHidden():
+            return
+        b.adjustSize()
+        cb = self._collapse_btn
+        if self._is_collapsed:
+            x = cb.x() - b.width() - 34
+            y = cb.y() + max(0, (cb.height() - b.height()) // 2) - 6
+        else:
+            top = self._bar.height()
+            if not self._engine_banner.isHidden():
+                top += self._engine_banner.sizeHint().height()
+            if not self._key_banner.isHidden():
+                top += self._key_banner.sizeHint().height()
+            x = self.width() - b.width() - 52
+            y = top + 24
+        b.move(max(0, x), max(0, y))
+        self._reposition_fab_dot()
+
+    # Durata del ciclo di glow intermittente (ms).
+    _FAB_GLOW_MS = 1700
+
+    def _start_fab_glow(self):
+        """Avvia il glow intermittente (loop) attorno al pulsante Azioni."""
+        self._stop_fab_glow()
+        eff = getattr(self, "_fab_glow_effect", None)
+        if eff is None:
+            return
+        base = QColor(theme.color("fab_glow"))
+        low = QColor(base)
+        low.setAlpha(171)
+        high = QColor(base)
+        high.setAlpha(255)
+        eff.setColor(low)
+
+        blur = QPropertyAnimation(eff, b"blurRadius", self)
+        blur.setDuration(self._FAB_GLOW_MS)
+        blur.setLoopCount(-1)
+        blur.setStartValue(18.0)
+        blur.setKeyValueAt(0.5, 52.0)
+        blur.setEndValue(18.0)
+        blur.setEasingCurve(QEasingCurve.Type.InOutSine)
+
+        color = QPropertyAnimation(eff, b"color", self)
+        color.setDuration(self._FAB_GLOW_MS)
+        color.setLoopCount(-1)
+        color.setStartValue(low)
+        color.setKeyValueAt(0.5, high)
+        color.setEndValue(low)
+        color.setEasingCurve(QEasingCurve.Type.InOutSine)
+
+        self._fab_glow_anims = (blur, color)
+        blur.start()
+        color.start()
+
+    def _stop_fab_glow(self):
+        """Ferma il glow e riporta l'ombra a un valore discreto."""
+        for anim in getattr(self, "_fab_glow_anims", ()) or ():
+            anim.stop()
+        self._fab_glow_anims = ()
+        eff = getattr(self, "_fab_glow_effect", None)
+        if eff is not None:
+            base = QColor(theme.color("fab_glow"))
+            base.setAlpha(190)
+            eff.setColor(base)
+            eff.setBlurRadius(18.0)
 
     def _toggle_page_actions(self):
         if self._fab_menu.isVisible():
@@ -4152,23 +4241,10 @@ class TranslatedPagePanel(QWidget):
         # Il menu è stato aperto: il pallino ha fatto il suo lavoro.
         self._clear_fab_badge()
         self._fab_menu.adjustSize()
-        pos = self._fab.mapToGlobal(QPoint(0, 0))
+        pos = self._fab.mapToGlobal(QPoint(0, self._fab.height() + 2))
         x = pos.x() + self._fab.width() - self._fab_menu.width()
-        y = pos.y() - self._fab_menu.height() - 4
-        self._fab_menu.popup(QPoint(max(0, x), max(0, y)))
+        self._fab_menu.popup(QPoint(max(0, x), pos.y()))
 
-    def _reposition_fab(self, final: bool = False):
-        b = self._fab
-        if b.isHidden():
-            return
-        if not final:
-            # Un resize durante l'ingresso annulla l'animazione e riallinea.
-            self._stop_fab_animations()
-        b.adjustSize()
-        x = max(0, self.width() - b.width() - 18)
-        y = max(0, self.height() - b.height() - 18)
-        b.move(x, y)
-        self._reposition_fab_dot()
 
     # ── engine radios ─────────────────────────────────────────────────
 
@@ -4267,17 +4343,157 @@ class TranslatedPagePanel(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._reposition_collapse_btn()
-        self._reposition_fab()
+        if not self._fab.isHidden():
+            self._reposition_fab()
         if self._spinner.isVisible():
             self._position_spinner()
         if self._liquid.isVisible():
             self._liquid.setGeometry(self.scroll_area.geometry())
             self._liquid.raise_()
 
+    def apply_theme(self):
+        """(Ri)applica i colori del tema attivo a tutti gli stili del pannello."""
+        q = theme.color
+        self._bar.setStyleSheet(
+            "QWidget#cloneBar { background: %s; border-bottom: 1px solid %s; }"
+            % (q("bar_bg"), q("bar_border"))
+        )
+        self._lbl_target.setStyleSheet(
+            "color: %s; font-size: 13px; font-weight: bold;" % q("text2")
+        )
+        radio_style = """
+            QRadioButton { color: %s; font-size: 12px; background: transparent;
+                           spacing: 5px; }
+            QRadioButton:hover { color: %s; }
+            QRadioButton::indicator {
+                width: 13px; height: 13px; border: 1px solid %s;
+                border-radius: 7px; background: %s;
+            }
+            QRadioButton::indicator:checked {
+                background: %s; border-color: %s;
+            }
+        """ % (
+            q("text4"), q("text"), q("radio_border"), q("radio_bg"),
+            q("accent"), q("accent"),
+        )
+        for rb in self._radios.values():
+            rb.setStyleSheet(radio_style)
+        self._lbl_status.setStyleSheet(
+            "color: %s; font-size: 12px;" % q("text4")
+        )
+        self._lbl_working.setStyleSheet(
+            "color: %s; font-size: 12px; font-weight: bold;" % q("warn")
+        )
+        self.btn_export.setStyleSheet(
+            "QToolButton { background: transparent; color: %s; border: none;"
+            " font-size: 14px; padding: 0 4px; }"
+            "QToolButton:hover { color: %s; }"
+            "QToolButton::menu-indicator { width: 0; }"
+            % (q("text2"), q("text"))
+        )
+        self._engine_banner.setStyleSheet(
+            "QFrame#engineBanner { background: %s; border-bottom: 1px solid %s; }"
+            % (q("banner_engine_bg"), q("banner_engine_border"))
+        )
+        self._lbl_engine_banner.setStyleSheet(
+            "color: %s; font-size: 12px; background: transparent;"
+            % q("banner_engine_text")
+        )
+        self.btn_install_engine.setStyleSheet(
+            "QPushButton { background: %s; color: %s; border: none;"
+            " border-radius: 4px; padding: 3px 12px; font-size: 12px;"
+            " font-weight: bold; }"
+            "QPushButton:hover { background: %s; }"
+            % (
+                q("banner_engine_btn"), q("banner_engine_btn_text"),
+                q("banner_engine_btn_hover"),
+            )
+        )
+        self._key_banner.setStyleSheet(
+            "QFrame#keyBanner { background: %s; border-bottom: 1px solid %s; }"
+            % (q("banner_key_bg"), q("banner_key_border"))
+        )
+        self._lbl_key_banner.setStyleSheet(
+            "color: %s; font-size: 12px; background: transparent;"
+            % q("banner_key_text")
+        )
+        self.btn_enter_key.setStyleSheet(
+            "QPushButton { background: %s; color: %s; border: none;"
+            " border-radius: 4px; padding: 3px 12px; font-size: 12px;"
+            " font-weight: bold; }"
+            "QPushButton:hover { background: %s; }"
+            % (
+                q("banner_key_btn"), q("accent_text"),
+                q("banner_key_btn_hover"),
+            )
+        )
+        self.btn_use_free.setStyleSheet(
+            "QPushButton { background: %s; color: %s;"
+            " border: 1px solid %s; border-radius: 4px; padding: 3px 12px;"
+            " font-size: 12px; }"
+            "QPushButton:hover { background: %s; }"
+            % (
+                q("banner_key_btn2"), q("banner_key_btn2_text"),
+                q("border2"), q("banner_key_btn2_hover"),
+            )
+        )
+        self._spinner.setStyleSheet(
+            "QLabel { background: %s; color: %s; border: 1px solid %s;"
+            " border-radius: 12px; padding: 16px 34px; font-size: 18px;"
+            " font-weight: bold; }"
+            % (q("spinner_bg"), q("spinner_text"), q("spinner_border"))
+        )
+        self._collapse_btn.setStyleSheet(
+            "QPushButton { background: %s; color: %s;"
+            " border: 1px solid %s; border-radius: 4px; font-size: 12px;"
+            " padding: 0; }"
+            "QPushButton:hover { background: %s; color: %s; }"
+            % (
+                q("collapse_bg"), q("collapse_text"), q("collapse_border"),
+                q("bg_hover"), q("text"),
+            )
+        )
+        self._fab.setStyleSheet(
+            "QPushButton#pageFab {"
+            " background: %s; color: %s;"
+            " border: 2px solid %s; border-radius: 15px;"
+            " padding: 5px 14px; font-size: 13px; font-weight: 700; }"
+            "QPushButton#pageFab:hover { background: %s;"
+            " border-color: %s; }"
+            % (
+                q("fab_bg"), q("fab_text"), q("fab_border"),
+                q("fab_hover_bg"), q("fab_hover_border"),
+            )
+        )
+        # Glow: aggiorna il colore al tema e riavvia se il pulsante è visibile.
+        if getattr(self, "_fab_glow_effect", None) is not None:
+            if self._fab.isVisible():
+                self._start_fab_glow()
+            else:
+                self._stop_fab_glow()
+        self._fab_dot.setStyleSheet(
+            "QLabel#pageFabDot { background: %s; border-radius: 4px; }"
+            % q("badge")
+        )
+        self._fab_menu.setStyleSheet(
+            "QMenu#pageFabMenu { background: %s; color: %s;"
+            " border: 1px solid %s; padding: 6px; }"
+            "QMenu#pageFabMenu::item { padding: 7px 22px 7px 12px;"
+            " border-radius: 5px; }"
+            "QMenu#pageFabMenu::item:selected { background: %s;"
+            " color: %s; }"
+            "QMenu#pageFabMenu::item:disabled { color: %s; }"
+            % (
+                q("menu_bg"), q("menu_text"), q("menu_border"),
+                q("sel_bg"), q("sel_text"), q("menu_disabled"),
+            )
+        )
+        if hasattr(self, "_liquid"):
+            self._liquid.apply_theme()
+        if hasattr(self, "view"):
+            self.view.apply_theme()
+
     def retranslate(self):
-        self.set_target_language(get_target_lang())
-        for code, rb in self._radios.items():
-            rb.setText(T(f"engine.short.{code}"))
         self._collapse_btn.setToolTip(
             T("clone.bar.expand") if self._is_collapsed else T("clone.bar.collapse")
         )
@@ -4309,18 +4525,27 @@ class TocPanel(QWidget):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(16)
-        self.tree.setStyleSheet(
-            "QTreeWidget { background: #2b2b2b; color: #ddd; border: none;"
-            " font-size: 13px; }"
-            "QTreeWidget::item { padding: 2px 0; }"
-            "QTreeWidget::item:selected { background: #3a6bc5; color: #fff; }"
-        )
+        self.apply_theme()
+
         layout.addWidget(self.tree)
 
         self._items: list[QTreeWidgetItem] = []  # flat, in document order
         self._syncing: bool = False
 
         self.tree.itemClicked.connect(self._on_item_clicked)
+
+    def apply_theme(self):
+        """Applica i colori del tema attivo al TOC."""
+        self.tree.setStyleSheet(
+            "QTreeWidget { background: %s; color: %s; border: none;"
+            " font-size: 13px; }"
+            "QTreeWidget::item { padding: 2px 0; }"
+            "QTreeWidget::item:selected { background: %s; color: %s; }"
+            % (
+                theme.color("tree_bg"), theme.color("tree_text"),
+                theme.color("tree_sel_bg"), theme.color("tree_sel_text"),
+            )
+        )
 
     def build_toc(self, doc) -> None:
         """Rebuild the tree from a pymupdf Document's bookmarks."""
@@ -4388,37 +4613,6 @@ class TocPanel(QWidget):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-_SETTINGS_QSS = """
-QDialog { background: #2b2b2b; }
-QGroupBox { color: #eee; border: 1px solid #555; border-radius: 6px;
-            margin-top: 10px; padding-top: 8px; font-size: 13px; }
-QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
-QLabel { color: #ccc; font-size: 13px; }
-QComboBox, QSpinBox, QDoubleSpinBox {
-    background: #444; color: #eee; border: 1px solid #555;
-    border-radius: 4px; padding: 4px 8px; font-size: 13px;
-    min-width: 220px;
-}
-QComboBox QAbstractItemView { background: #444; color: #eee;
-    selection-background-color: #3a6bc5; selection-color: #fff; }
-QCheckBox { color: #ddd; font-size: 13px; spacing: 8px; }
-QRadioButton { color: #ddd; font-size: 13px; spacing: 8px; }
-QRadioButton::indicator {
-    width: 13px; height: 13px; border: 1px solid #888;
-    border-radius: 7px; background: #444;
-}
-QRadioButton::indicator:checked {
-    background: #3a6bc5; border-color: #3a6bc5;
-}
-QPushButton {
-    background: #444; color: #eee; border: 1px solid #555;
-    border-radius: 4px; padding: 6px 18px; font-size: 13px;
-}
-QPushButton:hover { background: #555; }
-QPushButton:pressed { background: #666; }
-"""
-
-
 class ApiKeyDialog(QDialog):
     """Inserimento della chiave OpenRouter (cross-platform).
 
@@ -4433,7 +4627,7 @@ class ApiKeyDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(T("apikey.title"))
         self.setMinimumWidth(520)
-        self.setStyleSheet(_SETTINGS_QSS)
+        self.setStyleSheet(theme.settings_qss())
 
         root = QVBoxLayout(self)
         root.setSpacing(10)
@@ -4464,7 +4658,7 @@ class ApiKeyDialog(QDialog):
 
         self._result = QLabel("")
         self._result.setWordWrap(True)
-        self._result.setStyleSheet("color: #999; font-size: 12px;")
+        self._result.setStyleSheet(_status_style("text5"))
         root.addWidget(self._result)
 
         link = QLabel(
@@ -4498,16 +4692,16 @@ class ApiKeyDialog(QDialog):
         ok, reason = keystore.KeyStore.verify(key)
         if ok:
             self._result.setText(T("apikey.verify_ok"))
-            self._result.setStyleSheet("color: #7fd67f; font-size: 12px;")
+            self._result.setStyleSheet(_status_style("ok"))
         elif reason == "invalid":
             self._result.setText(T("apikey.verify_invalid"))
-            self._result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self._result.setStyleSheet(_status_style("err"))
         elif reason == "missing":
             self._result.setText(T("apikey.verify_missing"))
-            self._result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self._result.setStyleSheet(_status_style("err"))
         else:
             self._result.setText(T("apikey.verify_unreachable"))
-            self._result.setStyleSheet("color: #ffcc66; font-size: 12px;")
+            self._result.setStyleSheet(_status_style("warn"))
 
 
 class KeyVerifyThread(QThread):
@@ -4656,11 +4850,30 @@ class SettingsDialog(QDialog):
         self._cfg = get_config()
 
         self.setWindowTitle(T("settings.title"))
-        self.setMinimumWidth(480)
-        self.setStyleSheet(_SETTINGS_QSS)
+        self.setMinimumWidth(520)
+        self.resize(580, 720)
+        self.setStyleSheet(theme.settings_qss())
 
         root = QVBoxLayout(self)
         root.setSpacing(10)
+
+        # Le sezioni sono molte: per non comprimere i controlli (che
+        # diventavano inusabili) il contenuto scorre dentro una QScrollArea,
+        # mentre i pulsanti OK/Annulla restano fissi in fondo.
+        scroll = QScrollArea()
+        scroll.setObjectName("settingsScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        content = QWidget()
+        content.setObjectName("settingsContent")
+        inner = QVBoxLayout(content)
+        inner.setContentsMargins(0, 0, 0, 0)
+        inner.setSpacing(10)
+        scroll.setWidget(content)
+        root.addWidget(scroll, 1)
 
         # ── Lingua ──────────────────────────────────────────────────────
         self._box_lang = QGroupBox(T("settings.group.lang"))
@@ -4682,7 +4895,7 @@ class SettingsDialog(QDialog):
                 continue
             self._dst_combo.addItem(f"{flag} {name}", code)
         lang_form.addRow(self._lbl_dst, self._dst_combo)
-        root.addWidget(self._box_lang)
+        inner.addWidget(self._box_lang)
 
         # ── Traduzione ──────────────────────────────────────────────────
         self._box_translation = QGroupBox(T("settings.group.translation"))
@@ -4692,7 +4905,7 @@ class SettingsDialog(QDialog):
         for code in TRANSLATION_ENGINES:
             self._engine_combo.addItem(T(f"engine.option.{code}"), code)
         trans_form.addRow(self._lbl_engine, self._engine_combo)
-        root.addWidget(self._box_translation)
+        inner.addWidget(self._box_translation)
 
         # ── Motore di clonazione (pdf2zh_next v2) ───────────────────────
         self._box_clone = QGroupBox(T("settings.group.clone"))
@@ -4735,18 +4948,18 @@ class SettingsDialog(QDialog):
         clone_form.addRow(self._lbl_api, api_row)
         self._api_source = QLabel(_llm_key_source_text())
         self._api_source.setWordWrap(True)
-        self._api_source.setStyleSheet("color: #93a0b4; font-size: 12px;")
+        self._api_source.setStyleSheet(_status_style("text_muted"))
         clone_form.addRow(self._api_source)
         self._api_result = QLabel("")
         self._api_result.setWordWrap(True)
-        self._api_result.setStyleSheet("color: #999; font-size: 12px;")
+        self._api_result.setStyleSheet(_status_style("text5"))
         clone_form.addRow(self._api_result)
 
         self._lbl_clone_hint = QLabel(T("settings.clone.hint"))
         self._lbl_clone_hint.setWordWrap(True)
-        self._lbl_clone_hint.setStyleSheet("color: #999; font-size: 12px;")
+        self._lbl_clone_hint.setStyleSheet(_status_style("text5"))
         clone_form.addRow(self._lbl_clone_hint)
-        root.addWidget(self._box_clone)
+        inner.addWidget(self._box_clone)
 
         # ── Testo ───────────────────────────────────────────────────────
         self._box_text = QGroupBox(T("settings.group.text"))
@@ -4778,7 +4991,7 @@ class SettingsDialog(QDialog):
         self._zoom_spin.setSingleStep(0.25)
         self._zoom_spin.setDecimals(2)
         view_form.addRow(self._lbl_zoom, self._zoom_spin)
-        root.addWidget(self._box_view)
+        inner.addWidget(self._box_view)
 
         # ── Comportamento ───────────────────────────────────────────────
         self._box_beh = QGroupBox(T("settings.group.behavior"))
@@ -4787,7 +5000,52 @@ class SettingsDialog(QDialog):
         beh_form.addRow(self._resume_check)
         self._tab_check = QCheckBox(T("settings.behavior.tab"))
         beh_form.addRow(self._tab_check)
-        root.addWidget(self._box_beh)
+        inner.addWidget(self._box_beh)
+
+        # ── Aspetto (tema) ──────────────────────────────────────────────
+        self._box_appearance = QGroupBox(T("settings.group.appearance"))
+        appear_form = QFormLayout(self._box_appearance)
+        self._lbl_theme = QLabel(T("settings.appearance.theme"))
+        self._theme_combo = QComboBox()
+        for code in ("dark", "light", "system"):
+            self._theme_combo.addItem(T(f"settings.theme.{code}"), code)
+        appear_form.addRow(self._lbl_theme, self._theme_combo)
+        inner.addWidget(self._box_appearance)
+
+        # ── Avvisi (fine batch + standby) ───────────────────────────────
+        self._box_notify = QGroupBox(T("settings.group.notifications"))
+        notify_form = QFormLayout(self._box_notify)
+        self._notify_check = QCheckBox(T("settings.notify.on_finish"))
+        notify_form.addRow(self._notify_check)
+        self._sound_check = QCheckBox(T("settings.notify.sound"))
+        notify_form.addRow(self._sound_check)
+        self._btn_test_sound = QPushButton(T("settings.notify.test"))
+        self._btn_test_sound.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_test_sound.setToolTip(
+            T(
+                "settings.notify.player",
+                player=notifications.available_player() or "—",
+            )
+        )
+        self._btn_test_sound.clicked.connect(
+            lambda: notifications.chime(True)
+        )
+        notify_form.addRow(self._btn_test_sound)
+        self._sleep_check = QCheckBox(T("settings.notify.prevent_sleep"))
+        notify_form.addRow(self._sleep_check)
+        inner.addWidget(self._box_notify)
+
+        # ── Prestazioni ──────────────────────────────────────────────────
+        self._box_perf = QGroupBox(T("settings.group.performance"))
+        perf_form = QFormLayout(self._box_perf)
+        self._lbl_llm_workers = QLabel(T("settings.performance.llm_workers"))
+        self._llm_workers_spin = QSpinBox()
+        self._llm_workers_spin.setRange(1, 16)
+        self._llm_workers_spin.setToolTip(
+            T("settings.performance.llm_workers.tip")
+        )
+        perf_form.addRow(self._lbl_llm_workers, self._llm_workers_spin)
+        inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
         btns = QHBoxLayout()
@@ -4840,16 +5098,16 @@ class SettingsDialog(QDialog):
         ok, reason = keystore.KeyStore.verify(key)
         if ok:
             self._api_result.setText(T("apikey.verify_ok"))
-            self._api_result.setStyleSheet("color: #7fd67f; font-size: 12px;")
+            self._api_result.setStyleSheet(_status_style("ok"))
         elif reason == "invalid":
             self._api_result.setText(T("apikey.verify_invalid"))
-            self._api_result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self._api_result.setStyleSheet(_status_style("err"))
         elif reason == "missing":
             self._api_result.setText(T("apikey.verify_missing"))
-            self._api_result.setStyleSheet("color: #ff6b6b; font-size: 12px;")
+            self._api_result.setStyleSheet(_status_style("err"))
         else:
             self._api_result.setText(T("apikey.verify_unreachable"))
-            self._api_result.setStyleSheet("color: #ffcc66; font-size: 12px;")
+            self._api_result.setStyleSheet(_status_style("warn"))
 
     def _on_clear_api(self):
         """Rimuove la chiave salvata (il salvataggio avviene in config col campo)."""
@@ -4857,7 +5115,7 @@ class SettingsDialog(QDialog):
         keystore.KeyStore(_keystore_path()).clear()
         self._api_source.setText(_llm_key_source_text())
         self._api_result.setText(T("apikey.removed"))
-        self._api_result.setStyleSheet("color: #999; font-size: 12px;")
+        self._api_result.setStyleSheet(_status_style("text5"))
 
     def _on_clear_edits(self):
         """Ask confirmation, then wipe the current document's saved edits."""
@@ -4893,6 +5151,14 @@ class SettingsDialog(QDialog):
         self._resume_check.setChecked(bool(cfg.get("resume_last_page", True)))
         self._tab_check.setChecked(bool(cfg.get("remember_tab", True)))
         self._pdf2zh_edit.setText(str(cfg.get("pdf2zh_bin", "") or ""))
+        idx = self._theme_combo.findData(cfg.get("theme", "dark"))
+        self._theme_combo.setCurrentIndex(max(0, idx))
+        self._notify_check.setChecked(bool(cfg.get("notify_on_finish", True)))
+        self._sound_check.setChecked(bool(cfg.get("notify_sound", True)))
+        self._sleep_check.setChecked(bool(cfg.get("prevent_sleep", True)))
+        self._llm_workers_spin.setValue(
+            int(cfg.get("llm_pool_workers", 4) or 4)
+        )
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -4943,6 +5209,25 @@ class SettingsDialog(QDialog):
         self._lbl_zoom.setText(T("settings.view.zoom"))
         self._resume_check.setText(T("settings.behavior.resume"))
         self._tab_check.setText(T("settings.behavior.tab"))
+        self._box_appearance.setTitle(T("settings.group.appearance"))
+        self._lbl_theme.setText(T("settings.appearance.theme"))
+        cur_theme = self._theme_combo.currentData()
+        self._theme_combo.clear()
+        for code in ("dark", "light", "system"):
+            self._theme_combo.addItem(T(f"settings.theme.{code}"), code)
+        if cur_theme is not None:
+            tidx = self._theme_combo.findData(cur_theme)
+            self._theme_combo.setCurrentIndex(max(0, tidx))
+        self._box_notify.setTitle(T("settings.group.notifications"))
+        self._notify_check.setText(T("settings.notify.on_finish"))
+        self._sound_check.setText(T("settings.notify.sound"))
+        self._btn_test_sound.setText(T("settings.notify.test"))
+        self._sleep_check.setText(T("settings.notify.prevent_sleep"))
+        self._box_perf.setTitle(T("settings.group.performance"))
+        self._lbl_llm_workers.setText(T("settings.performance.llm_workers"))
+        self._llm_workers_spin.setToolTip(
+            T("settings.performance.llm_workers.tip")
+        )
         self._btn_ok.setText(T("settings.ok"))
         self._btn_cancel.setText(T("settings.cancel"))
 
@@ -4967,97 +5252,20 @@ class SettingsDialog(QDialog):
             "remember_tab": bool(self._tab_check.isChecked()),
             "pdf2zh_bin": self._pdf2zh_edit.text().strip(),
             "openrouter_api_key": self._api_edit.text().strip(),
+            "theme": self._theme_combo.currentData() or "dark",
+            "notify_on_finish": bool(self._notify_check.isChecked()),
+            "notify_sound": bool(self._sound_check.isChecked()),
+            "prevent_sleep": bool(self._sleep_check.isChecked()),
+            "llm_pool_workers": int(self._llm_workers_spin.value()),
         }
 
 
 # ── Wizard di esportazione (stile del wizard del servizio) ──────────────────
 #
-# Ricalca il modal multi-step di ``noesis-pdf-cloner-service`` (palette scura,
-# 5 passi numerati, footer Annulla/Indietro/Avanti). Il desktop non ha un
-# backend di stima, quindi il box del passo "Motore" usa un tempo indicativo.
-
-_WIZARD_QSS = """
-QDialog { background: #171b23; }
-QScrollArea#wizScroll, QWidget#wizViewport, QWidget#wizPane {
-    background: transparent; border: none;
-}
-QWidget#wizHeader { background: #171b23; border-bottom: 1px solid #2a3242; }
-QLabel#wizTitle { color: #e7ecf3; font-size: 14px; font-weight: 600; }
-QPushButton#wizX { background: transparent; border: 0; color: #93a0b4;
-                   font-size: 17px; padding: 0 6px; }
-QPushButton#wizX:hover { color: #e7ecf3; }
-QWidget#wizSteps { background: #1e2430; border-bottom: 1px solid #2a3242; }
-QLabel#wizStepNum {
-    color: #93a0b4; border: 1px solid #2a3242; border-radius: 10px;
-    min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px;
-    font-size: 11px;
-}
-QLabel#wizStepName { color: #93a0b4; font-size: 12px; }
-QWidget#wizStep[state="on"] QLabel#wizStepNum {
-    border-color: #4f8cff; color: #4f8cff;
-}
-QWidget#wizStep[state="on"] QLabel#wizStepName { color: #e7ecf3; }
-QWidget#wizStep[state="done"] QLabel#wizStepNum {
-    background: #35d0a5; border-color: #35d0a5; color: #06231b;
-}
-QWidget#wizStep[state="done"] QLabel#wizStepName { color: #e7ecf3; }
-QFrame#wizSep { background: #2a3242; max-height: 1px; }
-QLabel#wizH3 { color: #e7ecf3; font-size: 14px; font-weight: 600; }
-QLabel#wizHint { color: #93a0b4; font-size: 12.5px; }
-QLabel#wizThumb { background: #f7f4ee; border: 1px solid #2a3242; border-radius: 4px; }
-QLabel#wizThumbBig { background: #f7f4ee; border: 1px solid #2a3242; border-radius: 6px; }
-QWidget#wizCard {
-    background: #1e2430; border: 1px solid #2a3242; border-radius: 11px;
-}
-QPushButton#wizCardOpt {
-    background: #1e2430; border: 1px solid #2a3242; color: #e7ecf3;
-    border-radius: 11px; padding: 12px; text-align: left; font-size: 13px;
-}
-QPushButton#wizCardOpt:hover { border-color: #3a465e; }
-QPushButton#wizCardOpt:checked { border-color: #4f8cff; background: #1d3350; }
-QLabel#wizEst { background: #1e2430; border: 1px solid #2a3242; border-radius: 11px;
-                padding: 12px 14px; color: #93a0b4; font-size: 12.5px; }
-QLabel#wizSum { background: #1e2430; border: 1px solid #2a3242; border-radius: 11px;
-                padding: 14px; color: #e7ecf3; font-size: 13px; }
-QLineEdit, QComboBox, QSpinBox {
-    background: #1e2430; border: 1px solid #2a3242; color: #e7ecf3;
-    border-radius: 9px; padding: 8px 10px; font-size: 13px;
-}
-QSpinBox#wizSpin { padding: 6px 4px; font-size: 13px; }
-QFrame#wizModeSep { background: #2a3242; border: none; max-width: 1px; }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: #4f8cff; }
-QComboBox QAbstractItemView { background: #1e2430; color: #e7ecf3;
-    selection-background-color: #4f8cff; selection-color: #08152e; }
-QCheckBox, QRadioButton { color: #e7ecf3; font-size: 13px; spacing: 8px; }
-QCheckBox::indicator {
-    width: 14px; height: 14px; border: 1px solid #5a6b86;
-    border-radius: 4px; background: #1e2430;
-}
-QCheckBox::indicator:checked { background: #4f8cff; border-color: #4f8cff; }
-QRadioButton::indicator {
-    width: 13px; height: 13px; border: 1px solid #5a6b86;
-    border-radius: 7px; background: #1e2430;
-}
-QRadioButton::indicator:checked { background: #4f8cff; border-color: #4f8cff; }
-QPushButton#wizSeg {
-    background: #171b23; border: 1px solid #2a3242; color: #93a0b4;
-    border-radius: 9px; padding: 8px 14px; font-size: 12.5px;
-}
-QPushButton#wizSeg:hover { color: #e7ecf3; }
-QPushButton#wizSeg:checked { background: #1e2430; color: #e7ecf3; border-color: #4f8cff; }
-QWidget#wizFooter { background: #1e2430; border-top: 1px solid #2a3242; }
-QLabel#wizError { color: #ff6b6b; font-size: 12px; }
-QPushButton#wizGhost { background: transparent; border: 0; color: #93a0b4;
-    padding: 9px 12px; font-size: 13px; }
-QPushButton#wizGhost:hover { color: #e7ecf3; }
-QPushButton#wizBtn { background: #171b23; border: 1px solid #2a3242; color: #e7ecf3;
-    border-radius: 9px; padding: 9px 16px; font-size: 13px; }
-QPushButton#wizBtn:hover { border-color: #4f8cff; }
-QPushButton#wizPrimary { background: #4f8cff; border: 1px solid #4f8cff;
-    color: #08152e; border-radius: 9px; padding: 9px 16px; font-size: 13px;
-    font-weight: 700; }
-QPushButton#wizPrimary:hover { background: #6ba0ff; }
-"""
+# Ricalca il modal multi-step di ``noesis-pdf-cloner-service`` (5 passi
+# numerati, footer Annulla/Indietro/Avanti). Il desktop non ha un backend di
+# stima, quindi il box del passo "Motore" usa un tempo indicativo. I colori
+# vengono dal tema attivo (``theme.wizard_qss()``): chiaro o scuro.
 
 
 class ExportWizardDialog(QDialog):
@@ -5114,7 +5322,9 @@ class ExportWizardDialog(QDialog):
 
         self.setWindowTitle(T("export.wizard.title"))
         self.setMinimumSize(820, 700)
-        self.setStyleSheet(_WIZARD_QSS)
+        # Tasto "riduci a icona" sul wizard (utile sulle finestre ridotte).
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
+        self.setStyleSheet(theme.wizard_qss())
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -6046,7 +6256,8 @@ class ExportWizardDialog(QDialog):
         ]
         self._summary.setText(
             "<br>".join(
-                f"<span style='color:#93a0b4'>{_html.escape(k)}</span>"
+                f"<span style='color:{theme.color('wiz_muted')}'>"
+                f"{_html.escape(k)}</span>"
                 f"&nbsp;&nbsp;&nbsp;{_html.escape(v)}"
                 for k, v in lines
             )
@@ -6156,17 +6367,18 @@ def _fmt_bytes(size: int) -> str:
 
 
 class ExportProgressDialog(QDialog):
-    """Modal wait shown while the missing range pages are translated and the
-    PDF is written.
+    """Progress window shown while the missing range pages are translated and
+    the PDF is written.
 
     It keeps the user informed with live feedback (engine/language, range,
     a working/done activity line, page i/N, a busy-then-determinate progress
     bar, running counts, elapsed + estimated remaining time and a per-page
-    log) and holds the application modal so navigation/settings cannot change
-    mid-queue. When the job finishes it stays open in a "completed" state
-    showing the saved file path, so the export never closes abruptly. Cancel
-    is cooperative: the in-flight pdf2zh_next subprocess cannot be
-    interrupted, so the queue stops after the current page.
+    log). It is **not** application-modal: the user can minimize the app (or
+    this window) while the job runs and is alerted by a system notification +
+    sound when it finishes. ``MainWindow._batch_busy`` guards the few actions
+    that must not run concurrently. When the job finishes it stays open in a
+    "completed" state showing the saved file path, so the export never closes
+    abruptly. Cancel terminates the in-flight ``pdf2zh_next`` process group.
     """
 
     cancelled = pyqtSignal()
@@ -6187,7 +6399,10 @@ class ExportProgressDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(T("export.progress.title"))
         self.setMinimumWidth(760)
-        self.setStyleSheet(_SETTINGS_QSS)
+        # Finestra normale (non solo dialog modale): tasto "riduci a icona" e
+        # possibilità di ridurre anche la finestra principale mentre lavora.
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
+        self.setStyleSheet(theme.settings_qss())
         self._total = max(int(total), 1)
         self._start: float | None = None
         self._done = 0
@@ -6242,20 +6457,22 @@ class ExportProgressDialog(QDialog):
                 },
             )
         )
-        self._range_lbl.setStyleSheet("color: #aaa; font-size: 12px;")
+        self._range_lbl.setStyleSheet(
+            "color: %s; font-size: 12px;" % theme.color("text4")
+        )
         left.addWidget(self._range_lbl)
 
         # Riga di attività: sempre valorizzata, così la finestra non appare
         # mai "vuota" durante l'attesa.
         self._activity_lbl = QLabel("")
         self._activity_lbl.setStyleSheet(
-            "color: #fff; font-size: 14px; font-weight: bold;"
+            "color: %s; font-size: 14px; font-weight: bold;" % theme.color("text")
         )
         self._activity_lbl.setWordWrap(True)
         left.addWidget(self._activity_lbl)
 
         self._page_lbl = QLabel("")
-        self._page_lbl.setStyleSheet("color: #ddd;")
+        self._page_lbl.setStyleSheet("color: %s;" % theme.color("text2"))
         left.addWidget(self._page_lbl)
 
         self._bar = QProgressBar()
@@ -6264,11 +6481,15 @@ class ExportProgressDialog(QDialog):
         left.addWidget(self._bar)
 
         self._stats_lbl = QLabel("")
-        self._stats_lbl.setStyleSheet("color: #999; font-size: 12px;")
+        self._stats_lbl.setStyleSheet(
+            "color: %s; font-size: 12px;" % theme.color("text5")
+        )
         left.addWidget(self._stats_lbl)
 
         self._eta_lbl = QLabel("")
-        self._eta_lbl.setStyleSheet("color: #999; font-size: 12px;")
+        self._eta_lbl.setStyleSheet(
+            "color: %s; font-size: 12px;" % theme.color("text5")
+        )
         left.addWidget(self._eta_lbl)
         left.addStretch(1)
 
@@ -6281,7 +6502,9 @@ class ExportProgressDialog(QDialog):
         root.addLayout(body)
 
         self._path_lbl = QLabel("")
-        self._path_lbl.setStyleSheet("color: #7fd67f; font-size: 12px;")
+        self._path_lbl.setStyleSheet(
+            "color: %s; font-size: 12px;" % theme.color("ok")
+        )
         self._path_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
@@ -6325,11 +6548,17 @@ class ExportProgressDialog(QDialog):
 
     # ── ciclo di vita del job ─────────────────────────────────────────
 
-    def begin(self, page_1based: int):
-        """Avvia la fase di traduzione mostrando subito l'attività."""
+    def begin(self, page_1based: int, log: bool = True):
+        """Avvia la fase di traduzione mostrando subito l'attività.
+
+        ``log=False`` evita di aggiungere la riga "in lavorazione" al registro:
+        nel batch la traduzione di più pagine parte insieme, quindi una riga di
+        avvio per la sola prima pagina sarebbe fuorviante. Il registro resta
+        pulito con i soli esiti (✓/✗) per pagina.
+        """
         self._start = time.perf_counter()
         self._phase = "translating"
-        self.set_translating(page_1based, position=1)
+        self.set_translating(page_1based, position=1, log=log)
         self._timer.start()
 
     def _activity_text(self) -> str:
@@ -6344,16 +6573,19 @@ class ExportProgressDialog(QDialog):
             )
         return T("export.progress.activity_page", page=self._current_page)
 
-    def set_translating(self, page_1based: int, position: int | None = None):
+    def set_translating(
+        self, page_1based: int, position: int | None = None, log: bool = True
+    ):
         self._current_page = page_1based
         self._pos = position
         self._phase = "translating"
         self._bar.setRange(0, 0)  # busy/indeterminata
-        # Una riga di log per OGNI pagina (in lavorazione → poi ✓/✗), non solo
-        # per la prima: così il log riflette l'intera coda.
-        self._log.appendPlainText(
-            T("export.progress.activity_page_log", page=page_1based)
-        )
+        # Riga "in lavorazione" opzionale: nel flusso batch la si omette, così
+        # il registro resta pulito con i soli esiti ✓/✗.
+        if log:
+            self._log.appendPlainText(
+                T("export.progress.activity_page_log", page=page_1based)
+            )
         self._page_lbl.setText(
             T(
                 "export.progress.label",
@@ -6700,6 +6932,19 @@ class MainWindow(QMainWindow):
         self._clone_generation: int = 0
         self._clone_run_start: dict[str, float] = {}
 
+        # Job lungo in corso (export/batch): blocca le azioni che non devono
+        # sovrapporsi ora che la finestra non è più modale (punto 1).
+        self._batch_busy: bool = False
+        # Standby inibito durante i job (punto 4) e watchdog per il risveglio.
+        self._sleep_inhibitor = power.SleepInhibitor()
+        self._resume_watch = power.ResumeWatch()
+        self._resume_timer = QTimer(self)
+        self._resume_timer.setInterval(int(power.CHECK_INTERVAL_S * 1000))
+        self._resume_timer.timeout.connect(self._on_power_poll)
+        # Icona nel system tray (avvisi + riduzione a icona). Creata dopo la
+        # toolbar perché serve l'icona dell'app.
+        self._tray: QSystemTrayIcon | None = None
+
         # Central widget
         central = QWidget()
         self.setCentralWidget(central)
@@ -6821,73 +7066,19 @@ class MainWindow(QMainWindow):
             self._on_export_translated,
         )
 
-        # Dark theme
-        self.setStyleSheet("""
-            QMainWindow { background: #2b2b2b; }
-            QToolBar {
-                background: #333; padding: 4px; spacing: 6px;
-                border-bottom: 1px solid #444;
-            }
-            QToolBar QPushButton {
-                background: #444; color: #eee; border: 1px solid #555;
-                border-radius: 4px; padding: 6px 14px; font-size: 13px;
-            }
-            QToolBar QPushButton:hover { background: #555; }
-            QToolBar QPushButton:pressed { background: #666; }
-            QToolBar QPushButton:checked { background: #3a6bc5; color: #fff; }
-            QToolBar QSpinBox {
-                background: #444; color: #eee; border: 1px solid #555;
-                border-radius: 4px; padding: 4px 8px; font-size: 13px;
-                min-width: 60px;
-            }
-            /* Page-number box: no up/down buttons (they made the widget look
-               cluttered); navigation is via ◀ ▶ or by typing a page number. */
-            QToolBar QSpinBox::up-button, QToolBar QSpinBox::down-button {
-                width: 0px; border: none; background: transparent;
-            }
-            QToolBar QLabel { color: #ccc; font-size: 13px; }
-            QStatusBar { background: #333; color: #aaa; }
+        # Tema attivo (chiaro/scuro/sistema): i colori vengono dal modulo
+        # ``theme``. Il pulsante ▶ Traduci ha un accento proprio applicato qui.
+        self.apply_theme()
 
-            /* Punti che altrimenti ereditano il tema di sistema: colori
-               espliciti così l'app resta scura anche sui temi chiari/scuri
-               del sistema operativo. */
-            QScrollArea { background: #2b2b2b; border: none; }
-            QSplitter::handle { background: #333; }
-            QDockWidget { color: #ddd; }
-            QDockWidget::title {
-                background: #333; color: #ddd; padding: 5px 8px;
-                text-align: left;
-            }
-            QDockWidget::close-button, QDockWidget::float-button {
-                background: #444; border: none; border-radius: 2px;
-            }
-            QDockWidget::close-button:hover,
-            QDockWidget::float-button:hover { background: #555; }
-            QScrollBar:vertical {
-                background: #2f2f2f; width: 12px; margin: 0;
-            }
-            QScrollBar::handle:vertical {
-                background: #555; min-height: 24px;
-                border-radius: 6px; margin: 2px;
-            }
-            QScrollBar::handle:vertical:hover { background: #666; }
-            QScrollBar:horizontal {
-                background: #2f2f2f; height: 12px; margin: 0;
-            }
-            QScrollBar::handle:horizontal {
-                background: #555; min-width: 24px;
-                border-radius: 6px; margin: 2px;
-            }
-            QScrollBar::handle:horizontal:hover { background: #666; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                height: 0; width: 0;
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
-            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
-                background: none;
-            }
-        """)
+        # Icona nel system tray (notifiche di fine batch / mostra finestra) e
+        # watchdog per il risveglio da standby.
+        self._setup_tray()
+        self._resume_timer.start()
+        # In modalità "come il sistema", segui i cambi di tema del SO.
+        with contextlib.suppress(Exception):
+            QApplication.styleHints().colorSchemeChanged.connect(
+                self._on_color_scheme_changed
+            )
 
         # L'apertura del PDF è gestita in main(): argomento da riga di comando
         # oppure harrison2025.pdf nella directory corrente.
@@ -6896,6 +7087,120 @@ class MainWindow(QMainWindow):
         self._configure_clone_engine()
         self._update_engine_banner()
         self._update_translate_tooltip()
+
+    # ── tema ──────────────────────────────────────────────────────────────
+
+    def apply_theme(self) -> None:
+        """Applica il tema attivo alla finestra, al pannello e al TOC.
+
+        Chiamato all'avvio e dopo un cambio tema nelle Impostazioni. Le
+        tavolozze arrivano da ``theme``; i widget che hanno stili inline li
+        riapplicano tramite i propri metodi ``apply_theme``.
+        """
+        self.setStyleSheet(theme.main_qss())
+        if hasattr(self, "btn_translate"):
+            self.btn_translate.setStyleSheet(
+                "QPushButton { background: %s; color: %s; border: none;"
+                " border-radius: 4px; padding: 4px 12px; font-size: 13px;"
+                " font-weight: bold; }"
+                "QPushButton:hover { background: %s; }"
+                "QPushButton:disabled { background: %s; color: %s; }"
+                % (
+                    theme.color("accent"),
+                    theme.color("accent_text"),
+                    theme.color("accent_hover"),
+                    theme.color("disabled_bg"),
+                    theme.color("disabled_text"),
+                )
+            )
+        if hasattr(self, "translated_panel"):
+            self.translated_panel.apply_theme()
+        if hasattr(self, "pdf_view"):
+            self.pdf_view.apply_theme()
+        if hasattr(self, "toc_panel"):
+            self.toc_panel.apply_theme()
+
+    # ── avvisi, tray, standby ──────────────────────────────────────────────
+
+    def _on_color_scheme_changed(self, scheme) -> None:
+        """Segue il cambio di tema del SO quando la modalità è "sistema"."""
+        if theme.mode() != "system":
+            return
+        apply_theme_mode("system")
+        self.apply_theme()
+
+    def _setup_tray(self) -> None:
+        """Crea l'icona nel system tray (se disponibile) per avvisi e ripristino."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        icon = _app_icon()
+        tray = QSystemTrayIcon(icon, self)
+        tray.setToolTip(T("tray.tip"))
+        menu = QMenu(self)
+        menu.addAction(T("tray.show"), self._restore_from_tray)
+        menu.addSeparator()
+        menu.addAction(T("tray.quit"), QApplication.quit)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._on_tray_activated)
+        tray.show()
+        self._tray = tray
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self._restore_from_tray()
+
+    def _restore_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _notify_batch(self, message: str, sound: bool | None = None) -> None:
+        """Avviso di fine batch: notifica di sistema + suono + badge taskbar.
+
+        Silenzioso se l'utente ha disattivato l'avviso. Non solleva mai: un
+        sistema senza tray/audio non deve far fallire il job.
+        """
+        if not bool(get_setting("notify_on_finish", True)):
+            return
+        if sound is None:
+            sound = bool(get_setting("notify_sound", True))
+        with contextlib.suppress(Exception):
+            QApplication.alert(self)
+        if self._tray is not None and self._tray.isVisible():
+            with contextlib.suppress(Exception):
+                self._tray.showMessage(
+                    T("notify.batch.title"), message, _app_icon(), 8000
+                )
+        notifications.chime(sound)
+
+    def _start_long_job(self) -> None:
+        """Segna l'inizio di un job lungo: blocca le azioni in conflitto."""
+        self._batch_busy = True
+        if bool(get_setting("prevent_sleep", True)):
+            self._sleep_inhibitor.acquire()
+        self._resume_watch.reset()
+
+    def _end_long_job(self) -> None:
+        self._batch_busy = False
+        self._sleep_inhibitor.release()
+
+    def _on_power_poll(self) -> None:
+        gap = self._resume_watch.poll()
+        if gap > 0:
+            self._handle_resume(gap)
+
+    def _handle_resume(self, gap: float) -> None:
+        """Risveglio da standby: segnala e lascia che il motore ritenti.
+
+        Durante la sospensione la pagina in volo può fallire (rete assente) o
+        andare in timeout: il motore la riproverà, e l'utente viene avvisato.
+        """
+        log.info("risveglio da standby (%.1f s), batch=%s", gap, self._batch_busy)
+        if self._batch_busy:
+            self.status_bar.showMessage(T("power.resumed"), 8000)
 
     # ── toolbar ───────────────────────────────────────────────────────────
 
@@ -7000,11 +7305,18 @@ class MainWindow(QMainWindow):
         self.btn_translate.setToolTip(T("clone.translate.tip"))
         self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_translate.setStyleSheet(
-            "QPushButton { background: #3a6bc5; color: #fff; border: none;"
+            "QPushButton { background: %s; color: %s; border: none;"
             " border-radius: 4px; padding: 4px 12px; font-size: 13px;"
             " font-weight: bold; }"
-            "QPushButton:hover { background: #4a7bd5; }"
-            "QPushButton:disabled { background: #555; color: #999; }"
+            "QPushButton:hover { background: %s; }"
+            "QPushButton:disabled { background: %s; color: %s; }"
+            % (
+                theme.color("accent"),
+                theme.color("accent_text"),
+                theme.color("accent_hover"),
+                theme.color("disabled_bg"),
+                theme.color("disabled_text"),
+            )
         )
         self.btn_translate.clicked.connect(self._on_translate_requested)
         bar.addWidget(self.btn_translate)
@@ -7587,15 +7899,22 @@ class MainWindow(QMainWindow):
         if values.get("lang") in LANGUAGES:
             set_language(values["lang"])
         self._apply_api_key(values.get("openrouter_api_key"))
+        theme_changed = values.get("theme", get_setting("theme", "dark")) != get_setting("theme", "dark")
         for key in ("zoom", "font_size", "render_md", "show_header",
                     "resume_last_page", "remember_tab", "save_edits",
-                    "pdf2zh_bin"):
+                    "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
+                    "prevent_sleep", "llm_pool_workers"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
         set_target_lang(dst)
         set_translation_engine(engine)
         save_config()
+
+        # Cambio tema: applica subito (risolvendo "come il sistema").
+        if theme_changed:
+            apply_theme_mode(str(values.get("theme", "dark")))
+            self.apply_theme()
 
         # Applicazione immediata delle preferenze
         zoom = float(values.get("zoom", self._base_render_scale))
@@ -7804,6 +8123,9 @@ class MainWindow(QMainWindow):
         self._clone_engine.lang_in = src
         self._clone_engine.lang_out = dst
         self._clone_engine.set_pdf2zh_bin(get_setting("pdf2zh_bin", "") or None)
+        self._clone_engine.llm_pool_workers = max(
+            1, int(get_setting("llm_pool_workers", 4) or 4)
+        )
 
     def _update_engine_banner(self):
         """Aggiorna le strisce informative (motore e chiave mancanti)."""
@@ -7988,6 +8310,9 @@ class MainWindow(QMainWindow):
 
     def _on_translate_requested(self):
         """Pulsante ▶ Traduci: avvia la traduzione della pagina corrente."""
+        if self._batch_busy:
+            self.status_bar.showMessage(T("export.busy"), 5000)
+            return
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             return
         self._configure_clone_engine()
@@ -8230,7 +8555,18 @@ class MainWindow(QMainWindow):
                 page_num < self._page_count - 1
             )
             self.translated_panel.show_page_actions()
+            self._notify_page_done(page_num)
         self._update_working_badge()
+
+    def _notify_page_done(self, page_num: int) -> None:
+        """Avvisa a fine pagina SOLO se l'utente non sta guardando la finestra.
+
+        Così chi ha ridotto a icona (o è su un'altra app) sente il campanello e
+        vede la notifica; chi sta guardando non viene disturbato.
+        """
+        if self.isActiveWindow() and not self.isMinimized():
+            return
+        self._notify_batch(T("notify.page.done", page=page_num + 1))
 
     def _on_clone_error(self, generation: int, page_num: int, engine: str, message: str):
         if generation != self._clone_generation:
@@ -8402,6 +8738,9 @@ class MainWindow(QMainWindow):
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             self.status_bar.showMessage(T("export.need_doc"), 4000)
             return
+        if self._batch_busy:
+            self.status_bar.showMessage(T("export.busy"), 5000)
+            return
         self._configure_clone_engine()
         source = get_source_lang()
 
@@ -8462,10 +8801,14 @@ class MainWindow(QMainWindow):
             export_engine = clone_engine.CloneEngine(
                 cache_root=self._clone_engine.cache_root,
                 pdf2zh_bin=get_setting("pdf2zh_bin", "") or None,
+                max_concurrent=1,
             )
             export_engine.set_document(self._pdf_path)
             export_engine.lang_in = source
             export_engine.lang_out = target
+            export_engine.llm_model = self._clone_engine.llm_model
+            export_engine.llm_base_url = self._clone_engine.llm_base_url
+            export_engine.llm_pool_workers = self._clone_engine.llm_pool_workers
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,
@@ -8493,6 +8836,9 @@ class MainWindow(QMainWindow):
         """
         if not self._pdf_path or self._mupdf_doc is None or self._page_count == 0:
             self.status_bar.showMessage(T("export.need_doc"), 4000)
+            return
+        if self._batch_busy:
+            self.status_bar.showMessage(T("export.busy"), 5000)
             return
         self._configure_clone_engine()
         engine = get_translation_engine()
@@ -8533,14 +8879,12 @@ class MainWindow(QMainWindow):
         dest: str,
         fmt: str = "merged",
     ) -> tuple[bool, int, int]:
-        """Translate (optionally), merge and save, with a modal progress dialog.
+        """Translate (optionally), merge and save, with a progress window.
 
-        The dialog is application-modal so the user cannot navigate away while
-        the job runs; its event loop keeps the UI painting (activity line,
-        busy/determinate bar, counts, elapsed/ETA, per-page log) without
-        blocking the GUI thread. On success it stays open in a "completed"
-        state showing the saved path until the user closes it. Cancel is
-        cooperative and stops after the page in flight.
+        La finestra **non** è application-modal: l'utente può ridurre a icona
+        l'app mentre il job gira (punto 1) e viene avvisato a fine lavoro con
+        notifica + suono (punto 3). Le pagine mancanti sono tradotte **una alla
+        volta**, in sequenza. Lo standby è inibito durante il job (punto 4).
 
         Returns ``(ok, pages_written, pages_failed)``.
         """
@@ -8557,9 +8901,33 @@ class MainWindow(QMainWindow):
             parent=self,
             range_label=page_spec.format_pages_label(pages),
         )
-        prog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        # Non modale: la finestra principale resta riducibile/utilizzabile.
+        prog.setWindowModality(Qt.WindowModality.NonModal)
         prog.show()
 
+        self._start_long_job()
+        try:
+            return self._run_export_body(
+                prog, engine, pages, missing, translate, engine_name,
+                source, target, dest, fmt,
+            )
+        finally:
+            self._end_long_job()
+
+    def _run_export_body(
+        self,
+        prog,
+        engine,
+        pages: list[int],
+        missing: list[int],
+        translate: bool,
+        engine_name: str,
+        source: str,
+        target: str,
+        dest: str,
+        fmt: str,
+    ) -> tuple[bool, int, int]:
+        """Corpo dell'export, separato per garantire il rilascio dello standby."""
         state = {"cancelled": False, "failed": {}}
         if translate and missing:
             thread = CloneExportThread(engine, missing, engine_name)
@@ -8567,17 +8935,15 @@ class MainWindow(QMainWindow):
             def _on_page_error(page: int, reason: str):
                 state["failed"][page] = _friendly_reason(reason)
 
+            def _on_page_started(page: int):
+                prog.set_translating(page + 1, log=False)
+
             def _on_progress(done: int, tot: int, page: int):
                 if page in state["failed"]:
                     prog.log_fail(page, state["failed"][page])
                 else:
                     prog.log_ok(page)
                 prog.set_stats(done, len(state["failed"]), tot)
-                next_page = missing[done] if done < tot else None
-                if next_page is not None:
-                    prog.set_translating(next_page + 1, position=done + 1)
-                else:
-                    prog.set_phase_exporting()
 
             def _on_cancel():
                 # Lo slot è invocato anche alla chiusura del dialogo: ignoralo
@@ -8590,10 +8956,11 @@ class MainWindow(QMainWindow):
                 prog.set_cancelling()
 
             thread.page_error.connect(_on_page_error)
+            thread.page_started.connect(_on_page_started)
             thread.progress.connect(_on_progress)
             prog.cancelled.connect(_on_cancel)
 
-            prog.begin(missing[0] + 1)
+            prog.begin(missing[0] + 1, log=False)
             loop = QEventLoop()
             thread.batch_finished.connect(lambda *_: loop.quit())
             thread.start()
@@ -8604,6 +8971,7 @@ class MainWindow(QMainWindow):
                 prog.set_error(T("export.cancelled"))
                 prog.exec()
                 self.status_bar.showMessage(T("export.cancelled"), 5000)
+                self._notify_batch(T("notify.batch.cancelled"))
                 return (False, 0, 0)
         else:
             prog.set_phase_exporting()
@@ -8617,6 +8985,7 @@ class MainWindow(QMainWindow):
             prog.set_error(T("export.none_ready"))
             prog.exec()
             self.status_bar.showMessage(T("export.none_ready"), 5000)
+            self._notify_batch(T("notify.batch.error"))
             return (False, 0, 0)
         try:
             stem = self._pdf_path.stem if self._pdf_path else None
@@ -8637,6 +9006,7 @@ class MainWindow(QMainWindow):
             prog.set_error(T("export.error"))
             prog.exec()
             self.status_bar.showMessage(T("export.error"), 5000)
+            self._notify_batch(T("notify.batch.error"))
             return (False, 0, 0)
         failed = sum(
             1
@@ -8644,6 +9014,14 @@ class MainWindow(QMainWindow):
             if not engine.is_cached(p, engine_name, source, target)
         )
         prog.set_completed(str(dest), count, failed)
+        # Avviso PRIMA di exec(): la finestra resta aperta ma l'utente può
+        # essere altrove (ridotto a icona).
+        if failed:
+            self._notify_batch(
+                T("notify.batch.partial", count=count, failed=failed)
+            )
+        else:
+            self._notify_batch(T("notify.batch.done", count=count))
         prog.exec()  # resta aperta finché l'utente non preme "Chiudi"
         return (True, count, failed)
 
@@ -8686,6 +9064,9 @@ class MainWindow(QMainWindow):
     # ── file open ─────────────────────────────────────────────────────────
 
     def _on_open(self):
+        if self._batch_busy:
+            self.status_bar.showMessage(T("export.busy"), 5000)
+            return
         path_str, _ = QFileDialog.getOpenFileName(
             self, T("dlg.open"), "", T("dlg.open_filter")
         )
@@ -8856,6 +9237,9 @@ def main():
     config_path = _config_file_path()
     cfg = init_config(config_path, defaults={**DEFAULTS, "lang": _detect_os_lang()})
     set_language(cfg["lang"])
+    # Tema scelto (chiaro/scuro/sistema) PRIMA di costruire la finestra, così
+    # nasce già con i colori giusti.
+    apply_theme_mode(str(cfg.get("theme", "dark")))
 
     window = MainWindow()
     window.show()
