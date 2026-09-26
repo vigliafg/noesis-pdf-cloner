@@ -571,7 +571,8 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   - *Normale*: tutto OFF, Mercury, OpenRouter (~40 s/pagina);
   - *Veloce (consigliato)*: patch + worker, Mercury, OpenRouter (~33 s);
   - *Massima velocità*: patch + worker + gpt-oss-120B + proxy locale (autostart)
-    + reasoning minimal + pool 8 (~23 s).
+    + reasoning minimal + pool 8 + **prompt di sistema di default** (traduce i
+    nomi dei farmaci, non traduce citazioni/sigle) (~20-23 s).
   I campi che il preset governa stanno in **"Avanzate"** (collassato di default)
   e sono di sola lettura. **Stato provider inline** + "Prova provider" sotto le
   card. I preset valgono per tutti i motori (patch+worker anche su google/bing);
@@ -588,7 +589,7 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   sulla pagina 401 di `ha22.pdf` (8 voci separate). Richiede il wrapper (patch
   runtime); marker cache `-lists1`. Riverberato al service (`NUMERIC_LISTS`).
 - **Modello e base URL** sono tendine (non testo libero): *Mercury* /
-  *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
+  *gpt-oss-120B* / *gpt-6-luna* / *Default*, e *OpenRouter* / *Proxy locale*.
 - **Prompt di sistema LLM** (`llm_system_prompt`, campo in Avanzate):
   `--custom-system-prompt`, per guidare terminologia/stile (es. tradurre i nomi
   dei farmaci, non tradurre le citazioni). Marker cache dedicato.

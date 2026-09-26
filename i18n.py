@@ -2330,6 +2330,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "gpt-oss-120B — openai/gpt-oss-120b",
         "es": "gpt-oss-120B — openai/gpt-oss-120b",
     },
+    "settings.llm.model.luna": {
+        "it": "gpt-6-luna — openai/gpt-6-luna",
+        "en": "gpt-6-luna — openai/gpt-6-luna",
+        "fr": "gpt-6-luna — openai/gpt-6-luna",
+        "de": "gpt-6-luna — openai/gpt-6-luna",
+        "es": "gpt-6-luna — openai/gpt-6-luna",
+    },
     "settings.llm.model.default": {
         "it": "Default (variabile d'ambiente)",
         "en": "Default (environment variable)",

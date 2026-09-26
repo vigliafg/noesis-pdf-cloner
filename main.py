@@ -5406,21 +5406,31 @@ class SettingsDialog(QDialog):
     # NOTA precisione: i flag "traduzione rapida" (B2) NON sono attivi nei
     # preset — saltano elaborazioni di layout/formule e riducono la precisione
     # per un guadagno trascurabile. Restano come opt-in manuale in Avanzate.
+    # Prompt di default per "Massima velocità": rende gpt-oss coerente nella
+    # terminologia (nomi dei farmaci in italiano, citazioni non tradotte).
+    _FASTEST_PROMPT = (
+        "Sei un traduttore medico EN->IT. Traduci fedelmente mantenendo la "
+        "formattazione e l'ordine. Traduci i nomi dei farmaci nella forma "
+        "italiana quando esiste (es. daptomycin->daptomicina, polymyxins->"
+        "polimixine). NON tradurre le citazioni bibliografiche, i nomi di "
+        "riviste e le sigle tecniche (ABG, AG, MIC)."
+    )
     _PRESETS = {
         "normal": {
             "fast": False, "flags": False, "worker": False,
             "model": "inception/mercury-2.5", "base": "", "reasoning": "",
-            "json": False, "autostart": False, "pool": 4,
+            "json": False, "autostart": False, "pool": 4, "prompt": "",
         },
         "fast": {
             "fast": True, "flags": False, "worker": True,
             "model": "inception/mercury-2.5", "base": "", "reasoning": "",
-            "json": False, "autostart": False, "pool": 4,
+            "json": False, "autostart": False, "pool": 4, "prompt": "",
         },
         "fastest": {
             "fast": True, "flags": False, "worker": True,
             "model": "openai/gpt-oss-120b", "base": "__proxy__",
             "reasoning": "minimal", "json": False, "autostart": True, "pool": 8,
+            "prompt": _FASTEST_PROMPT,
         },
     }
 
@@ -5456,6 +5466,7 @@ class SettingsDialog(QDialog):
         self._json_mode_check.setChecked(preset["json"])
         self._proxy_autostart_check.setChecked(preset["autostart"])
         self._llm_workers_spin.setValue(preset["pool"])
+        self._llm_prompt_edit.setText(preset.get("prompt", ""))
         self._set_preset_fields_enabled(False)
 
     def _on_preset_toggled(self, code: str, checked: bool) -> None:
@@ -5545,6 +5556,9 @@ class SettingsDialog(QDialog):
         self._llm_model_combo.addItem(
             T("settings.llm.model.gptoss"), "openai/gpt-oss-120b"
         )
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.luna"), "openai/gpt-6-luna"
+        )
         self._llm_model_combo.addItem(T("settings.llm.model.default"), "")
         if model and self._llm_model_combo.findData(model) < 0:
             self._llm_model_combo.addItem(model, model)
@@ -5606,7 +5620,10 @@ class SettingsDialog(QDialog):
         preset = str(cfg.get("performance_preset", "normal") or "normal")
         self._select_preset(preset)
         self._numeric_lists_check.setChecked(bool(cfg.get("numeric_lists", False)))
-        self._llm_prompt_edit.setText(str(cfg.get("llm_system_prompt", "") or ""))
+        # Prompt: un valore salvato non vuoto vince sul default del preset.
+        saved_prompt = str(cfg.get("llm_system_prompt", "") or "").strip()
+        if saved_prompt:
+            self._llm_prompt_edit.setText(saved_prompt)
         # I flag B2 sono seedati OFF dai preset (precisione): non si ripristina
         # un eventuale valore vecchio/errato salvato in config.
         self._update_perf_enabled()

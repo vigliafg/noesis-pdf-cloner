@@ -190,6 +190,11 @@ class SettingsDialogLayoutTests(unittest.TestCase):
             self.assertEqual(v["llm_reasoning_effort"], exp["reasoning"], name)
             self.assertEqual(v["llm_proxy_autostart"], exp["proxy"], name)
             self.assertEqual(v["llm_base_url"], exp["base"], name)
+            # Solo "Massima velocità" imposta un prompt di sistema di default.
+            if name == "fastest":
+                self.assertTrue(v["llm_system_prompt"])
+            else:
+                self.assertEqual(v["llm_system_prompt"], "")
         # I campi dipendenti sono di sola lettura (governati dal preset).
         self.assertFalse(dlg._fast_engine_check.isEnabled())
         self.assertFalse(dlg._llm_model_combo.isEnabled())

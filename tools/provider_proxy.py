@@ -107,11 +107,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_json(self, status: int, obj: Any) -> None:
         body = json.dumps(obj).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Il client si è disconnesso: non è un errore del proxy.
+            pass
 
     def do_GET(self):  # noqa: N802
         if self.path == "/healthz":
@@ -137,6 +141,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
         self._forward(raw, self.path)
 
+    def _write_raw(self, status: int, content_type: str, data: bytes) -> None:
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def _forward(self, body: bytes, path: str) -> None:
         url = _upstream_url(path)
         request = urllib.request.Request(url, data=body or None, method=self.command)
@@ -151,21 +165,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with urllib.request.urlopen(request, timeout=600) as response:
                 data = response.read()
-                self.send_response(response.status)
-                self.send_header(
-                    "Content-Type",
+                self._write_raw(
+                    response.status,
                     response.headers.get("Content-Type", "application/json"),
+                    data,
                 )
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
         except urllib.error.HTTPError as exc:
-            data = exc.read()
-            self.send_response(exc.code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self._write_raw(
+                exc.code,
+                "application/json",
+                exc.read(),
+            )
         except Exception as exc:  # noqa: BLE001
             self._send_json(502, {"error": f"upstream failed: {exc}"})
 
