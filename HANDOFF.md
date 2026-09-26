@@ -578,10 +578,27 @@ Default OFF; a OFF comportamento invariato (290 test verdi).
 - **`content = None`**: aggiungere retry (marker transitorio) — vedi
   `BENCH_LLM.md`.
 
-### Risultati benchmark (pagina 3575, EN→IT, 4 core)
+### Risultati benchmark (pagina 3575, EN→IT, 4 core, 3 run con `--fresh`)
 
-_(compilati al termine della sessione di benchmark — vedi
-`tools/bench_results.jsonl`)_
+Mediana dei tempi (`tools/bench_page.py`, `tools/bench_results.jsonl`):
+
+| Config | run (s) | mediana | note |
+|---|---:|---:|---|
+| baseline (feature OFF) | 52,7 / 42,5 / 40,3 | **42,5** | ~coerente con `BENCH_LLM.md` |
+| patch sole (worker 4) | 38,7 / 35,7 / 34,1 | **35,7** | −6,8 s |
+| fast + preset rapido (4) | 34,7 / 35,9 / 35,2 | **35,2** | B2 quasi nullo su questa pagina |
+| fast + preset rapido (12) | 33,9 / 33,8 / 36,1 | **33,9** | +2-3 worker ≈ −1,3 s |
+| **cache calda** (fast+flags, 4) | 21,9 / 21,0 / 21,0 | **21,0** | scenario desktop (usa la cache) |
+| google (fast+flags, 4) | 26,4 / 22,6 | ~24,5 | il wrapper vale anche sulla catena gratuita |
+
+Lettura:
+- la feature **riduce di ~7-9 s** la traduzione fresca (≈ −17-20%); il grosso
+  viene dalle **patch** (font cache + MemoryMonitor), non dai flag B2;
+- il **pavimento CPU** resta ~21 s (run a cache calda: LLM quasi assente);
+- con la cache del motore (default desktop) si è **già sotto i 30 s**;
+- per scendere **≤ 30 s anche a traduzione fresca** serve la Fase 2 (worker
+  persistente, pavimento ~17-18 s) e/o un LLM più veloce (gpt-oss-120b Groq +
+  `reasoning-effort minimal`). Vedi piano.
 
 ---
 
