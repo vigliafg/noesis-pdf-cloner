@@ -159,6 +159,40 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         self.assertEqual(values["llm_base_url"], "http://127.0.0.1:8791/v1")
         dlg.close()
 
+    def test_performance_presets_fill_fields(self):
+        dlg = self.main.SettingsDialog()
+        cases = {
+            "normal": dict(
+                fast=False, worker=False, model="inception/mercury-2.5",
+                proxy=False, pool=4, reasoning="", base="",
+            ),
+            "fast": dict(
+                fast=True, worker=True, model="inception/mercury-2.5",
+                proxy=False, pool=4, reasoning="", base="",
+            ),
+            "fastest": dict(
+                fast=True, worker=True, model="openai/gpt-oss-120b",
+                proxy=True, pool=8, reasoning="minimal",
+                base="http://127.0.0.1:8790/v1",
+            ),
+        }
+        for name, exp in cases.items():
+            dlg._preset_combo.setCurrentIndex(dlg._preset_combo.findData(name))
+            v = dlg.values()
+            self.assertEqual(v["performance_preset"], name)
+            self.assertEqual(v["fast_engine"], exp["fast"], name)
+            self.assertEqual(v["fast_worker"], exp["worker"], name)
+            self.assertEqual(v["llm_model"], exp["model"], name)
+            self.assertEqual(v["llm_pool_workers"], exp["pool"], name)
+            self.assertEqual(v["llm_reasoning_effort"], exp["reasoning"], name)
+            self.assertEqual(v["llm_proxy_autostart"], exp["proxy"], name)
+            self.assertEqual(v["llm_base_url"], exp["base"], name)
+        # I campi dipendenti sono di sola lettura (governati dal preset).
+        self.assertFalse(dlg._fast_engine_check.isEnabled())
+        self.assertFalse(dlg._llm_model_combo.isEnabled())
+        self.assertTrue(dlg._btn_proxy_test.isEnabled())
+        dlg.close()
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class MainWindowRefinementsTests(unittest.TestCase):

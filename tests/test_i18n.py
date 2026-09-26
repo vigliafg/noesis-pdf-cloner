@@ -271,6 +271,7 @@ class ConfigV2Tests(unittest.TestCase):
             "fast_engine": True,
             "llm_proxy_autostart": True,
             "llm_proxy_port": 8899,
+            "performance_preset": "fastest",
         })
         cfg = i18n.load_config(self._path)
         self.assertEqual(cfg["engine"], "bing")
@@ -284,6 +285,7 @@ class ConfigV2Tests(unittest.TestCase):
         self.assertTrue(cfg["fast_engine"])
         self.assertTrue(cfg["llm_proxy_autostart"])
         self.assertEqual(cfg["llm_proxy_port"], 8899)
+        self.assertEqual(cfg["performance_preset"], "fastest")
 
     def test_invalid_enum_values_fall_back_to_defaults(self):
         self._write({

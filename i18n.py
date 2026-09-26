@@ -105,6 +105,8 @@ DEFAULTS: dict = {
     "fast_engine": False,      # motore veloce (wrapper + patch runtime)
     "fast_flags": False,       # preset "traduzione rapida" (salta controlli)
     "fast_worker": False,      # worker persistente (Fase 2, richiede fast_engine)
+    # Preset prestazioni (governa i campi sottostanti): normal | fast | fastest.
+    "performance_preset": "normal",
     # Opzioni LLM avanzate (usate solo a fast_engine attivo).
     "llm_reasoning_effort": "",  # "" | minimal | low | medium | high
     "llm_json_mode": False,      # --openai-enable-json-mode
@@ -2114,6 +2116,41 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Prestazioni", "en": "Performance", "fr": "Performances",
         "de": "Leistung", "es": "Rendimiento",
     },
+    "settings.performance.preset": {
+        "it": "Preset prestazioni",
+        "en": "Performance preset",
+        "fr": "Préréglage de performances",
+        "de": "Leistungs-Preset",
+        "es": "Preajuste de rendimiento",
+    },
+    "settings.performance.preset.tip": {
+        "it": "Scegli un preset: compila automaticamente motore veloce, worker, modello, base URL e opzioni LLM. Gli altri campi sono di sola lettura.",
+        "en": "Pick a preset: it fills fast engine, worker, model, base URL and LLM options automatically. The other fields are read-only.",
+        "fr": "Choisissez un préréglage : il remplit automatiquement moteur rapide, worker, modèle, URL de base et options LLM. Les autres champs sont en lecture seule.",
+        "de": "Wählen Sie ein Preset: füllt schnelle Engine, Worker, Modell, Basis-URL und LLM-Optionen automatisch. Die übrigen Felder sind schreibgeschützt.",
+        "es": "Elige un preajuste: rellena automáticamente motor rápido, worker, modelo, URL base y opciones LLM. Los demás campos son de solo lectura.",
+    },
+    "settings.performance.preset.normal": {
+        "it": "Normale",
+        "en": "Normal",
+        "fr": "Normal",
+        "de": "Normal",
+        "es": "Normal",
+    },
+    "settings.performance.preset.fast": {
+        "it": "Veloce",
+        "en": "Fast",
+        "fr": "Rapide",
+        "de": "Schnell",
+        "es": "Rápido",
+    },
+    "settings.performance.preset.fastest": {
+        "it": "Massima velocità",
+        "en": "Fastest",
+        "fr": "Maximum",
+        "de": "Maximal",
+        "es": "Máxima",
+    },
     "settings.performance.llm_workers": {
         "it": "Richieste LLM in parallelo (per pagina)",
         "en": "Parallel LLM requests (per page)",
@@ -2496,6 +2533,11 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
     )
     theme = str(raw.get("theme", "")).strip().lower()
     out["theme"] = theme if theme in ("dark", "light", "system") else defaults["theme"]
+    preset = str(raw.get("performance_preset", "")).strip().lower()
+    out["performance_preset"] = (
+        preset if preset in ("normal", "fast", "fastest")
+        else defaults["performance_preset"]
+    )
     effort = str(raw.get("llm_reasoning_effort", "")).strip().lower()
     out["llm_reasoning_effort"] = (
         effort if effort in ("", "minimal", "low", "medium", "high")

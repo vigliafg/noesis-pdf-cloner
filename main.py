@@ -5180,6 +5180,15 @@ class SettingsDialog(QDialog):
         # ── Prestazioni ──────────────────────────────────────────────────
         self._box_perf = QGroupBox(T("settings.group.performance"))
         perf_form = QFormLayout(self._box_perf)
+        self._lbl_preset = QLabel(T("settings.performance.preset"))
+        self._preset_combo = QComboBox()
+        self._preset_combo.setToolTip(T("settings.performance.preset.tip"))
+        for code in ("normal", "fast", "fastest"):
+            self._preset_combo.addItem(
+                T(f"settings.performance.preset.{code}"), code
+            )
+        self._preset_combo.currentIndexChanged.connect(self._on_preset_changed)
+        perf_form.addRow(self._lbl_preset, self._preset_combo)
         self._lbl_llm_workers = QLabel(T("settings.performance.llm_workers"))
         self._llm_workers_spin = QSpinBox()
         self._llm_workers_spin.setRange(1, 16)
@@ -5350,6 +5359,61 @@ class SettingsDialog(QDialog):
             if idx >= 0:
                 self._llm_base_combo.setCurrentIndex(idx)
 
+    # Valori dei preset: governano tutti i campi sottostanti.
+    _PRESETS = {
+        "normal": {
+            "fast": False, "flags": False, "worker": False,
+            "model": "inception/mercury-2.5", "base": "", "reasoning": "",
+            "json": False, "autostart": False, "pool": 4,
+        },
+        "fast": {
+            "fast": True, "flags": True, "worker": True,
+            "model": "inception/mercury-2.5", "base": "", "reasoning": "",
+            "json": False, "autostart": False, "pool": 4,
+        },
+        "fastest": {
+            "fast": True, "flags": True, "worker": True,
+            "model": "openai/gpt-oss-120b", "base": "__proxy__",
+            "reasoning": "minimal", "json": False, "autostart": True, "pool": 8,
+        },
+    }
+
+    @staticmethod
+    def _select_combo_data(combo, data: str) -> None:
+        idx = combo.findData(data)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+
+    def _set_preset_fields_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self._fast_engine_check, self._fast_flags_check,
+            self._fast_worker_check, self._llm_model_combo,
+            self._llm_base_combo, self._reasoning_combo, self._json_mode_check,
+            self._proxy_autostart_check, self._proxy_port_spin,
+            self._llm_workers_spin, self._lbl_llm_workers, self._lbl_llm_model,
+            self._lbl_llm_base, self._lbl_reasoning, self._lbl_proxy_port,
+        ):
+            widget.setEnabled(enabled)
+        self._btn_proxy_test.setEnabled(True)
+
+    def _apply_preset(self, name: str) -> None:
+        """Compila i campi secondo il preset e li rende di sola lettura."""
+        preset = self._PRESETS.get(name) or self._PRESETS["normal"]
+        self._fast_engine_check.setChecked(preset["fast"])
+        self._fast_flags_check.setChecked(preset["flags"])
+        self._fast_worker_check.setChecked(preset["worker"])
+        self._select_combo_data(self._llm_model_combo, preset["model"])
+        self._select_combo_data(self._llm_base_combo, preset["base"])
+        self._select_combo_data(self._reasoning_combo, preset["reasoning"])
+        self._json_mode_check.setChecked(preset["json"])
+        self._proxy_autostart_check.setChecked(preset["autostart"])
+        self._llm_workers_spin.setValue(preset["pool"])
+        self._set_preset_fields_enabled(False)
+
+    def _on_preset_changed(self, index: int) -> None:
+        name = self._preset_combo.itemData(index) or "normal"
+        self._apply_preset(name)
+
     def _on_test_provider(self):
         """Avvia la prova provider in background e mostra l'esito."""
         parent = self.parent()
@@ -5457,39 +5521,12 @@ class SettingsDialog(QDialog):
         self._llm_workers_spin.setValue(
             int(cfg.get("llm_pool_workers", 4) or 4)
         )
-        self._fast_engine_check.setChecked(bool(cfg.get("fast_engine", False)))
-        fast_on = self._fast_engine_check.isChecked()
-        self._fast_flags_check.setChecked(
-            fast_on and bool(cfg.get("fast_flags", False))
-        )
-        self._fast_flags_check.setEnabled(fast_on)
-        self._fast_worker_check.setChecked(
-            fast_on and bool(cfg.get("fast_worker", False))
-        )
-        self._fast_worker_check.setEnabled(fast_on)
-        idx = self._reasoning_combo.findData(
-            str(cfg.get("llm_reasoning_effort", "") or "")
-        )
-        self._reasoning_combo.setCurrentIndex(max(0, idx))
-        self._reasoning_combo.setEnabled(fast_on)
-        self._json_mode_check.setChecked(bool(cfg.get("llm_json_mode", False)))
-        self._json_mode_check.setEnabled(fast_on)
-        model_val = str(cfg.get("llm_model", "") or "")
-        base_val = str(cfg.get("llm_base_url", "") or "")
-        port = int(cfg.get("llm_proxy_port", 8790) or 8790)
-        base_display = (
-            "__proxy__" if base_val == f"http://127.0.0.1:{port}/v1" else base_val
-        )
-        self._populate_llm_combos(model_val, base_display)
-        self._proxy_autostart_check.setChecked(
-            bool(cfg.get("llm_proxy_autostart", False))
-        )
+        # Porta proxy dal config, poi applica il preset (che governa i campi).
         self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
-        self._proxy_autostart_check.setEnabled(fast_on)
-        self._proxy_port_spin.setEnabled(
-            fast_on and self._proxy_autostart_check.isChecked()
-        )
-        self._btn_proxy_test.setEnabled(fast_on)
+        preset = str(cfg.get("performance_preset", "normal") or "normal")
+        idx = self._preset_combo.findData(preset)
+        self._preset_combo.setCurrentIndex(max(0, idx))
+        self._apply_preset(preset)
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -5555,6 +5592,14 @@ class SettingsDialog(QDialog):
         self._btn_test_sound.setText(T("settings.notify.test"))
         self._sleep_check.setText(T("settings.notify.prevent_sleep"))
         self._box_perf.setTitle(T("settings.group.performance"))
+        self._lbl_preset.setText(T("settings.performance.preset"))
+        self._preset_combo.setToolTip(T("settings.performance.preset.tip"))
+        self._preset_combo.blockSignals(True)
+        for i, code in enumerate(("normal", "fast", "fastest")):
+            self._preset_combo.setItemText(
+                i, T(f"settings.performance.preset.{code}")
+            )
+        self._preset_combo.blockSignals(False)
         self._lbl_llm_workers.setText(T("settings.performance.llm_workers"))
         self._llm_workers_spin.setToolTip(
             T("settings.performance.llm_workers.tip")
@@ -5617,6 +5662,7 @@ class SettingsDialog(QDialog):
             "notify_sound": bool(self._sound_check.isChecked()),
             "prevent_sleep": bool(self._sleep_check.isChecked()),
             "llm_pool_workers": int(self._llm_workers_spin.value()),
+            "performance_preset": self._preset_combo.currentData() or "normal",
             "fast_engine": bool(self._fast_engine_check.isChecked()),
             "fast_flags": bool(self._fast_flags_check.isChecked()),
             "fast_worker": bool(self._fast_worker_check.isChecked()),

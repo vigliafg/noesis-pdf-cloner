@@ -565,11 +565,16 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 ### Fase 3 — LLM avanzato
 - `--openai-reasoning-effort` e `--openai-enable-json-mode` (setting UI + env
   `PDF_LLM_REASONING_EFFORT`/`PDF_LLM_JSON_MODE`), gated da `fast_engine`.
-- **Modello e base URL in Impostazioni** come **menu a tendina** (non testo
-  libero): modello = *Mercury*, *gpt-oss-120B*, *Default (env)*; base URL =
-  *OpenRouter (default)* o *Proxy locale (pin Groq)*. Valori custom già salvati
-  restano come voce. Sotto: `llm_model`/`llm_base_url` (vuoto = default o env
-  `PDF_LLM_MODEL`/`PDF_LLM_BASE_URL`).
+- **Preset prestazioni** (Impostazioni → Prestazioni): un'unica scelta
+  **Normale / Veloce / Massima velocità** che **compila e blocca** tutti i campi
+  sottostanti (motore veloce, worker, modello, base URL, reasoning, pool):
+  - *Normale*: tutto OFF, Mercury, OpenRouter (~42 s/pagina);
+  - *Veloce*: patch + worker, Mercury, OpenRouter (~33-35 s);
+  - *Massima velocità*: patch + worker + gpt-oss-120B + proxy locale (autostart)
+    + reasoning minimal + pool 8 (~23 s).
+  Gli altri campi sono di sola lettura; "Prova provider" resta sempre attivo.
+- **Modello e base URL** sono tendine (non testo libero): *Mercury* /
+  *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →
   Prestazioni, "Avvia automaticamente il proxy provider" + porta; l'app avvia
   `tools/provider_proxy.py` in background, punta la base URL al proxy e lo
