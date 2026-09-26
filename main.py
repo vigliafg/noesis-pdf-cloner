@@ -5179,17 +5179,56 @@ class SettingsDialog(QDialog):
         inner.addWidget(self._box_notify)
 
         # ── Prestazioni ──────────────────────────────────────────────────
+        # ── Prestazioni ──────────────────────────────────────────────────
+        # Tre preset come "card" radio (tutte visibili), con i campi
+        # governati dal preset dentro "Avanzate" (collassato) e lo stato del
+        # provider inline.
         self._box_perf = QGroupBox(T("settings.group.performance"))
-        perf_form = QFormLayout(self._box_perf)
-        self._lbl_preset = QLabel(T("settings.performance.preset"))
-        self._preset_combo = QComboBox()
-        self._preset_combo.setToolTip(T("settings.performance.preset.tip"))
+        perf_root = QVBoxLayout(self._box_perf)
+        self._preset_radios: dict = {}
+        self._preset_descs: dict = {}
+        preset_group = QButtonGroup(self._box_perf)
         for code in ("normal", "fast", "fastest"):
-            self._preset_combo.addItem(
-                T(f"settings.performance.preset.{code}"), code
+            radio = QRadioButton(T(f"settings.performance.preset.{code}.label"))
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            radio.toggled.connect(
+                lambda checked, c=code: self._on_preset_toggled(c, checked)
             )
-        self._preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-        perf_form.addRow(self._lbl_preset, self._preset_combo)
+            preset_group.addButton(radio)
+            desc = QLabel(T(f"settings.performance.preset.{code}.desc"))
+            desc.setWordWrap(True)
+            desc.setStyleSheet(f"color: {theme.color('text5')}; font-size: 11px;")
+            perf_root.addWidget(radio)
+            perf_root.addWidget(desc)
+            self._preset_radios[code] = radio
+            self._preset_descs[code] = desc
+
+        status_row = QHBoxLayout()
+        self._proxy_test_result = QLabel("")
+        self._proxy_test_result.setWordWrap(True)
+        self._proxy_test_result.setStyleSheet(_status_style("text5"))
+        self._btn_proxy_test = QPushButton(T("settings.proxy.test"))
+        self._btn_proxy_test.setToolTip(T("settings.proxy.test.tip"))
+        self._btn_proxy_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_proxy_test.clicked.connect(self._on_test_provider)
+        status_row.addWidget(self._proxy_test_result, 1)
+        status_row.addWidget(self._btn_proxy_test)
+        perf_root.addLayout(status_row)
+
+        # Avanzate (nascoste di default): i campi governati dal preset.
+        self._btn_advanced = QToolButton()
+        self._btn_advanced.setText(T("settings.performance.advanced"))
+        self._btn_advanced.setCheckable(True)
+        self._btn_advanced.setArrowType(Qt.ArrowType.RightArrow)
+        self._btn_advanced.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self._btn_advanced.clicked.connect(self._on_advanced_toggled)
+        perf_root.addWidget(self._btn_advanced)
+
+        self._advanced_widget = QWidget()
+        perf_form = QFormLayout(self._advanced_widget)
+        perf_form.setContentsMargins(0, 0, 0, 0)
         self._lbl_llm_workers = QLabel(T("settings.performance.llm_workers"))
         self._llm_workers_spin = QSpinBox()
         self._llm_workers_spin.setRange(1, 16)
@@ -5202,11 +5241,10 @@ class SettingsDialog(QDialog):
         self._fast_engine_check.setToolTip(
             T("settings.performance.fast_engine.tip")
         )
+        self._fast_engine_check.toggled.connect(self._on_fast_engine_toggled)
         perf_form.addRow(self._fast_engine_check)
         self._fast_flags_check = QCheckBox(T("settings.performance.fast_flags"))
         self._fast_flags_check.setToolTip(T("settings.performance.fast_flags.tip"))
-        # Il preset "traduzione rapida" ha senso solo col motore veloce attivo.
-        self._fast_engine_check.toggled.connect(self._on_fast_engine_toggled)
         perf_form.addRow(self._fast_flags_check)
         self._fast_worker_check = QCheckBox(T("settings.performance.fast_worker"))
         self._fast_worker_check.setToolTip(T("settings.performance.fast_worker.tip"))
@@ -5231,7 +5269,6 @@ class SettingsDialog(QDialog):
         self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
         perf_form.addRow(self._lbl_llm_base, self._llm_base_combo)
         self._populate_llm_combos()
-        # Proxy provider locale: avvio automatico + prova.
         self._proxy_autostart_check = QCheckBox(T("settings.proxy.autostart"))
         self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
         self._proxy_autostart_check.toggled.connect(
@@ -5243,14 +5280,8 @@ class SettingsDialog(QDialog):
         self._proxy_port_spin.setRange(1024, 65535)
         self._proxy_port_spin.setToolTip(T("settings.proxy.port.tip"))
         perf_form.addRow(self._lbl_proxy_port, self._proxy_port_spin)
-        self._btn_proxy_test = QPushButton(T("settings.proxy.test"))
-        self._btn_proxy_test.setToolTip(T("settings.proxy.test.tip"))
-        self._btn_proxy_test.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_proxy_test.clicked.connect(self._on_test_provider)
-        perf_form.addRow(self._btn_proxy_test)
-        self._proxy_test_result = QLabel("")
-        self._proxy_test_result.setWordWrap(True)
-        perf_form.addRow(self._proxy_test_result)
+        perf_root.addWidget(self._advanced_widget)
+        self._advanced_widget.setVisible(False)
         inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
@@ -5411,22 +5442,40 @@ class SettingsDialog(QDialog):
         self._llm_workers_spin.setValue(preset["pool"])
         self._set_preset_fields_enabled(False)
 
-    def _on_preset_changed(self, index: int) -> None:
-        name = self._preset_combo.itemData(index) or "normal"
+    def _on_preset_toggled(self, code: str, checked: bool) -> None:
+        if checked:
+            self._apply_preset(code)
+
+    def _select_preset(self, name: str) -> None:
+        radio = self._preset_radios.get(name) or self._preset_radios["normal"]
+        radio.setChecked(True)
         self._apply_preset(name)
+
+    def _on_advanced_toggled(self, checked: bool) -> None:
+        self._advanced_widget.setVisible(checked)
+        self._btn_advanced.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+        )
 
     def _on_engine_changed(self, index: int) -> None:
         self._update_perf_enabled()
 
     def _update_perf_enabled(self) -> None:
-        """I preset valgono per tutti i motori; il test provider solo per LLM."""
+        """Preset per tutti i motori; 'Massima velocità' e test solo per LLM."""
         engine = self._engine_combo.currentData() or "google"
         llm = engine == "llm"
         box = getattr(self, "_box_perf", None)
         if box is not None:
-            # Preset sempre visibili/usabili (patch+worker valgono per ogni
-            # motore); le opzioni solo-LLM restano di sola lettura.
             box.setEnabled(True)
+        fastest = self._preset_radios.get("fastest")
+        if fastest is not None:
+            fastest.setEnabled(llm)
+            fastest.setToolTip(
+                "" if llm else T("settings.performance.preset.fastest.llm_only")
+            )
+            desc = self._preset_descs.get("fastest")
+            if desc is not None:
+                desc.setEnabled(llm)
         self._btn_proxy_test.setEnabled(llm)
 
     def _on_test_provider(self):
@@ -5539,9 +5588,7 @@ class SettingsDialog(QDialog):
         # Porta proxy dal config, poi applica il preset (che governa i campi).
         self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
         preset = str(cfg.get("performance_preset", "normal") or "normal")
-        idx = self._preset_combo.findData(preset)
-        self._preset_combo.setCurrentIndex(max(0, idx))
-        self._apply_preset(preset)
+        self._select_preset(preset)
         self._update_perf_enabled()
 
     def _on_ui_preview(self, index: int):
@@ -5608,14 +5655,14 @@ class SettingsDialog(QDialog):
         self._btn_test_sound.setText(T("settings.notify.test"))
         self._sleep_check.setText(T("settings.notify.prevent_sleep"))
         self._box_perf.setTitle(T("settings.group.performance"))
-        self._lbl_preset.setText(T("settings.performance.preset"))
-        self._preset_combo.setToolTip(T("settings.performance.preset.tip"))
-        self._preset_combo.blockSignals(True)
-        for i, code in enumerate(("normal", "fast", "fastest")):
-            self._preset_combo.setItemText(
-                i, T(f"settings.performance.preset.{code}")
+        for code in ("normal", "fast", "fastest"):
+            self._preset_radios[code].setText(
+                T(f"settings.performance.preset.{code}.label")
             )
-        self._preset_combo.blockSignals(False)
+            self._preset_descs[code].setText(
+                T(f"settings.performance.preset.{code}.desc")
+            )
+        self._btn_advanced.setText(T("settings.performance.advanced"))
         self._lbl_llm_workers.setText(T("settings.performance.llm_workers"))
         self._llm_workers_spin.setToolTip(
             T("settings.performance.llm_workers.tip")
@@ -5678,7 +5725,10 @@ class SettingsDialog(QDialog):
             "notify_sound": bool(self._sound_check.isChecked()),
             "prevent_sleep": bool(self._sleep_check.isChecked()),
             "llm_pool_workers": int(self._llm_workers_spin.value()),
-            "performance_preset": self._preset_combo.currentData() or "normal",
+            "performance_preset": next(
+                (code for code, radio in self._preset_radios.items() if radio.isChecked()),
+                "normal",
+            ),
             "fast_engine": bool(self._fast_engine_check.isChecked()),
             "fast_flags": bool(self._fast_flags_check.isChecked()),
             "fast_worker": bool(self._fast_worker_check.isChecked()),

@@ -565,18 +565,18 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 ### Fase 3 — LLM avanzato
 - `--openai-reasoning-effort` e `--openai-enable-json-mode` (setting UI + env
   `PDF_LLM_REASONING_EFFORT`/`PDF_LLM_JSON_MODE`), gated da `fast_engine`.
-- **Preset prestazioni** (Impostazioni → Prestazioni): un'unica scelta
-  **Normale / Veloce / Massima velocità** che **compila e blocca** tutti i campi
-  sottostanti (motore veloce, worker, modello, base URL, reasoning, pool):
-  - *Normale*: tutto OFF, Mercury, OpenRouter (~42 s/pagina);
-  - *Veloce*: patch + worker, Mercury, OpenRouter (~33-35 s);
+- **Preset prestazioni** (Impostazioni → Prestazioni): tre **card radio**
+  sempre visibili (Normale / Veloce / Massima velocità) con descrizione e tempo
+  atteso inline:
+  - *Normale*: tutto OFF, Mercury, OpenRouter (~40 s/pagina);
+  - *Veloce (consigliato)*: patch + worker, Mercury, OpenRouter (~33 s);
   - *Massima velocità*: patch + worker + gpt-oss-120B + proxy locale (autostart)
     + reasoning minimal + pool 8 (~23 s).
-  Gli altri campi sono di sola lettura; "Prova provider" resta sempre attivo.
-  I preset sono **visibili e usabili per tutti i motori** (patch+worker valgono
-  anche per google/bing); le opzioni solo-LLM (modello, base URL, reasoning,
-  JSON, proxy) non si applicano a google/bing e "Prova provider" è attivo solo
-  col motore LLM.
+  I campi che il preset governa stanno in **"Avanzate"** (collassato di default)
+  e sono di sola lettura. **Stato provider inline** + "Prova provider" sotto le
+  card. I preset valgono per tutti i motori (patch+worker anche su google/bing);
+  la card *Massima velocità* e "Prova provider" sono attive **solo col motore
+  LLM** (grigie altrove, con tooltip).
 - **Modello e base URL** sono tendine (non testo libero): *Mercury* /
   *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →
