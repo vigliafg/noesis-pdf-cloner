@@ -5171,6 +5171,8 @@ class SettingsDialog(QDialog):
         perf_form.addRow(self._fast_engine_check)
         self._fast_flags_check = QCheckBox(T("settings.performance.fast_flags"))
         self._fast_flags_check.setToolTip(T("settings.performance.fast_flags.tip"))
+        # Il preset "traduzione rapida" ha senso solo col motore veloce attivo.
+        self._fast_engine_check.toggled.connect(self._on_fast_engine_toggled)
         perf_form.addRow(self._fast_flags_check)
         inner.addWidget(self._box_perf)
 
@@ -5259,6 +5261,12 @@ class SettingsDialog(QDialog):
             parent.clear_saved_edits()
         QMessageBox.information(self, T("settings.title"), T("settings.edits.clear_done"))
 
+    def _on_fast_engine_toggled(self, enabled: bool):
+        """Abilita/disabilita il preset rapido in base al motore veloce."""
+        self._fast_flags_check.setEnabled(enabled)
+        if not enabled:
+            self._fast_flags_check.setChecked(False)
+
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
         cfg = self._cfg
@@ -5287,7 +5295,11 @@ class SettingsDialog(QDialog):
             int(cfg.get("llm_pool_workers", 4) or 4)
         )
         self._fast_engine_check.setChecked(bool(cfg.get("fast_engine", False)))
-        self._fast_flags_check.setChecked(bool(cfg.get("fast_flags", False)))
+        fast_on = self._fast_engine_check.isChecked()
+        self._fast_flags_check.setChecked(
+            fast_on and bool(cfg.get("fast_flags", False))
+        )
+        self._fast_flags_check.setEnabled(fast_on)
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""

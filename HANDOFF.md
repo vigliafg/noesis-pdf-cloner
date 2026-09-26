@@ -524,7 +524,68 @@ rilievo). Suite: **482 OK** (24 skip).
 
 ---
 
-## 10. Contesto utente
+## 10. Feature sperimentale — "motore veloce" (26/09)
+
+Obiettivo: ridurre la latenza di una pagina tradotta verso i **≤ 30 s**. Analisi
+completa in `.opencode/plan/velocita-traduzione.md` (fuori dal repo). Sintesi
+misurata: il collo di bottiglia non è solo l'LLM; una pagina costa ~31 s anche a
+traduzione istantanea, per costi fissi pagati a ogni subprocess (ri-hash dei
+font, monitor memoria, import Python, load modello).
+
+### Cosa è stato aggiunto (feature **default OFF**, reversibile)
+
+- `engine_patch.py` — patch runtime del motore:
+  - memoizza `babeldoc.assets.assets.get_font_and_metadata` (i font in cache
+    sono immutabili; oggi ri-hash 7×/pagina ≈ 6 s);
+  - sostituisce `MemoryMonitor` con un no-op (~2-3 s/pagina).
+  Idempotente e difensiva: se `babeldoc` manca/cambia, la patch è saltata.
+- `engine_wrapper.py` — launcher che applica le patch e delega a `pdf2zh_next`.
+- `clone_engine.py` — `fast_engine`/`fast_flags` (default OFF) + pool esplicito
+  (`--pool-max-workers`/`--qps`, anche =1) + preset "traduzione rapida"
+  (`--skip-scanned-detection` solo se la pagina ha testo,
+  `--skip-formula-offset-calculation`, `--no-remove-non-formula-lines`) +
+  marker cache `-fast1` + fallback automatico al binario.
+- `i18n.py` / `main.py` — due toggle in **Impostazioni → Prestazioni**
+  ("Motore veloce", "Traduzione rapida").
+- `tools/bench_page.py` — banco di misura (usa `CloneEngine`, `--fresh` =
+  `--ignore-cache`); `tools/child_profile.py` — profiler del processo figlio.
+
+### Reversibilità (runbook)
+
+1. Impostazioni → disattiva i due toggle (secondi).
+2. `NOESIS_FAST_ENGINE=0` / `NOESIS_FAST_FLAGS=0` (kill-switch, senza UI).
+3. `git checkout main` sul branch `experiment/fast-engine` (non mergiato).
+4. `git revert -m 1 <merge>` se mergiato; oppure rimozione dei file nuovi.
+Con feature OFF il comando al motore è **identico** a prima (test dedicati).
+
+### Service
+
+Allineato nello stesso branch `experiment/fast-engine` di
+`noesis-pdf-cloner-service`: `app/engine_patch.py`, `app/engine_wrapper.py`,
+`app/engine.py`, `app/config.py` (`llm_pool_workers`/`fast_engine`/`fast_flags`,
+env `PDF_LLM_POOL_WORKERS`/`FAST_ENGINE`/`FAST_FLAGS`), `worker`/`cli`/`estimate`.
+Default OFF; a OFF comportamento invariato (290 test verdi).
+
+### Follow-up noti
+
+- **Packaging**: `.github/workflows/release.yml` non bundle ancora
+  `engine_wrapper.py`/`engine_patch.py` (come `gtranslate_cli.py`). Finché non
+  lo si aggiunge, nelle build PyInstaller la feature degrada al binario
+  (fail-safe). Il file era già modificato per pin di action non correlati: da
+  aggiungere in un commit dedicato.
+- **Upstream BabelDOC**: proporre memoizzazione di `get_font_and_metadata` e
+  `MemoryMonitor` opzionale, così il wrapper diventa temporaneo.
+- **`content = None`**: aggiungere retry (marker transitorio) — vedi
+  `BENCH_LLM.md`.
+
+### Risultati benchmark (pagina 3575, EN→IT, 4 core)
+
+_(compilati al termine della sessione di benchmark — vedi
+`tools/bench_results.jsonl`)_
+
+---
+
+## 11. Contesto utente
 
 - Lingua utente: **italiano** — rispondere in italiano.
 - Requisito originale: "creare una app utilizzando il codice di noesis-pdf-reader-lite e
