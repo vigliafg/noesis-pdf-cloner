@@ -5174,6 +5174,9 @@ class SettingsDialog(QDialog):
         # Il preset "traduzione rapida" ha senso solo col motore veloce attivo.
         self._fast_engine_check.toggled.connect(self._on_fast_engine_toggled)
         perf_form.addRow(self._fast_flags_check)
+        self._fast_worker_check = QCheckBox(T("settings.performance.fast_worker"))
+        self._fast_worker_check.setToolTip(T("settings.performance.fast_worker.tip"))
+        perf_form.addRow(self._fast_worker_check)
         self._lbl_reasoning = QLabel(T("settings.performance.reasoning_effort"))
         self._reasoning_combo = QComboBox()
         for value in ("", "minimal", "low", "medium", "high"):
@@ -5275,10 +5278,12 @@ class SettingsDialog(QDialog):
     def _on_fast_engine_toggled(self, enabled: bool):
         """Abilita/disabilita le opzioni dipendenti dal motore veloce."""
         self._fast_flags_check.setEnabled(enabled)
+        self._fast_worker_check.setEnabled(enabled)
         self._reasoning_combo.setEnabled(enabled)
         self._json_mode_check.setEnabled(enabled)
         if not enabled:
             self._fast_flags_check.setChecked(False)
+            self._fast_worker_check.setChecked(False)
 
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
@@ -5313,6 +5318,10 @@ class SettingsDialog(QDialog):
             fast_on and bool(cfg.get("fast_flags", False))
         )
         self._fast_flags_check.setEnabled(fast_on)
+        self._fast_worker_check.setChecked(
+            fast_on and bool(cfg.get("fast_worker", False))
+        )
+        self._fast_worker_check.setEnabled(fast_on)
         idx = self._reasoning_combo.findData(
             str(cfg.get("llm_reasoning_effort", "") or "")
         )
@@ -5397,6 +5406,10 @@ class SettingsDialog(QDialog):
         self._fast_flags_check.setToolTip(
             T("settings.performance.fast_flags.tip")
         )
+        self._fast_worker_check.setText(T("settings.performance.fast_worker"))
+        self._fast_worker_check.setToolTip(
+            T("settings.performance.fast_worker.tip")
+        )
         self._lbl_reasoning.setText(T("settings.performance.reasoning_effort"))
         self._reasoning_combo.setToolTip(
             T("settings.performance.reasoning_effort.tip")
@@ -5434,6 +5447,7 @@ class SettingsDialog(QDialog):
             "llm_pool_workers": int(self._llm_workers_spin.value()),
             "fast_engine": bool(self._fast_engine_check.isChecked()),
             "fast_flags": bool(self._fast_flags_check.isChecked()),
+            "fast_worker": bool(self._fast_worker_check.isChecked()),
             "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
         }
@@ -8084,7 +8098,7 @@ class MainWindow(QMainWindow):
                     "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
                     "prevent_sleep", "llm_pool_workers",
                     "fast_engine", "fast_flags",
-                    "llm_reasoning_effort", "llm_json_mode"):
+                    "llm_reasoning_effort", "llm_json_mode", "fast_worker"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8314,6 +8328,11 @@ class MainWindow(QMainWindow):
             get_setting("llm_reasoning_effort", "") or ""
         )
         self._clone_engine.llm_json_mode = bool(get_setting("llm_json_mode", False))
+        self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
+        if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
+            # Pre-avvia il worker persistente (in background): il costo di avvio
+            # non ricade sulla prima pagina.
+            self._clone_engine.warmup()
 
     def _update_engine_banner(self):
         """Aggiorna le strisce informative (motore e chiave mancanti)."""
@@ -9003,6 +9022,7 @@ class MainWindow(QMainWindow):
                 self._clone_engine.llm_reasoning_effort
             )
             export_engine.llm_json_mode = self._clone_engine.llm_json_mode
+            export_engine.fast_worker = self._clone_engine.fast_worker
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,
@@ -9016,6 +9036,10 @@ class MainWindow(QMainWindow):
             dest,
             fmt,
         )
+        if export_engine is not self._clone_engine:
+            # L'engine dedicato all'export non serve più: chiude l'eventuale
+            # worker persistente per non lasciare processi orfani.
+            export_engine.close()
         if not ok:
             return
         self.status_bar.showMessage(
@@ -9336,6 +9360,9 @@ class MainWindow(QMainWindow):
         self._save_extraction_cache()
         save_config()  # flush ultima pagina / ultima tab
         self.text_panel.shutdown()
+        # Termina l'eventuale worker persistente del motore (Fase 2).
+        with contextlib.suppress(Exception):
+            self._clone_engine.close()
         super().closeEvent(event)
 
 

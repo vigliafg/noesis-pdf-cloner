@@ -52,6 +52,29 @@ il padre misura solo l'attesa. Questo wrapper sostituisce (a runtime)
 - `--patch` applica `engine_patch` prima di profilare (per confrontare con/senza).
 - Dopo `--` passano gli argomenti di `pdf2zh_next` invariati.
 
+## `provider_proxy.py` — pin del provider LLM
+
+`pdf2zh_next` non espone il routing del provider: per forzare Groq su OpenRouter
+serve il campo `provider` nel body. Il proxy lo inietta.
+
+```bash
+PROXY_PORT=8790 .venv/bin/python tools/provider_proxy.py   # in background
+.venv/bin/python tools/bench_page.py --page 3575 --runs 3 --fresh \
+    --fast --fast-flags --fast-worker --prewarm \
+    --model openai/gpt-oss-120b --base-url http://127.0.0.1:8790/v1 \
+    --reasoning-effort minimal --workers 8 --label gpt-oss-groq
+```
+
+Richiede `OPENROUTER_API_KEY`; `PROXY_PROVIDER` (default `groq`) sceglie il
+provider.
+
+## Worker persistente (Fase 2)
+
+`engine_worker.py` (lato `.venv2`) e `engine_client.py` (lato app) implementano
+il worker persistente usato da `CloneEngine` quando l'opzione sperimentale è
+attiva (`fast_engine` + `fast_worker`). Non si avviano a mano: li gestisce
+l'engine. Il bench li usa con `--fast-worker --prewarm`.
+
 ## Nota
 
 Questi tool usano `.venv/bin/python` (app: PyMuPDF) per il bench e

@@ -66,6 +66,7 @@ def _build_engine(args, cache_root: Path) -> clone_engine.CloneEngine:
     engine.llm_pool_workers = max(1, int(args.workers))
     engine.fast_engine = bool(args.fast)
     engine.fast_flags = bool(args.fast_flags)
+    engine.fast_worker = bool(args.fast_worker)
     engine.ignore_cache = bool(args.fresh)
     if args.reasoning_effort:
         engine.llm_reasoning_effort = args.reasoning_effort
@@ -120,6 +121,10 @@ def main() -> int:
                         help="usa il wrapper con le patch runtime")
     parser.add_argument("--fast-flags", action="store_true",
                         help="preset 'traduzione rapida' (B2)")
+    parser.add_argument("--fast-worker", action="store_true",
+                        help="worker persistente (Fase 2; richiede --fast)")
+    parser.add_argument("--prewarm", action="store_true",
+                        help="pre-avvia il worker prima di cronometrare")
     parser.add_argument("--fresh", action="store_true",
                         help="ignora la cache interna del motore (--ignore-cache)")
     parser.add_argument("--reasoning-effort", default="",
@@ -150,6 +155,10 @@ def main() -> int:
         return 2
     state = _instrument_tokens(engine)
 
+    if args.prewarm:
+        print("pre-avvio worker persistente...")
+        engine.prewarm()
+
     label = args.label or f"{args.engine}/{args.model or engine.llm_model}"
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,6 +188,7 @@ def main() -> int:
             "workers": args.workers,
             "fast": args.fast,
             "fast_flags": args.fast_flags,
+            "fast_worker": args.fast_worker,
             "fresh": args.fresh,
             "reasoning_effort": args.reasoning_effort,
             "json_mode": args.json_mode,
@@ -197,6 +207,7 @@ def main() -> int:
 
     if not walls:
         print("Nessuna run riuscita.", file=sys.stderr)
+        engine.close()
         return 1
 
     def _fmt(values: list[float]) -> str:
@@ -207,6 +218,7 @@ def main() -> int:
     print(f"   wall  {_fmt(walls)}")
     print(f"   cpu   {_fmt(cpus)}")
     print(f"   risultati in {out_path}")
+    engine.close()  # termina l'eventuale worker persistente
     return 0 if ok == args.runs else 1
 
 

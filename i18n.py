@@ -104,6 +104,7 @@ DEFAULTS: dict = {
     # OFF, reversibile). Vedi .opencode/plan/velocita-traduzione.md.
     "fast_engine": False,      # motore veloce (wrapper + patch runtime)
     "fast_flags": False,       # preset "traduzione rapida" (salta controlli)
+    "fast_worker": False,      # worker persistente (Fase 2, richiede fast_engine)
     # Opzioni LLM avanzate (usate solo a fast_engine attivo).
     "llm_reasoning_effort": "",  # "" | minimal | low | medium | high
     "llm_json_mode": False,      # --openai-enable-json-mode
@@ -2149,6 +2150,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Fügt Optionen hinzu, die Geometrie-/Formelprüfungen bei Textseiten überspringen. Schneller, aber Formel- und Layouttreue kann geringer sein. Ohne Wirkung bei gescannten Seiten.",
         "es": "Añade opciones que omiten comprobaciones de geometría/fórmulas cuando la página tiene texto. Más rápido, pero la fidelidad de fórmulas y diseño puede ser menor. Sin efecto en páginas escaneadas.",
     },
+    "settings.performance.fast_worker": {
+        "it": "Worker persistente (sperimentale)",
+        "en": "Persistent worker (experimental)",
+        "fr": "Worker persistant (expérimental)",
+        "de": "Persistenter Worker (experimentell)",
+        "es": "Worker persistente (experimental)",
+    },
+    "settings.performance.fast_worker.tip": {
+        "it": "Tiene un processo del motore caldo tra una pagina e l'altra: elimina gli import e i warmup ripetuti (più veloce dalla seconda pagina). Richiede il motore veloce. Se non disponibile, si torna automaticamente al metodo normale.",
+        "en": "Keeps an engine process warm between pages: removes repeated imports and warmups (faster from the second page onward). Requires the fast engine. Falls back automatically if unavailable.",
+        "fr": "Garde un processus moteur actif entre les pages : supprime les imports et warmups répétés (plus rapide dès la deuxième page). Nécessite le moteur rapide. Retour automatique si indisponible.",
+        "de": "Hält einen Engine-Prozess zwischen Seiten warm: entfernt wiederholte Importe und Warmups (schneller ab der zweiten Seite). Erfordert die schnelle Engine. Fällt automatisch zurück.",
+        "es": "Mantiene un proceso del motor caliente entre páginas: elimina importaciones y calentamientos repetidos (más rápido desde la segunda página). Requiere el motor rápido. Vuelve solo si no está disponible.",
+    },
     "settings.performance.reasoning_effort": {
         "it": "LLM: reasoning effort",
         "en": "LLM: reasoning effort",
@@ -2319,7 +2334,7 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "llm_json_mode"):
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     if raw.get("last_tab") in ("original", "translated", "images"):
         out["last_tab"] = raw["last_tab"]

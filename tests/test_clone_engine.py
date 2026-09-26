@@ -337,6 +337,80 @@ class FastEngineTests(unittest.TestCase):
         self.assertIn("--ignore-cache", captured["cmd"])
 
 
+    def _persistent_engine(self):
+        import subprocess
+
+        tmp = Path(self._tmp.name)
+        src = tmp / "book.pdf"
+        src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+        split = self.engine.split_path(1)
+        split.parent.mkdir(parents=True, exist_ok=True)
+        split.write_bytes(b"%PDF-1.4 page 1")
+        self.engine.fast_engine = True
+        self.engine.fast_worker = True
+        worker_file = tmp / "engine_worker.py"
+        worker_file.write_text("")
+        return subprocess, worker_file
+
+    def test_persistent_requires_flags_and_worker_file(self):
+        missing = Path(self._tmp.name) / "engine_worker.py"
+        with mock.patch.object(
+            clone_engine, "_engine_worker_path", return_value=missing
+        ):
+            self.engine.fast_engine = True
+            self.engine.fast_worker = True
+            self.assertFalse(self.engine._persistent_active())  # file assente
+        present = Path(self._tmp.name) / "engine_worker.py"
+        present.write_text("")
+        with mock.patch.object(
+            clone_engine, "_engine_worker_path", return_value=present
+        ):
+            self.engine.fast_worker = True
+            self.engine.fast_engine = False
+            self.assertFalse(self.engine._persistent_active())  # serve fast_engine
+            self.engine.fast_engine = True
+            self.assertTrue(self.engine._persistent_active())
+
+    def test_translate_page_uses_worker(self):
+        import subprocess
+
+        subprocess_mod, worker_file = self._persistent_engine()
+
+        def fake_worker(pdf2zh, argv, env, cancel_event=None):
+            captured["argv"] = argv
+            return subprocess_mod.CompletedProcess(argv, 0, "", "")
+
+        captured: dict = {}
+        with mock.patch.object(
+            clone_engine, "_engine_worker_path", return_value=worker_file
+        ), mock.patch.object(
+            self.engine, "_run_via_worker", fake_worker
+        ), mock.patch.object(
+            self.engine,
+            "_run_engine",
+            side_effect=AssertionError("subprocess non atteso"),
+        ):
+            self.engine.translate_page(1, "google")
+        self.assertIn("--output", captured["argv"])
+
+    def test_persistent_falls_back_to_subprocess(self):
+        import subprocess
+
+        subprocess_mod, worker_file = self._persistent_engine()
+        run_engine = mock.Mock(
+            return_value=subprocess_mod.CompletedProcess([], 0, "", "")
+        )
+        with mock.patch.object(
+            clone_engine, "_engine_worker_path", return_value=worker_file
+        ), mock.patch.object(
+            self.engine, "_run_via_worker", return_value=None
+        ), mock.patch.object(self.engine, "_run_engine", run_engine):
+            self.engine.translate_page(1, "google")
+        run_engine.assert_called_once()
+
+
 class CachePathTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

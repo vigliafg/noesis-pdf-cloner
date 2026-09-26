@@ -476,6 +476,19 @@ def _engine_wrapper_path() -> Path:
     return here
 
 
+def _engine_worker_path() -> Path:
+    """Percorso di ``engine_worker.py`` (worker persistente, sorgente/bundle)."""
+    here = Path(__file__).resolve().with_name("engine_worker.py")
+    if here.is_file():
+        return here
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled = Path(meipass) / "engine_worker.py"
+        if bundled.is_file():
+            return bundled
+    return here
+
+
 def page_has_text(path: str | Path) -> bool:
     """True se la pagina contiene testo estraibile.
 
@@ -538,6 +551,10 @@ class CloneEngine:
         # rapida". Con entrambe OFF il comando è identico a prima.
         self.fast_engine: bool = False
         self.fast_flags: bool = False
+        # Fase 2: worker persistente (richiede fast_engine attivo).
+        self.fast_worker: bool = False
+        self._worker_client = None
+        self._worker_lock = threading.Lock()
 
         # Solo per benchmark/diagnostica: forza ``--ignore-cache`` (ignora la
         # cache traduzioni interna di pdf2zh_next). Default OFF: non cambia il
@@ -943,6 +960,135 @@ class CloneEngine:
             return raw.strip().lower() in ("1", "true", "yes", "on")
         return bool(getattr(self, "fast_flags", False))
 
+    def _persistent_active(self) -> bool:
+        """True se va usato il worker persistente (Fase 2)."""
+        if not self._fast_engine_active():
+            return False
+        if not bool(getattr(self, "fast_worker", False)):
+            return False
+        return _engine_worker_path().is_file()
+
+    def _get_worker_client(self, pdf2zh: Path):
+        """Crea (una volta) il client del worker persistente."""
+        with self._worker_lock:
+            if self._worker_client is None:
+                import engine_client  # noqa: PLC0415 — import locale
+
+                client = engine_client.EngineWorkerClient(
+                    venv_python_for(pdf2zh),
+                    _engine_worker_path(),
+                    engine_client.default_work_dir(self.cache_root),
+                    idle_timeout=300.0,
+                )
+                self._worker_client = client
+            return self._worker_client
+
+    def close(self) -> None:
+        """Termina il worker persistente, se attivo (idempotente)."""
+        with self._worker_lock:
+            if self._worker_client is not None:
+                with contextlib.suppress(Exception):
+                    self._worker_client.close()
+                self._worker_client = None
+            self._warmup_started = False
+
+    def _engine_env(self) -> dict:
+        """Ambiente per il motore (subprocess o worker).
+
+        Porta le lingue alla catena gratuita (``gtranslate_cli.py``, figlio di
+        pdf2zh_next), il file eventi dei fallback e la chiave LLM **solo via
+        ambiente** (mai in argv). Condiviso tra percorso a subprocess e worker
+        persistente, così il worker riceve lo stesso ambiente.
+        """
+        env = dict(os.environ)
+        env["PDF_LANG_IN"] = self.lang_in
+        env["PDF_LANG_OUT"] = self.lang_out
+        # UTF-8 per i subprocess figli (gtranslate_cli.py): su Windows evita che
+        # le accentate escano in cp1252 e diventino U+FFFD nel pipe.
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["CLONE_ENGINE_EVENTS"] = str(self.events_file)
+        env["PDF_LLM_MODEL"] = self.llm_model
+        env["PDF_LLM_BASE_URL"] = self.llm_base_url
+        llm_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if llm_key:
+            env["PDF2ZH_OPENAI_API_KEY"] = llm_key
+        return env
+
+    def warmup(self) -> None:
+        """Pre-avvia il worker persistente in background (best effort).
+
+        Chiamato quando la feature è attiva, così il costo di avvio (import +
+        warmup asset) non ricade sulla prima pagina tradotta. Non fa nulla se
+        già avviato e non solleva mai.
+        """
+        if not self._persistent_active():
+            return
+        with self._worker_lock:
+            if getattr(self, "_warmup_started", False):
+                return
+            self._warmup_started = True
+
+        def _go() -> None:
+            try:
+                pdf2zh = self.pdf2zh_bin()
+                if pdf2zh is None:
+                    return
+                client = self._get_worker_client(pdf2zh)
+                client.ensure_started(self._engine_env())
+                log.info("worker persistente pronto")
+            except Exception:  # noqa: BLE001
+                log.warning("pre-avvio worker fallito", exc_info=True)
+
+        threading.Thread(target=_go, name="engine-warmup", daemon=True).start()
+
+    def prewarm(self, timeout: float = 180.0) -> bool:
+        """Avvia il worker persistente **in modo sincrono** (per i benchmark).
+
+        Ritorna True se il worker è pronto. Non solleva.
+        """
+        if not self._persistent_active():
+            return False
+        pdf2zh = self.pdf2zh_bin()
+        if pdf2zh is None:
+            return False
+        try:
+            client = self._get_worker_client(pdf2zh)
+            client.ready_timeout = float(timeout)
+            client.ensure_started(self._engine_env())
+            return True
+        except Exception:  # noqa: BLE001
+            log.warning("prewarm del worker fallito", exc_info=True)
+            return False
+
+    def _run_via_worker(
+        self,
+        pdf2zh: Path,
+        argv: list[str],
+        env: dict,
+        cancel_event: threading.Event | None,
+    ):
+        """Esegue il job sul worker persistente.
+
+        Ritorna un ``CompletedProcess`` oppure ``None`` se il worker non è
+        disponibile (il chiamante ricade sul subprocess: fail-safe).
+        """
+        import engine_client  # noqa: PLC0415
+
+        client = self._get_worker_client(pdf2zh)
+        try:
+            return client.run(
+                argv, env, cancel_event=cancel_event, timeout=PAGE_TIMEOUT
+            )
+        except engine_client.WorkerCancelled as exc:
+            raise TranslationCancelled("traduzione annullata") from exc
+        except engine_client.WorkerTimeout as exc:
+            raise RuntimeError("timeout della traduzione") from exc
+        except engine_client.WorkerError as exc:
+            log.warning(
+                "worker persistente non disponibile (%s): uso il subprocess", exc
+            )
+            return None
+
     def _engine_launch_prefix(self, pdf2zh: Path) -> list[str]:
         """Prefisso del comando per invocare il motore.
 
@@ -1085,7 +1231,8 @@ class CloneEngine:
             out_dir = self.translated_root / "_tmp" / f"tmp_{page:06d}_{engine}"
             shutil.rmtree(out_dir, ignore_errors=True)
             out_dir.mkdir(parents=True, exist_ok=True)
-            cmd = self._engine_launch_prefix(pdf2zh) + [
+            prefix = self._engine_launch_prefix(pdf2zh)
+            argv = [
                 str(sp),
                 "--lang-in", self.lang_in,
                 "--lang-out", self.lang_out,
@@ -1098,30 +1245,18 @@ class CloneEngine:
             ] + t_flags + self._quality_flags(sp)
             if self.ignore_cache:
                 # Solo benchmark: forza il lavoro reale del motore.
-                cmd.append("--ignore-cache")
+                argv.append("--ignore-cache")
+            cmd = prefix + argv
             # L'ambiente porta le lingue alla catena gratuita (gtranslate_cli.py,
             # eseguito come figlio di pdf2zh_next) e il file eventi dei fallback.
-            env = dict(os.environ)
-            env["PDF_LANG_IN"] = self.lang_in
-            env["PDF_LANG_OUT"] = self.lang_out
-            # UTF-8 per i subprocess figli (gtranslate_cli.py): su Windows evita
-            # che le accentate escano in cp1252 e diventino U+FFFD nel pipe.
-            env["PYTHONIOENCODING"] = "utf-8"
-            env["CLONE_ENGINE_EVENTS"] = str(self.events_file)
-            # Il fallback LLM della catena gratuita usa gli stessi modello e
-            # base URL dell'engine, anche se cambiati via codice (come nel
-            # servizio).
-            env["PDF_LLM_MODEL"] = self.llm_model
-            env["PDF_LLM_BASE_URL"] = self.llm_base_url
-            # Chiave LLM: passata solo via ambiente, mai in argv. `OPENROUTER_API_KEY`
-            # serve al fallback LLM della catena gratuita (gtranslate_cli.py);
-            # `PDF2ZH_OPENAI_API_KEY` è la variabile letta da pdf2zh_next (prefisso PDF2ZH_).
-            llm_key = os.environ.get("OPENROUTER_API_KEY", "")
-            if llm_key:
-                env["PDF2ZH_OPENAI_API_KEY"] = llm_key
+            env = self._engine_env()
             try:
                 log.info("traduzione pagina %d via %s...", page, t_name)
-                r = self._run_engine(cmd, env, cancel_event)
+                r = None
+                if self._persistent_active():
+                    r = self._run_via_worker(pdf2zh, argv, env, cancel_event)
+                if r is None:
+                    r = self._run_engine(cmd, env, cancel_event)
                 log.info("pdf2zh_next pagina %d: rc=%d", page, r.returncode)
                 if r.returncode != 0:
                     code = _engine_failure_code(engine, r.stderr, r.stdout)
