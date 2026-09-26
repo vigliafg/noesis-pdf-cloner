@@ -132,6 +132,33 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         chime.assert_called_once_with(True)
         dlg.close()
 
+    def test_llm_model_and_base_are_combos_with_presets(self):
+        dlg = self.main.SettingsDialog()
+        models = [
+            dlg._llm_model_combo.itemData(i)
+            for i in range(dlg._llm_model_combo.count())
+        ]
+        self.assertIn("inception/mercury-2.5", models)
+        self.assertIn("openai/gpt-oss-120b", models)
+        bases = [
+            dlg._llm_base_combo.itemData(i)
+            for i in range(dlg._llm_base_combo.count())
+        ]
+        self.assertIn("__proxy__", bases)
+        self.assertIn("", bases)
+
+    def test_llm_values_map_combo_selection(self):
+        dlg = self.main.SettingsDialog()
+        idx = dlg._llm_model_combo.findData("openai/gpt-oss-120b")
+        dlg._llm_model_combo.setCurrentIndex(idx)
+        idx = dlg._llm_base_combo.findData("__proxy__")
+        dlg._llm_base_combo.setCurrentIndex(idx)
+        dlg._proxy_port_spin.setValue(8791)
+        values = dlg.values()
+        self.assertEqual(values["llm_model"], "openai/gpt-oss-120b")
+        self.assertEqual(values["llm_base_url"], "http://127.0.0.1:8791/v1")
+        dlg.close()
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class MainWindowRefinementsTests(unittest.TestCase):

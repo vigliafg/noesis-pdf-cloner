@@ -565,9 +565,11 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 ### Fase 3 — LLM avanzato
 - `--openai-reasoning-effort` e `--openai-enable-json-mode` (setting UI + env
   `PDF_LLM_REASONING_EFFORT`/`PDF_LLM_JSON_MODE`), gated da `fast_engine`.
-- **Modello e base URL in Impostazioni** (`llm_model`, `llm_base_url`; vuoto =
-  default o env `PDF_LLM_MODEL`/`PDF_LLM_BASE_URL`): si passa da Mercury a
-  gpt-oss o al proxy senza variabili d'ambiente.
+- **Modello e base URL in Impostazioni** come **menu a tendina** (non testo
+  libero): modello = *Mercury*, *gpt-oss-120B*, *Default (env)*; base URL =
+  *OpenRouter (default)* o *Proxy locale (pin Groq)*. Valori custom già salvati
+  restano come voce. Sotto: `llm_model`/`llm_base_url` (vuoto = default o env
+  `PDF_LLM_MODEL`/`PDF_LLM_BASE_URL`).
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →
   Prestazioni, "Avvia automaticamente il proxy provider" + porta; l'app avvia
   `tools/provider_proxy.py` in background, punta la base URL al proxy e lo

@@ -5213,13 +5213,14 @@ class SettingsDialog(QDialog):
         self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
         perf_form.addRow(self._json_mode_check)
         self._lbl_llm_model = QLabel(T("settings.llm.model"))
-        self._llm_model_edit = QLineEdit()
-        self._llm_model_edit.setToolTip(T("settings.llm.model.tip"))
-        perf_form.addRow(self._lbl_llm_model, self._llm_model_edit)
+        self._llm_model_combo = QComboBox()
+        self._llm_model_combo.setToolTip(T("settings.llm.model.tip"))
+        perf_form.addRow(self._lbl_llm_model, self._llm_model_combo)
         self._lbl_llm_base = QLabel(T("settings.llm.base_url"))
-        self._llm_base_edit = QLineEdit()
-        self._llm_base_edit.setToolTip(T("settings.llm.base_url.tip"))
-        perf_form.addRow(self._lbl_llm_base, self._llm_base_edit)
+        self._llm_base_combo = QComboBox()
+        self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
+        perf_form.addRow(self._lbl_llm_base, self._llm_base_combo)
+        self._populate_llm_combos()
         # Proxy provider locale: avvio automatico + prova.
         self._proxy_autostart_check = QCheckBox(T("settings.proxy.autostart"))
         self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
@@ -5343,6 +5344,11 @@ class SettingsDialog(QDialog):
 
     def _on_proxy_autostart_toggled(self, enabled: bool):
         self._proxy_port_spin.setEnabled(enabled and self._fast_engine_check.isChecked())
+        if enabled:
+            # Allinea la selezione alla base URL del proxy.
+            idx = self._llm_base_combo.findData("__proxy__")
+            if idx >= 0:
+                self._llm_base_combo.setCurrentIndex(idx)
 
     def _on_test_provider(self):
         """Avvia la prova provider in background e mostra l'esito."""
@@ -5355,11 +5361,8 @@ class SettingsDialog(QDialog):
             if callable(ensure):
                 ensure(port)
         else:
-            base = (
-                self._llm_base_edit.text().strip()
-                or clone_engine.DEFAULT_BASE_URL
-            )
-        model = self._llm_model_edit.text().strip() or clone_engine.DEFAULT_MODEL
+            base = self._selected_base_url() or clone_engine.DEFAULT_BASE_URL
+        model = self._llm_model_combo.currentData() or clone_engine.DEFAULT_MODEL
         key = (os.environ.get(keystore.ENV_VAR) or "").strip()
         self._proxy_test_result.setText(T("settings.proxy.test.running"))
         self._proxy_test_result.setStyleSheet(_status_style("text5"))
@@ -5383,6 +5386,49 @@ class SettingsDialog(QDialog):
                 T("settings.proxy.test.error", error=outcome.get("error") or "?")
             )
             self._proxy_test_result.setStyleSheet(_status_style("err"))
+
+    def _populate_llm_combos(self, model_value=None, base_value=None):
+        """Riempe i menu modello/base URL preservando la selezione e i custom."""
+        model = (
+            model_value
+            if model_value is not None
+            else self._llm_model_combo.currentData()
+        )
+        self._llm_model_combo.clear()
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.mercury"), "inception/mercury-2.5"
+        )
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.gptoss"), "openai/gpt-oss-120b"
+        )
+        self._llm_model_combo.addItem(T("settings.llm.model.default"), "")
+        if model and self._llm_model_combo.findData(model) < 0:
+            self._llm_model_combo.addItem(model, model)
+        self._llm_model_combo.setCurrentIndex(
+            max(0, self._llm_model_combo.findData(model or ""))
+        )
+
+        base = (
+            base_value
+            if base_value is not None
+            else self._llm_base_combo.currentData()
+        )
+        self._llm_base_combo.clear()
+        self._llm_base_combo.addItem(T("settings.llm.base.openrouter"), "")
+        self._llm_base_combo.addItem(T("settings.llm.base.proxy"), "__proxy__")
+        if base and base != "__proxy__" and self._llm_base_combo.findData(base) < 0:
+            self._llm_base_combo.addItem(base, base)
+        self._llm_base_combo.setCurrentIndex(
+            max(0, self._llm_base_combo.findData(base or ""))
+        )
+
+    def _selected_base_url(self) -> str:
+        """Base URL effettiva dalla selezione corrente (proxy o preset)."""
+        selected = self._llm_base_combo.currentData() or ""
+        if selected == "__proxy__":
+            port = int(self._proxy_port_spin.value())
+            return f"http://127.0.0.1:{port}/v1"
+        return selected
 
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
@@ -5428,8 +5474,13 @@ class SettingsDialog(QDialog):
         self._reasoning_combo.setEnabled(fast_on)
         self._json_mode_check.setChecked(bool(cfg.get("llm_json_mode", False)))
         self._json_mode_check.setEnabled(fast_on)
-        self._llm_model_edit.setText(str(cfg.get("llm_model", "") or ""))
-        self._llm_base_edit.setText(str(cfg.get("llm_base_url", "") or ""))
+        model_val = str(cfg.get("llm_model", "") or "")
+        base_val = str(cfg.get("llm_base_url", "") or "")
+        port = int(cfg.get("llm_proxy_port", 8790) or 8790)
+        base_display = (
+            "__proxy__" if base_val == f"http://127.0.0.1:{port}/v1" else base_val
+        )
+        self._populate_llm_combos(model_val, base_display)
         self._proxy_autostart_check.setChecked(
             bool(cfg.get("llm_proxy_autostart", False))
         )
@@ -5527,9 +5578,10 @@ class SettingsDialog(QDialog):
         self._json_mode_check.setText(T("settings.performance.json_mode"))
         self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
         self._lbl_llm_model.setText(T("settings.llm.model"))
-        self._llm_model_edit.setToolTip(T("settings.llm.model.tip"))
+        self._llm_model_combo.setToolTip(T("settings.llm.model.tip"))
         self._lbl_llm_base.setText(T("settings.llm.base_url"))
-        self._llm_base_edit.setToolTip(T("settings.llm.base_url.tip"))
+        self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
+        self._populate_llm_combos()
         self._proxy_autostart_check.setText(T("settings.proxy.autostart"))
         self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
         self._lbl_proxy_port.setText(T("settings.proxy.port"))
@@ -5570,8 +5622,8 @@ class SettingsDialog(QDialog):
             "fast_worker": bool(self._fast_worker_check.isChecked()),
             "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
-            "llm_model": self._llm_model_edit.text().strip(),
-            "llm_base_url": self._llm_base_edit.text().strip(),
+            "llm_model": self._llm_model_combo.currentData() or "",
+            "llm_base_url": self._selected_base_url(),
             "llm_proxy_autostart": bool(self._proxy_autostart_check.isChecked()),
             "llm_proxy_port": int(self._proxy_port_spin.value()),
         }
