@@ -526,11 +526,13 @@ rilievo). Suite: **482 OK** (24 skip).
 
 ## 10. Feature sperimentale — "motore veloce" (26/09)
 
-Obiettivo: ridurre la latenza di una pagina tradotta verso i **≤ 30 s**. Analisi
-completa in `.opencode/plan/velocita-traduzione.md` (fuori dal repo). Sintesi
-misurata: il collo di bottiglia non è solo l'LLM; una pagina costa ~31 s anche a
-traduzione istantanea, per costi fissi pagati a ogni subprocess (ri-hash dei
-font, monitor memoria, import Python, load modello).
+Obiettivo: ridurre la latenza **a freddo** (prima traduzione, LLM chiamato)
+di una pagina tradotta verso i **≤ 30 s**. Le misure *a caldo* (cache interna
+del motore) restano solo **diagnostiche** (isolano il pavimento fisso della
+pipeline PDF). Analisi completa in `.opencode/plan/velocita-traduzione.md`
+(fuori dal repo). Sintesi misurata: il collo di bottiglia non è solo l'LLM; una
+pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
+(ri-hash dei font, monitor memoria, import Python, load modello).
 
 ### Cosa è stato aggiunto (feature **default OFF**, reversibile)
 
