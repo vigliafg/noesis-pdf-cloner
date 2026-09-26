@@ -25,3 +25,7 @@ ha22.pdf
 
 # exported translated ranges (artefatti di test/ispezione)
 ha22_pag*.pdf
+
+# risultati dei benchmark (artefatti locali)
+tools/bench_results.jsonl
+*.prof

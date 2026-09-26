@@ -17,6 +17,13 @@ Flusso per ogni pagina ed engine:
   1. split: estrazione della singola pagina in un PDF leggero (cache/split/)
   2. traduzione della pagina via pdf2zh_next CLI
   3. il ``*.mono.pdf`` prodotto viene spostato in cache/translated/<engine>/
+
+Feature sperimentale "motore veloce" (``fast_engine``, default OFF): quando
+attiva il motore è invocato via ``engine_wrapper.py`` (patch runtime in
+``engine_patch.py``) e, con ``fast_flags``, si aggiungono i flag del preset
+"traduzione rapida". Con la feature OFF il comando è identico a prima. Kill
+switch d'ambiente: ``NOESIS_FAST_ENGINE=0``. Vedi
+``.opencode/plan/velocita-traduzione.md``.
 """
 
 from __future__ import annotations
@@ -61,6 +68,10 @@ LLM_TIMEOUT = 90  # secondi: timeout per singola chiamata LLM
 # Versione dello schema di cache: incrementarla invalida la cache esistente
 # (evita di servire output prodotti da versioni diverse del motore).
 CACHE_SCHEMA_VERSION = "1"
+
+# Marker di cache della feature sperimentale "motore veloce". Deve restare
+# allineato a ``engine_patch.PATCH_VERSION`` (suffix "-fast<N>").
+FAST_ENGINE_TAG = "fast1"
 
 
 class TranslationCancelled(RuntimeError):
@@ -447,6 +458,19 @@ def _gtranslate_cli_path() -> Path:
     return here
 
 
+def _engine_wrapper_path() -> Path:
+    """Percorso di ``engine_wrapper.py`` (feature fast, sorgente o bundle)."""
+    here = Path(__file__).resolve().with_name("engine_wrapper.py")
+    if here.is_file():
+        return here
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled = Path(meipass) / "engine_wrapper.py"
+        if bundled.is_file():
+            return bundled
+    return here
+
+
 def page_has_text(path: str | Path) -> bool:
     """True se la pagina contiene testo estraibile.
 
@@ -496,6 +520,18 @@ class CloneEngine:
         # alza il throughput. Impostato dall'app da ``llm_pool_workers``.
         self.llm_pool_workers: int = 4
         self.llm_timeout: int = LLM_TIMEOUT
+
+        # Feature sperimentale "motore veloce" (default OFF). Quando attiva il
+        # motore viene lanciato via ``engine_wrapper.py`` (patch runtime) e, se
+        # ``fast_flags`` è attivo, si aggiungono i flag del preset "traduzione
+        # rapida". Con entrambe OFF il comando è identico a prima.
+        self.fast_engine: bool = False
+        self.fast_flags: bool = False
+
+        # Solo per benchmark/diagnostica: forza ``--ignore-cache`` (ignora la
+        # cache traduzioni interna di pdf2zh_next). Default OFF: non cambia il
+        # comportamento normale, che usa la cache.
+        self.ignore_cache: bool = False
 
         self._src_pdf: Path | None = None
         self._doc_key: str = ""
@@ -561,15 +597,20 @@ class CloneEngine:
         return f"{self.lang_in}-{self.lang_out}"
 
     def _version_tag(self) -> str:
-        """Segmento di cache: schema + modello LLM.
+        """Segmento di cache: schema + modello LLM (+ marker fast).
 
         Evita di riusare output prodotti da versioni diverse del motore o da un
-        modello LLM diverso (come nella versione server).
+        modello LLM diverso (come nella versione server). Con la feature
+        sperimentale attiva si aggiunge ``-fast<N>``: così abilitare/disabilitare
+        non mescola output prodotti con preset diversi e il rollback torna a
+        riusare la cache storica.
         """
         tag = f"cs{CACHE_SCHEMA_VERSION}"
         model = (self.llm_model or "").strip()
         if model:
             tag += "-" + hashlib.sha1(model.encode()).hexdigest()[:8]
+        if self._fast_engine_active():
+            tag += f"-{FAST_ENGINE_TAG}"
         return tag
 
     def split_path(self, page: int) -> Path:
@@ -870,6 +911,67 @@ class CloneEngine:
 
     # ── traduzione ────────────────────────────────────────────────────
 
+    def _fast_engine_active(self) -> bool:
+        """True se la feature "motore veloce" è attiva (setting o env).
+
+        L'override d'ambiente ``NOESIS_FAST_ENGINE`` vince sul setting ed è il
+        kill-switch di rollback: ``NOESIS_FAST_ENGINE=0`` riporta al percorso
+        storico anche se la UI ha il flag attivo.
+        """
+        raw = os.environ.get("NOESIS_FAST_ENGINE")
+        if raw is not None and raw.strip():
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+        return bool(getattr(self, "fast_engine", False))
+
+    def _fast_flags_active(self) -> bool:
+        """True se il preset "traduzione rapida" (flag B2) è attivo."""
+        if not self._fast_engine_active():
+            return False
+        raw = os.environ.get("NOESIS_FAST_FLAGS")
+        if raw is not None and raw.strip():
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+        return bool(getattr(self, "fast_flags", False))
+
+    def _engine_launch_prefix(self, pdf2zh: Path) -> list[str]:
+        """Prefisso del comando per invocare il motore.
+
+        Con la feature attiva e il wrapper presente usa
+        ``<venv2-python> engine_wrapper.py`` (patch runtime); altrimenti il
+        binario diretto (percorso storico). Fail-safe: se il wrapper manca si
+        torna al binario, così l'esperimento non può bloccare la traduzione.
+        """
+        if self._fast_engine_active():
+            wrapper = _engine_wrapper_path()
+            if wrapper.is_file():
+                py = venv_python_for(pdf2zh)
+                return [py, str(wrapper)]
+            log.warning(
+                "fast_engine attivo ma engine_wrapper.py assente: uso il "
+                "binario diretto"
+            )
+        return [str(pdf2zh)]
+
+    def _quality_flags(self, split_path: Path) -> list[str]:
+        """Flag "traduzione rapida" (B2), solo a feature attiva.
+
+        ``--skip-scanned-detection`` è sicuro solo se la pagina ha testo:
+        su una scansione disattiverebbe il rilevamento/OCR workaround, quindi
+        si omette e si lascia il comportamento normale.
+        """
+        if not self._fast_flags_active():
+            return []
+        flags = [
+            "--skip-formula-offset-calculation",
+            "--no-remove-non-formula-lines",
+        ]
+        try:
+            from_text = page_has_text(split_path)
+        except Exception:  # noqa: BLE001 — in dubbio, non saltare il rilevamento
+            from_text = False
+        if from_text:
+            flags.append("--skip-scanned-detection")
+        return flags
+
     def _translator_flags(self, engine: str) -> tuple[list[str], str]:
         """Flag CLI di pdf2zh_next per l'engine scelto, + nome descrittivo."""
         if normalize_engine(engine) == "llm":
@@ -886,7 +988,16 @@ class CloneEngine:
                 "--no-auto-extract-glossary",
             ]
             workers = max(1, int(getattr(self, "llm_pool_workers", 1) or 1))
-            if workers > 1:
+            if self._fast_engine_active():
+                # Con la feature attiva il pool è sempre esplicito (anche =1):
+                # altrimenti pdf2zh usa ``qps`` (default 4) come numero di
+                # worker e ``llm_pool_workers=1`` NON sarebbe sequenziale.
+                # ``--qps`` allineato evita che il rate limiter strozzi il pool.
+                flags += [
+                    "--pool-max-workers", str(workers),
+                    "--qps", str(workers),
+                ]
+            elif workers > 1:
                 # Più segmenti tradotti insieme dentro la stessa pagina.
                 flags += ["--pool-max-workers", str(workers)]
             return (flags, f"llm ({self.llm_model})")
@@ -955,8 +1066,7 @@ class CloneEngine:
             out_dir = self.translated_root / "_tmp" / f"tmp_{page:06d}_{engine}"
             shutil.rmtree(out_dir, ignore_errors=True)
             out_dir.mkdir(parents=True, exist_ok=True)
-            cmd = [
-                str(pdf2zh),
+            cmd = self._engine_launch_prefix(pdf2zh) + [
                 str(sp),
                 "--lang-in", self.lang_in,
                 "--lang-out", self.lang_out,
@@ -966,7 +1076,10 @@ class CloneEngine:
                 "--only-include-translated-page",
                 "--disable-config-auto-save",
                 "--disable-gui-sensitive-input",
-            ] + t_flags
+            ] + t_flags + self._quality_flags(sp)
+            if self.ignore_cache:
+                # Solo benchmark: forza il lavoro reale del motore.
+                cmd.append("--ignore-cache")
             # L'ambiente porta le lingue alla catena gratuita (gtranslate_cli.py,
             # eseguito come figlio di pdf2zh_next) e il file eventi dei fallback.
             env = dict(os.environ)

@@ -100,6 +100,10 @@ DEFAULTS: dict = {
     "notify_sound": True,      # suono d'avviso a fine batch
     "prevent_sleep": True,     # impedisci lo standby durante la traduzione
     "llm_pool_workers": 4,     # richieste LLM in parallelo dentro una pagina
+    # Feature sperimentale "motore veloce": patch runtime del motore (default
+    # OFF, reversibile). Vedi .opencode/plan/velocita-traduzione.md.
+    "fast_engine": False,      # motore veloce (wrapper + patch runtime)
+    "fast_flags": False,       # preset "traduzione rapida" (salta controlli)
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -2114,6 +2118,34 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Wie viele Textabschnitte die LLM-Engine gleichzeitig übersetzt. Höher ist schneller, kann aber die Dienstlimits erreichen.",
         "es": "Cuántos fragmentos de texto traducir a la vez con el motor LLM. Más alto es más rápido, pero puede alcanzar los límites del servicio.",
     },
+    "settings.performance.fast_engine": {
+        "it": "Motore veloce (sperimentale)",
+        "en": "Fast engine (experimental)",
+        "fr": "Moteur rapide (expérimental)",
+        "de": "Schnelle Engine (experimentell)",
+        "es": "Motor rápido (experimental)",
+    },
+    "settings.performance.fast_engine.tip": {
+        "it": "Avvia il motore tramite un wrapper che applica patch di velocità (cache dei font, niente monitor memoria). Non cambia il risultato. Disattivalo per tornare al comportamento standard.",
+        "en": "Runs the engine through a wrapper that applies speed patches (font cache, no memory monitor). The result is unchanged. Turn it off to return to the standard behaviour.",
+        "fr": "Lance le moteur via un wrapper qui applique des correctifs de vitesse (cache des polices, sans moniteur mémoire). Le résultat est inchangé. Désactivez-le pour revenir au comportement standard.",
+        "de": "Startet die Engine über einen Wrapper mit Geschwindigkeits-Patches (Font-Cache, kein Speicher-Monitor). Das Ergebnis bleibt gleich. Deaktivieren für das Standardverhalten.",
+        "es": "Ejecuta el motor mediante un wrapper que aplica mejoras de velocidad (caché de fuentes, sin monitor de memoria). El resultado no cambia. Desactívalo para volver al comportamiento estándar.",
+    },
+    "settings.performance.fast_flags": {
+        "it": "Traduzione rapida: salta controlli avanzati (sperimentale)",
+        "en": "Fast translation: skip advanced checks (experimental)",
+        "fr": "Traduction rapide : ignorer les contrôles avancés (expérimental)",
+        "de": "Schnelle Übersetzung: erweiterte Prüfungen überspringen (experimentell)",
+        "es": "Traducción rápida: omitir comprobaciones avanzadas (experimental)",
+    },
+    "settings.performance.fast_flags.tip": {
+        "it": "Aggiunge flag che saltano controlli geometrici/formule quando la pagina ha testo. Più veloce, ma la resa di formule e layout può risultare meno precisa. Su pagine scansionate non ha effetto.",
+        "en": "Adds flags that skip geometry/formula checks when the page has text. Faster, but formula and layout fidelity may be lower. Has no effect on scanned pages.",
+        "fr": "Ajoute des options qui ignorent les contrôles de géométrie/formules lorsque la page contient du texte. Plus rapide, mais la fidélité des formules et de la mise en page peut baisser. Sans effet sur les pages scannées.",
+        "de": "Fügt Optionen hinzu, die Geometrie-/Formelprüfungen bei Textseiten überspringen. Schneller, aber Formel- und Layouttreue kann geringer sein. Ohne Wirkung bei gescannten Seiten.",
+        "es": "Añade opciones que omiten comprobaciones de geometría/fórmulas cuando la página tiene texto. Más rápido, pero la fidelidad de fórmulas y diseño puede ser menor. Sin efecto en páginas escaneadas.",
+    },
     # ── notifiche (contenuti) ───────────────────────────────────────────────
     "notify.batch.title": {
         "it": "Traduzione completata", "en": "Translation complete",
@@ -2256,7 +2288,7 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed"):
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     if raw.get("last_tab") in ("original", "translated", "images"):
         out["last_tab"] = raw["last_tab"]

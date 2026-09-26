@@ -170,6 +170,160 @@ class FlagsTests(unittest.TestCase):
         self.assertEqual(shlex.split(command), [win_py, win_cli])
 
 
+class FastEngineTests(unittest.TestCase):
+    """Feature "motore veloce" (sperimentale, default OFF, reversibile)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        self.pdf2zh = tmp / "pdf2zh_next"
+        self.pdf2zh.write_text("#!/bin/sh\n")
+        self.engine = clone_engine.CloneEngine(
+            tmp / "cache", pdf2zh_bin=self.pdf2zh
+        )
+
+    def tearDown(self):
+        os.environ.pop("NOESIS_FAST_ENGINE", None)
+        os.environ.pop("NOESIS_FAST_FLAGS", None)
+        self._tmp.cleanup()
+
+    def test_default_off_uses_binary(self):
+        self.assertFalse(self.engine._fast_engine_active())
+        self.assertEqual(
+            self.engine._engine_launch_prefix(self.pdf2zh), [str(self.pdf2zh)]
+        )
+
+    def test_env_killswitch_overrides_setting(self):
+        self.engine.fast_engine = True
+        os.environ["NOESIS_FAST_ENGINE"] = "0"
+        self.assertFalse(self.engine._fast_engine_active())
+        self.assertEqual(
+            self.engine._engine_launch_prefix(self.pdf2zh), [str(self.pdf2zh)]
+        )
+
+    def test_env_enables_without_setting(self):
+        os.environ["NOESIS_FAST_ENGINE"] = "1"
+        self.assertTrue(self.engine._fast_engine_active())
+
+    def test_wrapper_used_when_enabled_and_present(self):
+        self.engine.fast_engine = True
+        wrapper = Path(self._tmp.name) / "engine_wrapper.py"
+        wrapper.write_text("")
+        with mock.patch.object(
+            clone_engine, "_engine_wrapper_path", return_value=wrapper
+        ), mock.patch.object(
+            clone_engine, "venv_python_for", return_value="/venv/python"
+        ):
+            prefix = self.engine._engine_launch_prefix(self.pdf2zh)
+        self.assertEqual(prefix, ["/venv/python", str(wrapper)])
+
+    def test_missing_wrapper_falls_back_to_binary(self):
+        self.engine.fast_engine = True
+        missing = Path(self._tmp.name) / "missing_wrapper.py"
+        with mock.patch.object(
+            clone_engine, "_engine_wrapper_path", return_value=missing
+        ):
+            prefix = self.engine._engine_launch_prefix(self.pdf2zh)
+        self.assertEqual(prefix, [str(self.pdf2zh)])
+
+    def test_pool_workers_explicit_only_when_fast(self):
+        self.engine.llm_pool_workers = 1
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertNotIn("--pool-max-workers", flags)  # comportamento storico
+        self.engine.fast_engine = True
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertEqual(flags[flags.index("--pool-max-workers") + 1], "1")
+        self.assertEqual(flags[flags.index("--qps") + 1], "1")
+
+    def test_quality_flags_gated_by_fast_flags(self):
+        self.engine.fast_engine = True
+        self.engine.fast_flags = False
+        self.assertEqual(self.engine._quality_flags(self.pdf2zh), [])
+        self.engine.fast_flags = True
+        with mock.patch.object(clone_engine, "page_has_text", return_value=True):
+            flags = self.engine._quality_flags(self.pdf2zh)
+        self.assertIn("--skip-scanned-detection", flags)
+        self.assertIn("--skip-formula-offset-calculation", flags)
+
+    def test_skip_scanned_omitted_for_textless_page(self):
+        self.engine.fast_engine = True
+        self.engine.fast_flags = True
+        with mock.patch.object(clone_engine, "page_has_text", return_value=False):
+            flags = self.engine._quality_flags(self.pdf2zh)
+        self.assertNotIn("--skip-scanned-detection", flags)
+
+    def test_fast_flags_env_killswitch(self):
+        self.engine.fast_engine = True
+        self.engine.fast_flags = True
+        os.environ["NOESIS_FAST_FLAGS"] = "0"
+        self.assertEqual(self.engine._quality_flags(self.pdf2zh), [])
+
+    def test_version_tag_marker(self):
+        tag_off = self.engine._version_tag()
+        self.assertNotIn(clone_engine.FAST_ENGINE_TAG, tag_off)
+        self.engine.fast_engine = True
+        tag_on = self.engine._version_tag()
+        self.assertIn(clone_engine.FAST_ENGINE_TAG, tag_on)
+        self.assertNotEqual(tag_off, tag_on)
+
+    def test_translate_page_uses_wrapper_and_quality_flags(self):
+        import subprocess
+
+        tmp = Path(self._tmp.name)
+        src = tmp / "book.pdf"
+        src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+        split = self.engine.split_path(1)
+        split.parent.mkdir(parents=True, exist_ok=True)
+        split.write_bytes(b"%PDF-1.4 page 1")
+        self.engine.fast_engine = True
+        self.engine.fast_flags = True
+        wrapper = tmp / "engine_wrapper.py"
+        wrapper.write_text("")
+        captured: dict = {}
+
+        def fake_run(cmd, env, cancel_event=None):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with mock.patch.object(
+            clone_engine, "_engine_wrapper_path", return_value=wrapper
+        ), mock.patch.object(
+            clone_engine, "venv_python_for", return_value="/venv/python"
+        ), mock.patch.object(
+            clone_engine, "page_has_text", return_value=True
+        ), mock.patch.object(self.engine, "_run_engine", fake_run):
+            self.engine.translate_page(1, "google")
+
+        cmd = captured["cmd"]
+        self.assertEqual(cmd[:2], ["/venv/python", str(wrapper)])
+        self.assertIn("--skip-scanned-detection", cmd)
+
+    def test_ignore_cache_flag_for_benchmark(self):
+        import subprocess
+
+        tmp = Path(self._tmp.name)
+        src = tmp / "book.pdf"
+        src.write_bytes(b"%PDF-1.4 source")
+        self.engine.set_document(src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+        split = self.engine.split_path(1)
+        split.parent.mkdir(parents=True, exist_ok=True)
+        split.write_bytes(b"%PDF-1.4 page 1")
+        self.engine.ignore_cache = True
+
+        captured: dict = {}
+
+        def fake_run(cmd, env, cancel_event=None):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with mock.patch.object(self.engine, "_run_engine", fake_run):
+            self.engine.translate_page(1, "google")
+        self.assertIn("--ignore-cache", captured["cmd"])
+
+
 class CachePathTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

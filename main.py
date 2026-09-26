@@ -5163,6 +5163,15 @@ class SettingsDialog(QDialog):
             T("settings.performance.llm_workers.tip")
         )
         perf_form.addRow(self._lbl_llm_workers, self._llm_workers_spin)
+        # Feature sperimentale "motore veloce" (reversibile, default OFF).
+        self._fast_engine_check = QCheckBox(T("settings.performance.fast_engine"))
+        self._fast_engine_check.setToolTip(
+            T("settings.performance.fast_engine.tip")
+        )
+        perf_form.addRow(self._fast_engine_check)
+        self._fast_flags_check = QCheckBox(T("settings.performance.fast_flags"))
+        self._fast_flags_check.setToolTip(T("settings.performance.fast_flags.tip"))
+        perf_form.addRow(self._fast_flags_check)
         inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
@@ -5277,6 +5286,8 @@ class SettingsDialog(QDialog):
         self._llm_workers_spin.setValue(
             int(cfg.get("llm_pool_workers", 4) or 4)
         )
+        self._fast_engine_check.setChecked(bool(cfg.get("fast_engine", False)))
+        self._fast_flags_check.setChecked(bool(cfg.get("fast_flags", False)))
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -5346,6 +5357,14 @@ class SettingsDialog(QDialog):
         self._llm_workers_spin.setToolTip(
             T("settings.performance.llm_workers.tip")
         )
+        self._fast_engine_check.setText(T("settings.performance.fast_engine"))
+        self._fast_engine_check.setToolTip(
+            T("settings.performance.fast_engine.tip")
+        )
+        self._fast_flags_check.setText(T("settings.performance.fast_flags"))
+        self._fast_flags_check.setToolTip(
+            T("settings.performance.fast_flags.tip")
+        )
         self._btn_ok.setText(T("settings.ok"))
         self._btn_cancel.setText(T("settings.cancel"))
 
@@ -5375,6 +5394,8 @@ class SettingsDialog(QDialog):
             "notify_sound": bool(self._sound_check.isChecked()),
             "prevent_sleep": bool(self._sleep_check.isChecked()),
             "llm_pool_workers": int(self._llm_workers_spin.value()),
+            "fast_engine": bool(self._fast_engine_check.isChecked()),
+            "fast_flags": bool(self._fast_flags_check.isChecked()),
         }
 
 
@@ -8021,7 +8042,8 @@ class MainWindow(QMainWindow):
         for key in ("zoom", "font_size", "render_md", "show_header",
                     "resume_last_page", "remember_tab", "save_edits",
                     "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
-                    "prevent_sleep", "llm_pool_workers"):
+                    "prevent_sleep", "llm_pool_workers",
+                    "fast_engine", "fast_flags"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8244,6 +8266,9 @@ class MainWindow(QMainWindow):
         self._clone_engine.llm_pool_workers = max(
             1, int(get_setting("llm_pool_workers", 4) or 4)
         )
+        # Feature sperimentale "motore veloce" (default OFF, reversibile).
+        self._clone_engine.fast_engine = bool(get_setting("fast_engine", False))
+        self._clone_engine.fast_flags = bool(get_setting("fast_flags", False))
 
     def _update_engine_banner(self):
         """Aggiorna le strisce informative (motore e chiave mancanti)."""
@@ -8927,6 +8952,8 @@ class MainWindow(QMainWindow):
             export_engine.llm_model = self._clone_engine.llm_model
             export_engine.llm_base_url = self._clone_engine.llm_base_url
             export_engine.llm_pool_workers = self._clone_engine.llm_pool_workers
+            export_engine.fast_engine = self._clone_engine.fast_engine
+            export_engine.fast_flags = self._clone_engine.fast_flags
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,
