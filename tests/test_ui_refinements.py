@@ -161,6 +161,8 @@ class SettingsDialogLayoutTests(unittest.TestCase):
 
     def test_performance_presets_fill_fields(self):
         dlg = self.main.SettingsDialog()
+        # La sezione è attiva solo col motore LLM.
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
         cases = {
             "normal": dict(
                 fast=False, worker=False, model="inception/mercury-2.5",
@@ -191,6 +193,15 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         self.assertFalse(dlg._fast_engine_check.isEnabled())
         self.assertFalse(dlg._llm_model_combo.isEnabled())
         self.assertTrue(dlg._btn_proxy_test.isEnabled())
+        dlg.close()
+
+    def test_perf_section_greyed_for_google_and_bing(self):
+        dlg = self.main.SettingsDialog()
+        for engine in ("google", "bing"):
+            dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData(engine))
+            self.assertFalse(dlg._box_perf.isEnabled(), engine)
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
+        self.assertTrue(dlg._box_perf.isEnabled())
         dlg.close()
 
 

@@ -5046,6 +5046,7 @@ class SettingsDialog(QDialog):
         self._engine_combo = QComboBox()
         for code in TRANSLATION_ENGINES:
             self._engine_combo.addItem(T(f"engine.option.{code}"), code)
+        self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         trans_form.addRow(self._lbl_engine, self._engine_combo)
         inner.addWidget(self._box_translation)
 
@@ -5414,6 +5415,21 @@ class SettingsDialog(QDialog):
         name = self._preset_combo.itemData(index) or "normal"
         self._apply_preset(name)
 
+    def _on_engine_changed(self, index: int) -> None:
+        self._update_perf_enabled()
+
+    def _update_perf_enabled(self) -> None:
+        """La sezione Prestazioni vale solo per il motore LLM (grigia altrove)."""
+        engine = self._engine_combo.currentData() or "google"
+        llm = engine == "llm"
+        box = getattr(self, "_box_perf", None)
+        if box is None:
+            return
+        box.setEnabled(llm)
+        if llm:
+            # Campi governati dal preset: di sola lettura.
+            self._set_preset_fields_enabled(False)
+
     def _on_test_provider(self):
         """Avvia la prova provider in background e mostra l'esito."""
         parent = self.parent()
@@ -5527,6 +5543,7 @@ class SettingsDialog(QDialog):
         idx = self._preset_combo.findData(preset)
         self._preset_combo.setCurrentIndex(max(0, idx))
         self._apply_preset(preset)
+        self._update_perf_enabled()
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
