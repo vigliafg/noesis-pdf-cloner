@@ -5594,9 +5594,8 @@ class SettingsDialog(QDialog):
         self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
         preset = str(cfg.get("performance_preset", "normal") or "normal")
         self._select_preset(preset)
-        # Opt-in manuale B2 (non governato dal preset): ripristina il valore.
-        if self._fast_engine_check.isChecked():
-            self._fast_flags_check.setChecked(bool(cfg.get("fast_flags", False)))
+        # I flag B2 sono seedati OFF dai preset (precisione): non si ripristina
+        # un eventuale valore vecchio/errato salvato in config.
         self._update_perf_enabled()
 
     def _on_ui_preview(self, index: int):
