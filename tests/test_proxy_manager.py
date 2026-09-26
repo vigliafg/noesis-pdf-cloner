@@ -123,14 +123,16 @@ class ManagerTests(unittest.TestCase):
             proxy_manager.subprocess, "STARTUPINFO", _FakeStartupInfo, create=True
         ), mock.patch.object(
             proxy_manager.subprocess, "STARTF_USESHOWWINDOW", 1, create=True
+        ), mock.patch.object(
+            proxy_manager.subprocess, "CREATE_NEW_CONSOLE", 0x10, create=True
         ):
             kwargs = proxy_manager._console_kwargs()
         startupinfo = kwargs.get("startupinfo")
         self.assertIsNotNone(startupinfo)
-        self.assertEqual(startupinfo.wShowWindow, proxy_manager._SW_SHOWMINNOACTIVE)
+        self.assertEqual(startupinfo.wShowWindow, 7)  # SW_SHOWMINNOACTIVE
         self.assertTrue(startupinfo.dwFlags & 1)
-        # Niente CREATE_NO_WINDOW: la console deve esistere, ma minimizzata.
-        self.assertNotIn("creationflags", kwargs)
+        # CREATE_NEW_CONSOLE è necessario perché lo show-state sia applicato.
+        self.assertEqual(kwargs.get("creationflags"), 0x10)
 
 
 if __name__ == "__main__":

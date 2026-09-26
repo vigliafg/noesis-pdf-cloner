@@ -9458,6 +9458,9 @@ class MainWindow(QMainWindow):
             export_engine.fast_worker = self._clone_engine.fast_worker
             export_engine.numeric_lists = self._clone_engine.numeric_lists
             export_engine.llm_system_prompt = self._clone_engine.llm_system_prompt
+            # Pre-avvia il worker dedicato in background: la prima pagina non
+            # paga l'avvio (import + warmup) e usa subito le patch runtime.
+            export_engine.warmup()
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,

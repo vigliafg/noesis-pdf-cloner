@@ -41,6 +41,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -525,6 +526,10 @@ class CloneEngine:
         self.split_root = self.cache_root / "split"
         self.translated_root = self.cache_root / "translated"
         self.events_file = self.cache_root / "engine_events.jsonl"
+        # Tag del worker persistente: engine diversi (pannello + export) devono
+        # avere cartelle di ready/log separate, altrimenti i client si
+        # connettono al worker sbagliato (conflitto su ``worker.ready``).
+        self._worker_tag = uuid.uuid4().hex[:12]
         self._pdf2zh_bin: Path | None = None
         self._pdf2zh_override = str(pdf2zh_bin) if pdf2zh_bin else ""
 
@@ -991,7 +996,9 @@ class CloneEngine:
                 client = engine_client.EngineWorkerClient(
                     venv_python_for(pdf2zh),
                     _engine_worker_path(),
-                    engine_client.default_work_dir(self.cache_root),
+                    engine_client.default_work_dir(
+                        self.cache_root, self._worker_tag
+                    ),
                     idle_timeout=300.0,
                 )
                 self._worker_client = client

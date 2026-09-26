@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.9** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.10** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -519,7 +519,7 @@ rilievo). Suite: **482 OK** (24 skip).
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
   pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag -a v0.1.9 -m "v0.1.9" && git push origin v0.1.9`).
+  (`git tag -a v0.1.10 -m "v0.1.10" && git push origin v0.1.10`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
@@ -693,6 +693,24 @@ Lettura:
 ---
 
 ## 12. Release — preparazione (26/09)
+
+### 0.1.10 (correzioni da test sul campo)
+- **Worker senza finestra** (`engine_client.py`): il worker persistente era
+  avviato **senza soppressione della console** → all'avvio compariva una
+  finestra console muta (la "PowerShell" di Windows 11). Ora parte con
+  `CREATE_NO_WINDOW` (nessuna finestra).
+- **Proxy ridotto a icona** (`proxy_manager.py` + `engine_client.py`): lo
+  show-state di `STARTUPINFO` vale solo se viene creata una **nuova** console;
+  mancava `CREATE_NEW_CONSOLE`. Ora il proxy parte minimizzato e senza rubare
+  il focus (`SW_SHOWMINNOACTIVE`).
+- **Export lento / hang** (`clone_engine.py`): l'engine dedicato dell'export
+  condivideva la `work_dir` (`_tmp/worker`) col worker del pannello → due worker
+  sullo stesso `worker.ready`, client connesso a quello sbagliato (hang su
+  Linux, riavvii + `SubprocessCrashError -15` su Windows). Ora ogni engine ha
+  la sua `work_dir` (`_tmp/worker/<tag>`) e l'engine di export pre-avvia il
+  worker. Export misurato: 23.1 / 21.8 / 20.9s.
+- `installer.nsi` → `0.1.10`. Test: desktop **549 OK**, service **310**.
+- Allineato il service (`app/engine.py`, `app/engine_client.py`).
 
 ### 0.1.9 (correzioni da test sul campo)
 - **Preset non persistito** (`main.py`): `performance_preset` (e

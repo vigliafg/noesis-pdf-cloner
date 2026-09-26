@@ -52,6 +52,40 @@ def _env_fingerprint(env: dict) -> str:
     return hashlib.sha1(blob.encode("utf-8", "replace")).hexdigest()
 
 
+# SW_SHOWMINNOACTIVE: minimizza la finestra senza attivarla (niente focus).
+_SW_SHOWMINNOACTIVE = 7
+
+
+def minimized_console_kwargs() -> dict:
+    """Windows: avvia un processo console con la finestra **ridotta a icona**.
+
+    Serve ``CREATE_NEW_CONSOLE``: lo show-state di ``STARTUPINFO`` è applicato
+    alla console **solo quando ne viene creata una nuova**; senza, la finestra
+    compare normale. ``SW_SHOWMINNOACTIVE`` evita anche di rubare il focus.
+    """
+    if os.name != "nt":
+        return {}
+    kwargs: dict = {}
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    if flags:
+        kwargs["creationflags"] = flags
+    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_cls is not None:
+        startupinfo = startupinfo_cls()
+        startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
+        startupinfo.wShowWindow = _SW_SHOWMINNOACTIVE
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
+def hidden_console_kwargs() -> dict:
+    """Windows: nessuna finestra console (per processi interni, es. worker)."""
+    if os.name != "nt":
+        return {}
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return {"creationflags": flags} if flags else {}
+
+
 class EngineWorkerClient:
     """Wrapper sul worker persistente, con riavvio e fallback."""
 
@@ -137,6 +171,7 @@ class EngineWorkerClient:
                 stderr=subprocess.STDOUT,
                 env=env,
                 start_new_session=(os.name != "nt"),
+                **hidden_console_kwargs(),
             )
         except OSError as exc:
             log_handle.close()
@@ -244,9 +279,16 @@ class EngineWorkerClient:
             self._kill()
 
 
-def default_work_dir(cache_root: str | Path) -> Path:
-    """Cartella per file di ready/log del worker (nella cache dell'app)."""
+def default_work_dir(cache_root: str | Path, tag: str = "") -> Path:
+    """Cartella per file di ready/log del worker (nella cache dell'app).
+
+    Con ``tag`` (es. id dell'engine) si usa una sottocartella dedicata: engine
+    diversi (pannello + export) non condividono ``worker.ready``/``worker.log``,
+    evitando che un client si connetta al worker di un altro.
+    """
     path = Path(cache_root) / "_tmp" / "worker"
+    if tag:
+        path = path / tag
     with contextlib.suppress(OSError):
         path.mkdir(parents=True, exist_ok=True)
     return path

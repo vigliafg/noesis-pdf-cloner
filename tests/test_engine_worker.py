@@ -11,6 +11,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -135,6 +136,69 @@ class WorkerClientTests(unittest.TestCase):
         env2["PDF_LLM_MODEL"] = "altro/modello"
         client.run(["ok"], env2)
         self.assertNotEqual(client._proc.pid, first_pid)
+
+
+class WorkDirTests(unittest.TestCase):
+    """Engine diversi non devono condividere ``worker.ready``/``worker.log``."""
+
+    def test_tag_creates_isolated_subdir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = engine_client.default_work_dir(tmp)
+            a = engine_client.default_work_dir(tmp, "engine-a")
+            b = engine_client.default_work_dir(tmp, "engine-b")
+            self.assertTrue(a.is_dir() and b.is_dir())
+            self.assertEqual(a.parent, base)
+            self.assertNotEqual(a, b)
+
+    def test_cleanup_removes_tagged_subdirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            engine_client.default_work_dir(tmp, "engine-a")
+            engine_client.cleanup_work_dir(tmp)
+            self.assertFalse((Path(tmp) / "_tmp" / "worker").exists())
+
+    def test_clone_engines_get_distinct_worker_dirs(self):
+        import clone_engine  # noqa: PLC0415
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = clone_engine.CloneEngine(tmp)
+            second = clone_engine.CloneEngine(tmp)
+            ca = first._get_worker_client(Path(sys.executable))
+            cb = second._get_worker_client(Path(sys.executable))
+            self.assertNotEqual(ca.work_dir, cb.work_dir)
+
+
+class ConsoleKwargsTests(unittest.TestCase):
+    """Su Windows le console dei processi interni non devono disturbare."""
+
+    def test_non_windows_returns_empty(self):
+        with mock.patch.object(engine_client.os, "name", "posix"):
+            self.assertEqual(engine_client.minimized_console_kwargs(), {})
+            self.assertEqual(engine_client.hidden_console_kwargs(), {})
+
+    def test_minimized_console_on_windows(self):
+        class _StartupInfo:
+            def __init__(self):
+                self.dwFlags = 0
+                self.wShowWindow = None
+
+        with mock.patch.object(engine_client.os, "name", "nt"), mock.patch.object(
+            engine_client.subprocess, "STARTUPINFO", _StartupInfo, create=True
+        ), mock.patch.object(
+            engine_client.subprocess, "STARTF_USESHOWWINDOW", 1, create=True
+        ), mock.patch.object(
+            engine_client.subprocess, "CREATE_NEW_CONSOLE", 0x10, create=True
+        ):
+            kwargs = engine_client.minimized_console_kwargs()
+        # CREATE_NEW_CONSOLE rende effettivo lo show-state della nuova console.
+        self.assertEqual(kwargs["creationflags"], 0x10)
+        self.assertEqual(kwargs["startupinfo"].wShowWindow, 7)
+
+    def test_hidden_console_on_windows(self):
+        with mock.patch.object(engine_client.os, "name", "nt"), mock.patch.object(
+            engine_client.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True
+        ):
+            kwargs = engine_client.hidden_console_kwargs()
+        self.assertEqual(kwargs["creationflags"], 0x08000000)
 
 
 if __name__ == "__main__":

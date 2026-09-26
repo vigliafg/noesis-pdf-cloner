@@ -78,19 +78,29 @@ _SW_SHOWMINNOACTIVE = 7
 def _console_kwargs() -> dict:
     """Su Windows avvia il proxy con la console **ridotta a icona**.
 
-    Il proxy è un processo console: senza opzioni Windows gli creerebbe una
-    finestra in primo piano. Lo si avvia minimizzato e senza rubare il focus
-    (``SW_SHOWMINNOACTIVE``); sugli altri sistemi non serve nulla.
+    Delega a ``engine_client.minimized_console_kwargs`` (che aggiunge
+    ``CREATE_NEW_CONSOLE``: senza, lo show-state non viene applicato alla nuova
+    console e la finestra compare normale). Fallback locale se il modulo manca.
     """
     if os.name != "nt":
         return {}
-    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
-    if startupinfo_cls is None:
-        return {}
-    startupinfo = startupinfo_cls()
-    startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
-    startupinfo.wShowWindow = _SW_SHOWMINNOACTIVE
-    return {"startupinfo": startupinfo}
+    try:
+        from engine_client import minimized_console_kwargs  # noqa: PLC0415
+
+        return minimized_console_kwargs()
+    except Exception:  # noqa: BLE001
+        # Fallback: stessa logica, senza dipendere da engine_client.
+        kwargs: dict = {}
+        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        if flags:
+            kwargs["creationflags"] = flags
+        startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+        if startupinfo_cls is not None:
+            startupinfo = startupinfo_cls()
+            startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
+            startupinfo.wShowWindow = _SW_SHOWMINNOACTIVE
+            kwargs["startupinfo"] = startupinfo
+        return kwargs
 
 
 def _health_ok(port: int, timeout: float = 2.0) -> bool:
