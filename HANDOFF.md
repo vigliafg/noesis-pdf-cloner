@@ -552,6 +552,22 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 - `tools/bench_page.py` — banco di misura (usa `CloneEngine`, `--fresh` =
   `--ignore-cache`); `tools/child_profile.py` — profiler del processo figlio.
 
+### Fase 2 — worker persistente
+- `engine_worker.py` (lato `.venv2`): processo caldo (import + patch + warmup una
+  volta), per job esegue `do_translate_file_async` **in-process**; protocollo
+  JSON-lines su socket locale.
+- `engine_client.py` (lato app): avvio/riavvio, cancel/timeout, riavvio se cambia
+  l'ambiente rilevante; **fail-safe** verso il subprocess.
+- `CloneEngine.warmup()/prewarm()/close()`; pre-avvio in background all'apertura
+  (il costo di avvio non ricade sulla prima pagina). Toggle **"Worker
+  persistente"** in Impostazioni.
+
+### Fase 3 — LLM avanzato
+- `--openai-reasoning-effort` e `--openai-enable-json-mode` (setting UI + env
+  `PDF_LLM_REASONING_EFFORT`/`PDF_LLM_JSON_MODE`), gated da `fast_engine`.
+- `tools/provider_proxy.py`: proxy che **pinna il provider** (Groq) su OpenRouter
+  (pdf2zh non espone il routing).
+
 ### Reversibilità (runbook)
 
 1. Impostazioni → disattiva i due toggle (secondi).
@@ -571,14 +587,20 @@ Default OFF; a OFF comportamento invariato (290 test verdi).
 ### Follow-up noti
 
 - **Packaging**: `.github/workflows/release.yml` non bundle ancora
-  `engine_wrapper.py`/`engine_patch.py` (come `gtranslate_cli.py`). Finché non
-  lo si aggiunge, nelle build PyInstaller la feature degrada al binario
-  (fail-safe). Il file era già modificato per pin di action non correlati: da
-  aggiungere in un commit dedicato.
+  `engine_wrapper.py`/`engine_patch.py`/`engine_worker.py` (come
+  `gtranslate_cli.py`). Finché non lo si aggiunge, nelle build PyInstaller la
+  feature degrada al binario (fail-safe). Il file era già modificato per pin di
+  action non correlati: da aggiungere in un commit dedicato.
+- **Groq/LLM**: per usare gpt-oss-120b serve il pin del provider via
+  `tools/provider_proxy.py` (`--openai-base-url` verso il proxy). Prezzi e
+  disponibilità del provider possono cambiare.
 - **Upstream BabelDOC**: proporre memoizzazione di `get_font_and_metadata` e
   `MemoryMonitor` opzionale, così il wrapper diventa temporaneo.
 - **`content = None`**: aggiungere retry (marker transitorio) — vedi
-  `BENCH_LLM.md`.
+  `BENCH_LLM.md`. Il worker riduce ma non elimina questa classe di errori.
+- **Worker**: valutare un pool di worker (uno per processo server) e la
+  classificazione degli errori dal `log_tail` (oggi il worker restituisce solo
+  rc + tail).
 
 ### Risultati benchmark (pagina 3575, EN→IT, 4 core, 3 run con `--fresh`)
 
@@ -593,16 +615,22 @@ Mediana dei tempi (`tools/bench_page.py`, `tools/bench_results.jsonl`):
 | **cache calda** (fast+flags, 4) | 21,9 / 21,0 / 21,0 | **21,0** | scenario desktop (usa la cache) |
 | cache calda (feature OFF, 4) | 31,4 / 30,2 / 29,7 | **30,2** | pavimento "puro" senza patch |
 | google (fast+flags, 4) | 26,4 / 22,6 | ~24,5 | il wrapper vale anche sulla catena gratuita |
+| Fase 2: Mercury + worker (4) | 36,1 / 32,4 | ~34,2 | worker: −2,8 s sul run a regime |
+| **Fase 3: gpt-oss/Groq + minimal (8)** | 27,3 / 28,6 / 31,3 | **28,6** | senza worker |
+| **Fase 1+2+3: gpt-oss + minimal + worker (8)** | 24,1 / 22,2 / 24,1 / 22,5 / 22,5 / 30,1 | **23,3** | min 22,2 — **≤ 30 s a freddo** |
 
 Lettura:
-- la feature **riduce di ~7-9 s** la traduzione fresca (≈ −17-20%); il grosso
-  viene dalle **patch** (font cache + MemoryMonitor), non dai flag B2;
+- la Fase 1 riduce di ~7-9 s la traduzione fresca (≈ −17-20%); il grosso viene
+  dalle **patch** (font cache + MemoryMonitor), non dai flag B2;
 - il **pavimento CPU** resta ~21 s (run a cache calda: LLM quasi assente);
   senza patch il pavimento è ~30 s (quota fissa −9 s);
-- con la cache del motore (default desktop) si è **già sotto i 30 s**;
-- per scendere **≤ 30 s anche a traduzione fresca** serve la Fase 2 (worker
-  persistente, pavimento ~17-18 s) e/o un LLM più veloce (gpt-oss-120b Groq +
-  `reasoning-effort minimal`). Vedi piano.
+- **Fase 3** (gpt-oss-120b su Groq + `reasoning-effort minimal`) porta il caso
+  freddo a ~28,6 s;
+- **Fase 2** (worker persistente) toglie ~2,8 s di costi di avvio per pagina;
+- **combinata Fase 1+2+3**: mediana **23,3 s a freddo** (min 22,2) → **obiettivo
+  ≤ 30 s raggiunto** con margine, contro i 42,5 s di baseline (**−45%**).
+- Il "worker persistente" si pre-avvia in background: la prima pagina non paga
+  più l'avvio.
 
 ---
 
