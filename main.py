@@ -5392,6 +5392,9 @@ class SettingsDialog(QDialog):
                 self._llm_base_combo.setCurrentIndex(idx)
 
     # Valori dei preset: governano tutti i campi sottostanti.
+    # NOTA precisione: i flag "traduzione rapida" (B2) NON sono attivi nei
+    # preset — saltano elaborazioni di layout/formule e riducono la precisione
+    # per un guadagno trascurabile. Restano come opt-in manuale in Avanzate.
     _PRESETS = {
         "normal": {
             "fast": False, "flags": False, "worker": False,
@@ -5399,12 +5402,12 @@ class SettingsDialog(QDialog):
             "json": False, "autostart": False, "pool": 4,
         },
         "fast": {
-            "fast": True, "flags": True, "worker": True,
+            "fast": True, "flags": False, "worker": True,
             "model": "inception/mercury-2.5", "base": "", "reasoning": "",
             "json": False, "autostart": False, "pool": 4,
         },
         "fastest": {
-            "fast": True, "flags": True, "worker": True,
+            "fast": True, "flags": False, "worker": True,
             "model": "openai/gpt-oss-120b", "base": "__proxy__",
             "reasoning": "minimal", "json": False, "autostart": True, "pool": 8,
         },
@@ -5417,10 +5420,12 @@ class SettingsDialog(QDialog):
             combo.setCurrentIndex(idx)
 
     def _set_preset_fields_enabled(self, enabled: bool) -> None:
+        # NOTA: `_fast_flags_check` è escluso: è l'opt-in manuale (B2) e resta
+        # modificabile in Avanzate per chi accetta il trade-off sulla precisione.
         for widget in (
-            self._fast_engine_check, self._fast_flags_check,
-            self._fast_worker_check, self._llm_model_combo,
-            self._llm_base_combo, self._reasoning_combo, self._json_mode_check,
+            self._fast_engine_check, self._fast_worker_check,
+            self._llm_model_combo, self._llm_base_combo,
+            self._reasoning_combo, self._json_mode_check,
             self._proxy_autostart_check, self._proxy_port_spin,
             self._llm_workers_spin, self._lbl_llm_workers, self._lbl_llm_model,
             self._lbl_llm_base, self._lbl_reasoning, self._lbl_proxy_port,
@@ -5589,6 +5594,9 @@ class SettingsDialog(QDialog):
         self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
         preset = str(cfg.get("performance_preset", "normal") or "normal")
         self._select_preset(preset)
+        # Opt-in manuale B2 (non governato dal preset): ripristina il valore.
+        if self._fast_engine_check.isChecked():
+            self._fast_flags_check.setChecked(bool(cfg.get("fast_flags", False)))
         self._update_perf_enabled()
 
     def _on_ui_preview(self, index: int):

@@ -577,6 +577,10 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   card. I preset valgono per tutti i motori (patch+worker anche su google/bing);
   la card *Massima velocità* e "Prova provider" sono attive **solo col motore
   LLM** (grigie altrove, con tooltip).
+  **I preset NON attivano i flag B2** ("traduzione rapida":
+  `--skip-formula-offset-calculation` ecc.): saltano elaborazioni di
+  layout/formule, riducono la precisione e nel benchmark davano ~0,5 s. Restano
+  come **opt-in manuale** (checkbox in Avanzate, non governata dal preset).
 - **Modello e base URL** sono tendine (non testo libero): *Mercury* /
   *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →

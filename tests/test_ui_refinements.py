@@ -218,6 +218,17 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         self.assertFalse(dlg._advanced_widget.isHidden())
         dlg.close()
 
+    def test_presets_do_not_enable_quality_flags(self):
+        """I preset non attivano i flag B2 (precisione); restano opt-in."""
+        dlg = self.main.SettingsDialog()
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
+        for name in ("normal", "fast", "fastest"):
+            dlg._select_preset(name)
+            self.assertFalse(dlg.values()["fast_flags"], name)
+        dlg._select_preset("fast")
+        self.assertTrue(dlg._fast_flags_check.isEnabled())  # opt-in manuale
+        dlg.close()
+
     def test_preset_works_for_google(self):
         dlg = self.main.SettingsDialog()
         dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("google"))
