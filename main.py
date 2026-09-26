@@ -41,6 +41,9 @@ import layout_engine
 import clone_engine
 from clone_engine import ENGINES as CLONE_ENGINES
 
+# Proxy provider locale (avvio automatico + prova provider).
+import proxy_manager
+
 # Archivio per-utente della chiave OpenRouter (file, cross-platform).
 import keystore
 
@@ -2453,6 +2456,27 @@ class ExtractThread(QThread):
         self.result_ready.emit(
             self._generation, self._page_num, text, label, raw, elapsed
         )
+
+
+class ProviderTestThread(QThread):
+    """Prova il provider LLM in background (una piccola richiesta)."""
+
+    result = pyqtSignal(dict)
+
+    def __init__(self, base_url: str, model: str, api_key: str, parent=None):
+        super().__init__(parent)
+        self._base_url = base_url
+        self._model = model
+        self._api_key = api_key
+
+    def run(self):
+        try:
+            outcome = proxy_manager.probe(
+                self._base_url, self._model, self._api_key
+            )
+        except Exception as exc:  # noqa: BLE001 — riportato in UI
+            outcome = {"ok": False, "error": str(exc)}
+        self.result.emit(outcome)
 
 
 class CloneTranslateThread(QThread):
@@ -5022,6 +5046,7 @@ class SettingsDialog(QDialog):
         self._engine_combo = QComboBox()
         for code in TRANSLATION_ENGINES:
             self._engine_combo.addItem(T(f"engine.option.{code}"), code)
+        self._engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         trans_form.addRow(self._lbl_engine, self._engine_combo)
         inner.addWidget(self._box_translation)
 
@@ -5154,8 +5179,56 @@ class SettingsDialog(QDialog):
         inner.addWidget(self._box_notify)
 
         # ── Prestazioni ──────────────────────────────────────────────────
+        # ── Prestazioni ──────────────────────────────────────────────────
+        # Tre preset come "card" radio (tutte visibili), con i campi
+        # governati dal preset dentro "Avanzate" (collassato) e lo stato del
+        # provider inline.
         self._box_perf = QGroupBox(T("settings.group.performance"))
-        perf_form = QFormLayout(self._box_perf)
+        perf_root = QVBoxLayout(self._box_perf)
+        self._preset_radios: dict = {}
+        self._preset_descs: dict = {}
+        preset_group = QButtonGroup(self._box_perf)
+        for code in ("normal", "fast", "fastest"):
+            radio = QRadioButton(T(f"settings.performance.preset.{code}.label"))
+            radio.setCursor(Qt.CursorShape.PointingHandCursor)
+            radio.toggled.connect(
+                lambda checked, c=code: self._on_preset_toggled(c, checked)
+            )
+            preset_group.addButton(radio)
+            desc = QLabel(T(f"settings.performance.preset.{code}.desc"))
+            desc.setWordWrap(True)
+            desc.setStyleSheet(f"color: {theme.color('text5')}; font-size: 11px;")
+            perf_root.addWidget(radio)
+            perf_root.addWidget(desc)
+            self._preset_radios[code] = radio
+            self._preset_descs[code] = desc
+
+        status_row = QHBoxLayout()
+        self._proxy_test_result = QLabel("")
+        self._proxy_test_result.setWordWrap(True)
+        self._proxy_test_result.setStyleSheet(_status_style("text5"))
+        self._btn_proxy_test = QPushButton(T("settings.proxy.test"))
+        self._btn_proxy_test.setToolTip(T("settings.proxy.test.tip"))
+        self._btn_proxy_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_proxy_test.clicked.connect(self._on_test_provider)
+        status_row.addWidget(self._proxy_test_result, 1)
+        status_row.addWidget(self._btn_proxy_test)
+        perf_root.addLayout(status_row)
+
+        # Avanzate (nascoste di default): i campi governati dal preset.
+        self._btn_advanced = QToolButton()
+        self._btn_advanced.setText(T("settings.performance.advanced"))
+        self._btn_advanced.setCheckable(True)
+        self._btn_advanced.setArrowType(Qt.ArrowType.RightArrow)
+        self._btn_advanced.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self._btn_advanced.clicked.connect(self._on_advanced_toggled)
+        perf_root.addWidget(self._btn_advanced)
+
+        self._advanced_widget = QWidget()
+        perf_form = QFormLayout(self._advanced_widget)
+        perf_form.setContentsMargins(0, 0, 0, 0)
         self._lbl_llm_workers = QLabel(T("settings.performance.llm_workers"))
         self._llm_workers_spin = QSpinBox()
         self._llm_workers_spin.setRange(1, 16)
@@ -5163,6 +5236,63 @@ class SettingsDialog(QDialog):
             T("settings.performance.llm_workers.tip")
         )
         perf_form.addRow(self._lbl_llm_workers, self._llm_workers_spin)
+        # Feature sperimentale "motore veloce" (reversibile, default OFF).
+        self._fast_engine_check = QCheckBox(T("settings.performance.fast_engine"))
+        self._fast_engine_check.setToolTip(
+            T("settings.performance.fast_engine.tip")
+        )
+        self._fast_engine_check.toggled.connect(self._on_fast_engine_toggled)
+        perf_form.addRow(self._fast_engine_check)
+        self._fast_flags_check = QCheckBox(T("settings.performance.fast_flags"))
+        self._fast_flags_check.setToolTip(T("settings.performance.fast_flags.tip"))
+        perf_form.addRow(self._fast_flags_check)
+        self._numeric_lists_check = QCheckBox(
+            T("settings.performance.numeric_lists")
+        )
+        self._numeric_lists_check.setToolTip(
+            T("settings.performance.numeric_lists.tip")
+        )
+        perf_form.addRow(self._numeric_lists_check)
+        self._fast_worker_check = QCheckBox(T("settings.performance.fast_worker"))
+        self._fast_worker_check.setToolTip(T("settings.performance.fast_worker.tip"))
+        perf_form.addRow(self._fast_worker_check)
+        self._lbl_reasoning = QLabel(T("settings.performance.reasoning_effort"))
+        self._reasoning_combo = QComboBox()
+        for value in ("", "minimal", "low", "medium", "high"):
+            self._reasoning_combo.addItem(value or "—", value)
+        self._reasoning_combo.setToolTip(
+            T("settings.performance.reasoning_effort.tip")
+        )
+        perf_form.addRow(self._lbl_reasoning, self._reasoning_combo)
+        self._json_mode_check = QCheckBox(T("settings.performance.json_mode"))
+        self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
+        perf_form.addRow(self._json_mode_check)
+        self._lbl_llm_model = QLabel(T("settings.llm.model"))
+        self._llm_model_combo = QComboBox()
+        self._llm_model_combo.setToolTip(T("settings.llm.model.tip"))
+        perf_form.addRow(self._lbl_llm_model, self._llm_model_combo)
+        self._lbl_llm_base = QLabel(T("settings.llm.base_url"))
+        self._llm_base_combo = QComboBox()
+        self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
+        perf_form.addRow(self._lbl_llm_base, self._llm_base_combo)
+        self._lbl_llm_prompt = QLabel(T("settings.llm.system_prompt"))
+        self._llm_prompt_edit = QLineEdit()
+        self._llm_prompt_edit.setToolTip(T("settings.llm.system_prompt.tip"))
+        perf_form.addRow(self._lbl_llm_prompt, self._llm_prompt_edit)
+        self._populate_llm_combos()
+        self._proxy_autostart_check = QCheckBox(T("settings.proxy.autostart"))
+        self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
+        self._proxy_autostart_check.toggled.connect(
+            self._on_proxy_autostart_toggled
+        )
+        perf_form.addRow(self._proxy_autostart_check)
+        self._lbl_proxy_port = QLabel(T("settings.proxy.port"))
+        self._proxy_port_spin = QSpinBox()
+        self._proxy_port_spin.setRange(1024, 65535)
+        self._proxy_port_spin.setToolTip(T("settings.proxy.port.tip"))
+        perf_form.addRow(self._lbl_proxy_port, self._proxy_port_spin)
+        perf_root.addWidget(self._advanced_widget)
+        self._advanced_widget.setVisible(False)
         inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
@@ -5250,6 +5380,214 @@ class SettingsDialog(QDialog):
             parent.clear_saved_edits()
         QMessageBox.information(self, T("settings.title"), T("settings.edits.clear_done"))
 
+    def _on_fast_engine_toggled(self, enabled: bool):
+        """Abilita/disabilita le opzioni dipendenti dal motore veloce."""
+        self._fast_flags_check.setEnabled(enabled)
+        self._fast_worker_check.setEnabled(enabled)
+        self._reasoning_combo.setEnabled(enabled)
+        self._json_mode_check.setEnabled(enabled)
+        self._proxy_autostart_check.setEnabled(enabled)
+        self._proxy_port_spin.setEnabled(enabled and self._proxy_autostart_check.isChecked())
+        self._btn_proxy_test.setEnabled(enabled)
+        if not enabled:
+            self._fast_flags_check.setChecked(False)
+            self._fast_worker_check.setChecked(False)
+            self._proxy_autostart_check.setChecked(False)
+
+    def _on_proxy_autostart_toggled(self, enabled: bool):
+        self._proxy_port_spin.setEnabled(enabled and self._fast_engine_check.isChecked())
+        if enabled:
+            # Allinea la selezione alla base URL del proxy.
+            idx = self._llm_base_combo.findData("__proxy__")
+            if idx >= 0:
+                self._llm_base_combo.setCurrentIndex(idx)
+
+    # Valori dei preset: governano tutti i campi sottostanti.
+    # NOTA precisione: i flag "traduzione rapida" (B2) NON sono attivi nei
+    # preset — saltano elaborazioni di layout/formule e riducono la precisione
+    # per un guadagno trascurabile. Restano come opt-in manuale in Avanzate.
+    # Prompt di default per "Massima velocità": rende gpt-oss coerente nella
+    # terminologia (nomi dei farmaci in italiano, citazioni non tradotte).
+    _FASTEST_PROMPT = (
+        "Sei un traduttore medico EN->IT. Traduci fedelmente mantenendo la "
+        "formattazione e l'ordine. Traduci i nomi dei farmaci nella forma "
+        "italiana quando esiste (es. daptomycin->daptomicina, polymyxins->"
+        "polimixine). NON tradurre le citazioni bibliografiche, i nomi di "
+        "riviste e le sigle tecniche (ABG, AG, MIC)."
+    )
+    _PRESETS = {
+        "normal": {
+            "fast": False, "flags": False, "worker": False,
+            "model": "inception/mercury-2.5", "base": "", "reasoning": "",
+            "json": False, "autostart": False, "pool": 4, "prompt": "",
+        },
+        "fast": {
+            "fast": True, "flags": False, "worker": True,
+            "model": "inception/mercury-2.5", "base": "", "reasoning": "",
+            "json": False, "autostart": False, "pool": 4, "prompt": "",
+        },
+        "fastest": {
+            "fast": True, "flags": False, "worker": True,
+            "model": "openai/gpt-oss-120b", "base": "__proxy__",
+            "reasoning": "minimal", "json": False, "autostart": True, "pool": 8,
+            "prompt": _FASTEST_PROMPT,
+        },
+    }
+
+    @staticmethod
+    def _select_combo_data(combo, data: str) -> None:
+        idx = combo.findData(data)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+
+    def _set_preset_fields_enabled(self, enabled: bool) -> None:
+        # NOTA: `_fast_flags_check` è escluso: è l'opt-in manuale (B2) e resta
+        # modificabile in Avanzate per chi accetta il trade-off sulla precisione.
+        for widget in (
+            self._fast_engine_check, self._fast_worker_check,
+            self._llm_model_combo, self._llm_base_combo,
+            self._reasoning_combo, self._json_mode_check,
+            self._proxy_autostart_check, self._proxy_port_spin,
+            self._llm_workers_spin, self._lbl_llm_workers, self._lbl_llm_model,
+            self._lbl_llm_base, self._lbl_reasoning, self._lbl_proxy_port,
+        ):
+            widget.setEnabled(enabled)
+        self._btn_proxy_test.setEnabled(True)
+
+    def _apply_preset(self, name: str) -> None:
+        """Compila i campi secondo il preset e li rende di sola lettura."""
+        preset = self._PRESETS.get(name) or self._PRESETS["normal"]
+        self._fast_engine_check.setChecked(preset["fast"])
+        self._fast_flags_check.setChecked(preset["flags"])
+        self._fast_worker_check.setChecked(preset["worker"])
+        self._select_combo_data(self._llm_model_combo, preset["model"])
+        self._select_combo_data(self._llm_base_combo, preset["base"])
+        self._select_combo_data(self._reasoning_combo, preset["reasoning"])
+        self._json_mode_check.setChecked(preset["json"])
+        self._proxy_autostart_check.setChecked(preset["autostart"])
+        self._llm_workers_spin.setValue(preset["pool"])
+        self._llm_prompt_edit.setText(preset.get("prompt", ""))
+        self._set_preset_fields_enabled(False)
+
+    def _on_preset_toggled(self, code: str, checked: bool) -> None:
+        if checked:
+            self._apply_preset(code)
+
+    def _select_preset(self, name: str) -> None:
+        radio = self._preset_radios.get(name) or self._preset_radios["normal"]
+        radio.setChecked(True)
+        self._apply_preset(name)
+
+    def _on_advanced_toggled(self, checked: bool) -> None:
+        self._advanced_widget.setVisible(checked)
+        self._btn_advanced.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
+        )
+
+    def _on_engine_changed(self, index: int) -> None:
+        self._update_perf_enabled()
+
+    def _update_perf_enabled(self) -> None:
+        """Preset per tutti i motori; 'Massima velocità' e test solo per LLM."""
+        engine = self._engine_combo.currentData() or "google"
+        llm = engine == "llm"
+        box = getattr(self, "_box_perf", None)
+        if box is not None:
+            box.setEnabled(True)
+        fastest = self._preset_radios.get("fastest")
+        if fastest is not None:
+            fastest.setEnabled(llm)
+            fastest.setToolTip(
+                "" if llm else T("settings.performance.preset.fastest.llm_only")
+            )
+            desc = self._preset_descs.get("fastest")
+            if desc is not None:
+                desc.setEnabled(llm)
+        self._btn_proxy_test.setEnabled(llm)
+
+    def _on_test_provider(self):
+        """Avvia la prova provider in background e mostra l'esito."""
+        parent = self.parent()
+        autostart = self._proxy_autostart_check.isChecked()
+        port = int(self._proxy_port_spin.value())
+        if autostart:
+            base = f"http://127.0.0.1:{port}/v1"
+            ensure = getattr(parent, "ensure_proxy", None)
+            if callable(ensure):
+                ensure(port)
+        else:
+            base = self._selected_base_url() or clone_engine.DEFAULT_BASE_URL
+        model = self._llm_model_combo.currentData() or clone_engine.DEFAULT_MODEL
+        key = (os.environ.get(keystore.ENV_VAR) or "").strip()
+        self._proxy_test_result.setText(T("settings.proxy.test.running"))
+        self._proxy_test_result.setStyleSheet(_status_style("text5"))
+        thread = ProviderTestThread(base, model, key, self)
+        thread.result.connect(self._on_provider_result)
+        self._proxy_test_thread = thread  # evita il garbage collector
+        thread.start()
+
+    def _on_provider_result(self, outcome: dict):
+        if outcome.get("ok"):
+            self._proxy_test_result.setText(
+                T(
+                    "settings.proxy.test.ok",
+                    provider=outcome.get("provider") or "?",
+                    model=outcome.get("model") or "?",
+                )
+            )
+            self._proxy_test_result.setStyleSheet(_status_style("ok"))
+        else:
+            self._proxy_test_result.setText(
+                T("settings.proxy.test.error", error=outcome.get("error") or "?")
+            )
+            self._proxy_test_result.setStyleSheet(_status_style("err"))
+
+    def _populate_llm_combos(self, model_value=None, base_value=None):
+        """Riempe i menu modello/base URL preservando la selezione e i custom."""
+        model = (
+            model_value
+            if model_value is not None
+            else self._llm_model_combo.currentData()
+        )
+        self._llm_model_combo.clear()
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.mercury"), "inception/mercury-2.5"
+        )
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.gptoss"), "openai/gpt-oss-120b"
+        )
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.luna"), "openai/gpt-6-luna"
+        )
+        self._llm_model_combo.addItem(T("settings.llm.model.default"), "")
+        if model and self._llm_model_combo.findData(model) < 0:
+            self._llm_model_combo.addItem(model, model)
+        self._llm_model_combo.setCurrentIndex(
+            max(0, self._llm_model_combo.findData(model or ""))
+        )
+
+        base = (
+            base_value
+            if base_value is not None
+            else self._llm_base_combo.currentData()
+        )
+        self._llm_base_combo.clear()
+        self._llm_base_combo.addItem(T("settings.llm.base.openrouter"), "")
+        self._llm_base_combo.addItem(T("settings.llm.base.proxy"), "__proxy__")
+        if base and base != "__proxy__" and self._llm_base_combo.findData(base) < 0:
+            self._llm_base_combo.addItem(base, base)
+        self._llm_base_combo.setCurrentIndex(
+            max(0, self._llm_base_combo.findData(base or ""))
+        )
+
+    def _selected_base_url(self) -> str:
+        """Base URL effettiva dalla selezione corrente (proxy o preset)."""
+        selected = self._llm_base_combo.currentData() or ""
+        if selected == "__proxy__":
+            port = int(self._proxy_port_spin.value())
+            return f"http://127.0.0.1:{port}/v1"
+        return selected
+
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
         cfg = self._cfg
@@ -5277,6 +5615,18 @@ class SettingsDialog(QDialog):
         self._llm_workers_spin.setValue(
             int(cfg.get("llm_pool_workers", 4) or 4)
         )
+        # Porta proxy dal config, poi applica il preset (che governa i campi).
+        self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
+        preset = str(cfg.get("performance_preset", "normal") or "normal")
+        self._select_preset(preset)
+        self._numeric_lists_check.setChecked(bool(cfg.get("numeric_lists", False)))
+        # Prompt: un valore salvato non vuoto vince sul default del preset.
+        saved_prompt = str(cfg.get("llm_system_prompt", "") or "").strip()
+        if saved_prompt:
+            self._llm_prompt_edit.setText(saved_prompt)
+        # I flag B2 sono seedati OFF dai preset (precisione): non si ripristina
+        # un eventuale valore vecchio/errato salvato in config.
+        self._update_perf_enabled()
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -5342,10 +5692,55 @@ class SettingsDialog(QDialog):
         self._btn_test_sound.setText(T("settings.notify.test"))
         self._sleep_check.setText(T("settings.notify.prevent_sleep"))
         self._box_perf.setTitle(T("settings.group.performance"))
+        for code in ("normal", "fast", "fastest"):
+            self._preset_radios[code].setText(
+                T(f"settings.performance.preset.{code}.label")
+            )
+            self._preset_descs[code].setText(
+                T(f"settings.performance.preset.{code}.desc")
+            )
+        self._btn_advanced.setText(T("settings.performance.advanced"))
         self._lbl_llm_workers.setText(T("settings.performance.llm_workers"))
         self._llm_workers_spin.setToolTip(
             T("settings.performance.llm_workers.tip")
         )
+        self._fast_engine_check.setText(T("settings.performance.fast_engine"))
+        self._fast_engine_check.setToolTip(
+            T("settings.performance.fast_engine.tip")
+        )
+        self._fast_flags_check.setText(T("settings.performance.fast_flags"))
+        self._fast_flags_check.setToolTip(
+            T("settings.performance.fast_flags.tip")
+        )
+        self._numeric_lists_check.setText(
+            T("settings.performance.numeric_lists")
+        )
+        self._numeric_lists_check.setToolTip(
+            T("settings.performance.numeric_lists.tip")
+        )
+        self._fast_worker_check.setText(T("settings.performance.fast_worker"))
+        self._fast_worker_check.setToolTip(
+            T("settings.performance.fast_worker.tip")
+        )
+        self._lbl_reasoning.setText(T("settings.performance.reasoning_effort"))
+        self._reasoning_combo.setToolTip(
+            T("settings.performance.reasoning_effort.tip")
+        )
+        self._json_mode_check.setText(T("settings.performance.json_mode"))
+        self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
+        self._lbl_llm_model.setText(T("settings.llm.model"))
+        self._llm_model_combo.setToolTip(T("settings.llm.model.tip"))
+        self._lbl_llm_base.setText(T("settings.llm.base_url"))
+        self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
+        self._lbl_llm_prompt.setText(T("settings.llm.system_prompt"))
+        self._llm_prompt_edit.setToolTip(T("settings.llm.system_prompt.tip"))
+        self._populate_llm_combos()
+        self._proxy_autostart_check.setText(T("settings.proxy.autostart"))
+        self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
+        self._lbl_proxy_port.setText(T("settings.proxy.port"))
+        self._proxy_port_spin.setToolTip(T("settings.proxy.port.tip"))
+        self._btn_proxy_test.setText(T("settings.proxy.test"))
+        self._btn_proxy_test.setToolTip(T("settings.proxy.test.tip"))
         self._btn_ok.setText(T("settings.ok"))
         self._btn_cancel.setText(T("settings.cancel"))
 
@@ -5375,6 +5770,21 @@ class SettingsDialog(QDialog):
             "notify_sound": bool(self._sound_check.isChecked()),
             "prevent_sleep": bool(self._sleep_check.isChecked()),
             "llm_pool_workers": int(self._llm_workers_spin.value()),
+            "performance_preset": next(
+                (code for code, radio in self._preset_radios.items() if radio.isChecked()),
+                "normal",
+            ),
+            "fast_engine": bool(self._fast_engine_check.isChecked()),
+            "fast_flags": bool(self._fast_flags_check.isChecked()),
+            "numeric_lists": bool(self._numeric_lists_check.isChecked()),
+            "fast_worker": bool(self._fast_worker_check.isChecked()),
+            "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
+            "llm_json_mode": bool(self._json_mode_check.isChecked()),
+            "llm_model": self._llm_model_combo.currentData() or "",
+            "llm_base_url": self._selected_base_url(),
+            "llm_system_prompt": self._llm_prompt_edit.text().strip(),
+            "llm_proxy_autostart": bool(self._proxy_autostart_check.isChecked()),
+            "llm_proxy_port": int(self._proxy_port_spin.value()),
         }
 
 
@@ -7039,6 +7449,10 @@ class MainWindow(QMainWindow):
             pdf2zh_bin=get_setting("pdf2zh_bin", "") or None,
             max_concurrent=1,
         )
+        # Proxy provider locale (avvio automatico opzionale + prova provider).
+        self._proxy_manager = proxy_manager.ProxyManager(
+            log_dir=_app_data_base() / "clones" / "_tmp"
+        )
         self._clone_thread: CloneTranslateThread | None = None
         self._retired_clone_threads: list[CloneTranslateThread] = []
         self._orig_pixmap: QPixmap | None = None
@@ -8021,7 +8435,11 @@ class MainWindow(QMainWindow):
         for key in ("zoom", "font_size", "render_md", "show_header",
                     "resume_last_page", "remember_tab", "save_edits",
                     "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
-                    "prevent_sleep", "llm_pool_workers"):
+                    "prevent_sleep", "llm_pool_workers",
+                    "fast_engine", "fast_flags",
+                    "llm_reasoning_effort", "llm_json_mode", "fast_worker",
+                    "llm_model", "llm_base_url",
+                    "llm_proxy_autostart", "llm_proxy_port", "llm_system_prompt"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8244,6 +8662,57 @@ class MainWindow(QMainWindow):
         self._clone_engine.llm_pool_workers = max(
             1, int(get_setting("llm_pool_workers", 4) or 4)
         )
+        # Feature sperimentale "motore veloce" (default OFF, reversibile).
+        self._clone_engine.fast_engine = bool(get_setting("fast_engine", False))
+        self._clone_engine.fast_flags = bool(get_setting("fast_flags", False))
+        self._clone_engine.llm_reasoning_effort = str(
+            get_setting("llm_reasoning_effort", "") or ""
+        )
+        self._clone_engine.llm_json_mode = bool(get_setting("llm_json_mode", False))
+        # Modello / base URL: setting esplicito, altrimenti env o default.
+        model = str(get_setting("llm_model", "") or "").strip()
+        self._clone_engine.llm_model = model or os.environ.get(
+            "PDF_LLM_MODEL", clone_engine.DEFAULT_MODEL
+        )
+        base = str(get_setting("llm_base_url", "") or "").strip()
+        self._clone_engine.llm_base_url = base or os.environ.get(
+            "PDF_LLM_BASE_URL", clone_engine.DEFAULT_BASE_URL
+        )
+        # Proxy provider locale: se l'avvio automatico è attivo, punta la base
+        # URL al proxy e avvialo in background.
+        if self._clone_engine.fast_engine and bool(
+            get_setting("llm_proxy_autostart", False)
+        ):
+            port = int(get_setting("llm_proxy_port", 8790) or 8790)
+            self._clone_engine.llm_base_url = f"http://127.0.0.1:{port}/v1"
+            self._ensure_proxy_async(port)
+        self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
+        self._clone_engine.numeric_lists = bool(get_setting("numeric_lists", False))
+        self._clone_engine.llm_system_prompt = str(
+            get_setting("llm_system_prompt", "") or ""
+        ).strip()
+        if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
+            # Pre-avvia il worker persistente (in background): il costo di avvio
+            # non ricade sulla prima pagina.
+            self._clone_engine.warmup()
+
+    def _ensure_proxy_async(self, port: int) -> None:
+        """Avvia il proxy provider in background (best effort, non bloccante)."""
+        def _go() -> None:
+            try:
+                self._proxy_manager.ensure_started(int(port))
+            except Exception:  # noqa: BLE001
+                pass
+
+        threading.Thread(target=_go, name="proxy-start", daemon=True).start()
+
+    def ensure_proxy(self, port: int | None = None) -> bool:
+        """Assicura il proxy provider (usato dal pulsante "Prova provider")."""
+        port = int(port or get_setting("llm_proxy_port", 8790) or 8790)
+        try:
+            return self._proxy_manager.ensure_started(port)
+        except Exception:  # noqa: BLE001
+            return False
 
     def _update_engine_banner(self):
         """Aggiorna le strisce informative (motore e chiave mancanti)."""
@@ -8927,6 +9396,15 @@ class MainWindow(QMainWindow):
             export_engine.llm_model = self._clone_engine.llm_model
             export_engine.llm_base_url = self._clone_engine.llm_base_url
             export_engine.llm_pool_workers = self._clone_engine.llm_pool_workers
+            export_engine.fast_engine = self._clone_engine.fast_engine
+            export_engine.fast_flags = self._clone_engine.fast_flags
+            export_engine.llm_reasoning_effort = (
+                self._clone_engine.llm_reasoning_effort
+            )
+            export_engine.llm_json_mode = self._clone_engine.llm_json_mode
+            export_engine.fast_worker = self._clone_engine.fast_worker
+            export_engine.numeric_lists = self._clone_engine.numeric_lists
+            export_engine.llm_system_prompt = self._clone_engine.llm_system_prompt
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,
@@ -8940,6 +9418,10 @@ class MainWindow(QMainWindow):
             dest,
             fmt,
         )
+        if export_engine is not self._clone_engine:
+            # L'engine dedicato all'export non serve più: chiude l'eventuale
+            # worker persistente per non lasciare processi orfani.
+            export_engine.close()
         if not ok:
             return
         self.status_bar.showMessage(
@@ -9260,6 +9742,12 @@ class MainWindow(QMainWindow):
         self._save_extraction_cache()
         save_config()  # flush ultima pagina / ultima tab
         self.text_panel.shutdown()
+        # Termina l'eventuale worker persistente del motore (Fase 2).
+        with contextlib.suppress(Exception):
+            self._clone_engine.close()
+        # Termina l'eventuale proxy provider avviato dall'app.
+        with contextlib.suppress(Exception):
+            self._proxy_manager.stop()
         super().closeEvent(event)
 
 

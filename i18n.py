@@ -100,6 +100,26 @@ DEFAULTS: dict = {
     "notify_sound": True,      # suono d'avviso a fine batch
     "prevent_sleep": True,     # impedisci lo standby durante la traduzione
     "llm_pool_workers": 4,     # richieste LLM in parallelo dentro una pagina
+    # Feature sperimentale "motore veloce": patch runtime del motore (default
+    # OFF, reversibile). Vedi .opencode/plan/velocita-traduzione.md.
+    "fast_engine": False,      # motore veloce (wrapper + patch runtime)
+    "fast_flags": False,       # preset "traduzione rapida" (salta controlli)
+    "fast_worker": False,      # worker persistente (Fase 2, richiede fast_engine)
+    # Preset prestazioni (governa i campi sottostanti): normal | fast | fastest.
+    "performance_preset": "normal",
+    # Opzioni LLM avanzate (usate solo a fast_engine attivo).
+    "llm_reasoning_effort": "",  # "" | minimal | low | medium | high
+    "llm_json_mode": False,      # --openai-enable-json-mode
+    # Modello e base URL LLM (vuoto = default/env PDF_LLM_MODEL / PDF_LLM_BASE_URL).
+    "llm_model": "",
+    "llm_base_url": "",
+    # Prompt di sistema personalizzato per il motore LLM (vuoto = default).
+    "llm_system_prompt": "",
+    # Proxy provider locale (pin Groq): avvio automatico dall'app + porta.
+    "llm_proxy_autostart": False,
+    "llm_proxy_port": 8790,
+    # Riconoscimento liste numerate/alfabetiche (patch runtime, opt-in).
+    "numeric_lists": False,
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -2100,6 +2120,76 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Prestazioni", "en": "Performance", "fr": "Performances",
         "de": "Leistung", "es": "Rendimiento",
     },
+    "settings.performance.preset.normal.label": {
+        "it": "Normale",
+        "en": "Normal",
+        "fr": "Normal",
+        "de": "Normal",
+        "es": "Normal",
+    },
+    "settings.performance.preset.normal.desc": {
+        "it": "Massima compatibilità: nessuna ottimizzazione. ~40 s/pagina.",
+        "en": "Maximum compatibility: no optimizations. ~40 s/page.",
+        "fr": "Compatibilité maximale : aucune optimisation. ~40 s/page.",
+        "de": "Maximale Kompatibilität: keine Optimierungen. ~40 s/Seite.",
+        "es": "Máxima compatibilidad: sin optimizaciones. ~40 s/página.",
+    },
+    "settings.performance.preset.fast.label": {
+        "it": "Veloce (consigliato)",
+        "en": "Fast (recommended)",
+        "fr": "Rapide (recommandé)",
+        "de": "Schnell (empfohlen)",
+        "es": "Rápido (recomendado)",
+    },
+    "settings.performance.preset.fast.desc": {
+        "it": "Ottimizzazioni della pipeline (patch + worker). ~33 s/pagina.",
+        "en": "Pipeline optimizations (patch + worker). ~33 s/page.",
+        "fr": "Optimisations du pipeline (patch + worker). ~33 s/page.",
+        "de": "Pipeline-Optimierungen (Patch + Worker). ~33 s/Seite.",
+        "es": "Optimizaciones del pipeline (patch + worker). ~33 s/página.",
+    },
+    "settings.performance.preset.fastest.label": {
+        "it": "Massima velocità",
+        "en": "Fastest",
+        "fr": "Maximum",
+        "de": "Maximal",
+        "es": "Máxima",
+    },
+    "settings.performance.preset.fastest.desc": {
+        "it": "gpt-oss su Groq: richiede la chiave OpenRouter e avvia il proxy locale. ~23 s/pagina.",
+        "en": "gpt-oss on Groq: needs the OpenRouter key and starts the local proxy. ~23 s/page.",
+        "fr": "gpt-oss sur Groq : nécessite la clé OpenRouter et démarre le proxy local. ~23 s/page.",
+        "de": "gpt-oss auf Groq: benötigt den OpenRouter-Schlüssel und startet den lokalen Proxy. ~23 s/Seite.",
+        "es": "gpt-oss en Groq: requiere la clave de OpenRouter e inicia el proxy local. ~23 s/página.",
+    },
+    "settings.performance.preset.fastest.llm_only": {
+        "it": "Disponibile solo con il motore LLM.",
+        "en": "Available only with the LLM engine.",
+        "fr": "Disponible uniquement avec le moteur LLM.",
+        "de": "Nur mit der LLM-Engine verfügbar.",
+        "es": "Disponible solo con el motor LLM.",
+    },
+    "settings.performance.advanced": {
+        "it": "Avanzate",
+        "en": "Advanced",
+        "fr": "Avancé",
+        "de": "Erweitert",
+        "es": "Avanzado",
+    },
+    "settings.performance.numeric_lists": {
+        "it": "Rileva liste numerate/alfabetiche",
+        "en": "Detect numbered/lettered lists",
+        "fr": "Détecter les listes numérotées/lettrées",
+        "de": "Nummerierte/Buchstaben-Listen erkennen",
+        "es": "Detectar listas numeradas/con letras",
+    },
+    "settings.performance.numeric_lists.tip": {
+        "it": "Fa riconoscere a BabelDOC le liste numerate (1., 2.) e alfabetiche (a., b.) come voci separate, invece di fonderle in un paragrafo. Piccola patch runtime, default OFF.",
+        "en": "Makes BabelDOC treat numbered (1., 2.) and lettered (a., b.) lists as separate items instead of merging them into a paragraph. Small runtime patch, default OFF.",
+        "fr": "Fait reconnaître à BabelDOC les listes numérotées (1., 2.) et lettrées (a., b.) comme des éléments séparés, au lieu de les fusionner. Petite patch runtime, désactivée par défaut.",
+        "de": "Lässt BabelDOC nummerierte (1., 2.) und alphabetische (a., b.) Listen als einzelne Einträge erkennen, statt sie zu einem Absatz zu verschmelzen. Kleiner Runtime-Patch, standardmäßig AUS.",
+        "es": "Hace que BabelDOC reconozca listas numeradas (1., 2.) y con letras (a., b.) como elementos separados, en vez de fusionarlas en un párrafo. Pequeño parche runtime, desactivado por defecto.",
+    },
     "settings.performance.llm_workers": {
         "it": "Richieste LLM in parallelo (per pagina)",
         "en": "Parallel LLM requests (per page)",
@@ -2113,6 +2203,223 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Combien de portions de texte traduire en même temps avec le moteur LLM. Plus élevé = plus rapide, mais peut atteindre les limites du service.",
         "de": "Wie viele Textabschnitte die LLM-Engine gleichzeitig übersetzt. Höher ist schneller, kann aber die Dienstlimits erreichen.",
         "es": "Cuántos fragmentos de texto traducir a la vez con el motor LLM. Más alto es más rápido, pero puede alcanzar los límites del servicio.",
+    },
+    "settings.performance.fast_engine": {
+        "it": "Motore veloce (sperimentale)",
+        "en": "Fast engine (experimental)",
+        "fr": "Moteur rapide (expérimental)",
+        "de": "Schnelle Engine (experimentell)",
+        "es": "Motor rápido (experimental)",
+    },
+    "settings.performance.fast_engine.tip": {
+        "it": "Avvia il motore tramite un wrapper che applica patch di velocità (cache dei font, niente monitor memoria). Non cambia il risultato. Disattivalo per tornare al comportamento standard.",
+        "en": "Runs the engine through a wrapper that applies speed patches (font cache, no memory monitor). The result is unchanged. Turn it off to return to the standard behaviour.",
+        "fr": "Lance le moteur via un wrapper qui applique des correctifs de vitesse (cache des polices, sans moniteur mémoire). Le résultat est inchangé. Désactivez-le pour revenir au comportement standard.",
+        "de": "Startet die Engine über einen Wrapper mit Geschwindigkeits-Patches (Font-Cache, kein Speicher-Monitor). Das Ergebnis bleibt gleich. Deaktivieren für das Standardverhalten.",
+        "es": "Ejecuta el motor mediante un wrapper que aplica mejoras de velocidad (caché de fuentes, sin monitor de memoria). El resultado no cambia. Desactívalo para volver al comportamiento estándar.",
+    },
+    "settings.performance.fast_flags": {
+        "it": "Traduzione rapida: salta controlli avanzati (sperimentale)",
+        "en": "Fast translation: skip advanced checks (experimental)",
+        "fr": "Traduction rapide : ignorer les contrôles avancés (expérimental)",
+        "de": "Schnelle Übersetzung: erweiterte Prüfungen überspringen (experimentell)",
+        "es": "Traducción rápida: omitir comprobaciones avanzadas (experimental)",
+    },
+    "settings.performance.fast_flags.tip": {
+        "it": "Aggiunge flag che saltano controlli geometrici/formule quando la pagina ha testo. Più veloce, ma la resa di formule e layout può risultare meno precisa. Su pagine scansionate non ha effetto.",
+        "en": "Adds flags that skip geometry/formula checks when the page has text. Faster, but formula and layout fidelity may be lower. Has no effect on scanned pages.",
+        "fr": "Ajoute des options qui ignorent les contrôles de géométrie/formules lorsque la page contient du texte. Plus rapide, mais la fidélité des formules et de la mise en page peut baisser. Sans effet sur les pages scannées.",
+        "de": "Fügt Optionen hinzu, die Geometrie-/Formelprüfungen bei Textseiten überspringen. Schneller, aber Formel- und Layouttreue kann geringer sein. Ohne Wirkung bei gescannten Seiten.",
+        "es": "Añade opciones que omiten comprobaciones de geometría/fórmulas cuando la página tiene texto. Más rápido, pero la fidelidad de fórmulas y diseño puede ser menor. Sin efecto en páginas escaneadas.",
+    },
+    "settings.performance.fast_worker": {
+        "it": "Worker persistente (sperimentale)",
+        "en": "Persistent worker (experimental)",
+        "fr": "Worker persistant (expérimental)",
+        "de": "Persistenter Worker (experimentell)",
+        "es": "Worker persistente (experimental)",
+    },
+    "settings.performance.fast_worker.tip": {
+        "it": "Tiene un processo del motore caldo tra una pagina e l'altra: elimina gli import e i warmup ripetuti (più veloce dalla seconda pagina). Richiede il motore veloce. Se non disponibile, si torna automaticamente al metodo normale.",
+        "en": "Keeps an engine process warm between pages: removes repeated imports and warmups (faster from the second page onward). Requires the fast engine. Falls back automatically if unavailable.",
+        "fr": "Garde un processus moteur actif entre les pages : supprime les imports et warmups répétés (plus rapide dès la deuxième page). Nécessite le moteur rapide. Retour automatique si indisponible.",
+        "de": "Hält einen Engine-Prozess zwischen Seiten warm: entfernt wiederholte Importe und Warmups (schneller ab der zweiten Seite). Erfordert die schnelle Engine. Fällt automatisch zurück.",
+        "es": "Mantiene un proceso del motor caliente entre páginas: elimina importaciones y calentamientos repetidos (más rápido desde la segunda página). Requiere el motor rápido. Vuelve solo si no está disponible.",
+    },
+    "settings.performance.reasoning_effort": {
+        "it": "LLM: reasoning effort",
+        "en": "LLM: reasoning effort",
+        "fr": "LLM : effort de raisonnement",
+        "de": "LLM: Reasoning-Aufwand",
+        "es": "LLM: esfuerzo de razonamiento",
+    },
+    "settings.performance.reasoning_effort.tip": {
+        "it": "Per i modelli ragionativi (es. gpt-oss): valori bassi come 'minimal' riducono i token di ragionamento e la latenza. Richiede il motore veloce attivo.",
+        "en": "For reasoning models (e.g. gpt-oss): low values like 'minimal' cut reasoning tokens and latency. Requires the fast engine.",
+        "fr": "Pour les modèles de raisonnement (ex. gpt-oss) : des valeurs basses comme « minimal » réduisent les tokens de raisonnement et la latence. Nécessite le moteur rapide.",
+        "de": "Für Reasoning-Modelle (z. B. gpt-oss): niedrige Werte wie 'minimal' reduzieren Reasoning-Tokens und Latenz. Erfordert die schnelle Engine.",
+        "es": "Para modelos de razonamiento (p. ej. gpt-oss): valores bajos como 'minimal' reducen los tokens de razonamiento y la latencia. Requiere el motor rápido.",
+    },
+    "settings.performance.json_mode": {
+        "it": "LLM: JSON mode",
+        "en": "LLM: JSON mode",
+        "fr": "LLM : mode JSON",
+        "de": "LLM: JSON-Modus",
+        "es": "LLM: modo JSON",
+    },
+    "settings.performance.json_mode.tip": {
+        "it": "Chiede al provider risposte JSON strutturate (se supportato). Può ridurre errori di parsing. Richiede il motore veloce attivo.",
+        "en": "Asks the provider for structured JSON responses (if supported). May reduce parsing errors. Requires the fast engine.",
+        "fr": "Demande au fournisseur des réponses JSON structurées (si pris en charge). Peut réduire les erreurs d'analyse. Nécessite le moteur rapide.",
+        "de": "Fordert strukturierte JSON-Antworten vom Anbieter an (falls unterstützt). Kann Parsing-Fehler reduzieren. Erfordert die schnelle Engine.",
+        "es": "Solicita al proveedor respuestas JSON estructuradas (si se admite). Puede reducir errores de análisis. Requiere el motor rápido.",
+    },
+    "settings.llm.model": {
+        "it": "LLM: modello",
+        "en": "LLM: model",
+        "fr": "LLM : modèle",
+        "de": "LLM: Modell",
+        "es": "LLM: modelo",
+    },
+    "settings.llm.model.tip": {
+        "it": "Modello del motore LLM (es. inception/mercury-2.5, openai/gpt-oss-120b). Vuoto = default (o variabile PDF_LLM_MODEL).",
+        "en": "LLM engine model (e.g. inception/mercury-2.5, openai/gpt-oss-120b). Empty = default (or PDF_LLM_MODEL env).",
+        "fr": "Modèle du moteur LLM (ex. inception/mercury-2.5, openai/gpt-oss-120b). Vide = défaut (ou variable PDF_LLM_MODEL).",
+        "de": "Modell der LLM-Engine (z. B. inception/mercury-2.5, openai/gpt-oss-120b). Leer = Standard (oder PDF_LLM_MODEL).",
+        "es": "Modelo del motor LLM (p. ej. inception/mercury-2.5, openai/gpt-oss-120b). Vacío = predeterminado (o PDF_LLM_MODEL).",
+    },
+    "settings.llm.base_url": {
+        "it": "LLM: base URL",
+        "en": "LLM: base URL",
+        "fr": "LLM : URL de base",
+        "de": "LLM: Basis-URL",
+        "es": "LLM: URL base",
+    },
+    "settings.llm.base_url.tip": {
+        "it": "Endpoint OpenAI-compatibile. Default OpenRouter; es. http://127.0.0.1:8790/v1 per il proxy provider (pin Groq). Vuoto = default (o variabile PDF_LLM_BASE_URL).",
+        "en": "OpenAI-compatible endpoint. Default OpenRouter; e.g. http://127.0.0.1:8790/v1 for the provider proxy (Groq pin). Empty = default (or PDF_LLM_BASE_URL env).",
+        "fr": "Endpoint compatible OpenAI. Par défaut OpenRouter ; ex. http://127.0.0.1:8790/v1 pour le proxy de fournisseur (pin Groq). Vide = défaut (ou PDF_LLM_BASE_URL).",
+        "de": "OpenAI-kompatibler Endpunkt. Standard OpenRouter; z. B. http://127.0.0.1:8790/v1 für den Provider-Proxy (Groq-Pin). Leer = Standard (oder PDF_LLM_BASE_URL).",
+        "es": "Endpoint compatible con OpenAI. Por defecto OpenRouter; p. ej. http://127.0.0.1:8790/v1 para el proxy de proveedor (pin Groq). Vacío = predeterminado (o PDF_LLM_BASE_URL).",
+    },
+    "settings.llm.system_prompt": {
+        "it": "LLM: prompt di sistema",
+        "en": "LLM: system prompt",
+        "fr": "LLM : prompt système",
+        "de": "LLM: System-Prompt",
+        "es": "LLM: prompt del sistema",
+    },
+    "settings.llm.system_prompt.tip": {
+        "it": "Istruzioni aggiuntive per il motore LLM (es. 'mantieni i nomi dei farmaci in italiano, non tradurre le citazioni'). Vuoto = prompt predefinito.",
+        "en": "Extra instructions for the LLM engine (e.g. 'keep drug names in Italian, do not translate citations'). Empty = default prompt.",
+        "fr": "Instructions supplémentaires pour le moteur LLM (ex. « garder les noms de médicaments en italien, ne pas traduire les citations »). Vide = prompt par défaut.",
+        "de": "Zusätzliche Anweisungen für die LLM-Engine (z. B. 'Arzneimittelnamen auf Italienisch behalten, Zitate nicht übersetzen'). Leer = Standard-Prompt.",
+        "es": "Instrucciones adicionales para el motor LLM (p. ej. 'mantener los nombres de fármacos en italiano, no traducir las citas'). Vacío = prompt predeterminado.",
+    },
+    "settings.llm.model.mercury": {
+        "it": "Mercury — inception/mercury-2.5",
+        "en": "Mercury — inception/mercury-2.5",
+        "fr": "Mercury — inception/mercury-2.5",
+        "de": "Mercury — inception/mercury-2.5",
+        "es": "Mercury — inception/mercury-2.5",
+    },
+    "settings.llm.model.gptoss": {
+        "it": "gpt-oss-120B — openai/gpt-oss-120b",
+        "en": "gpt-oss-120B — openai/gpt-oss-120b",
+        "fr": "gpt-oss-120B — openai/gpt-oss-120b",
+        "de": "gpt-oss-120B — openai/gpt-oss-120b",
+        "es": "gpt-oss-120B — openai/gpt-oss-120b",
+    },
+    "settings.llm.model.luna": {
+        "it": "gpt-6-luna — openai/gpt-6-luna",
+        "en": "gpt-6-luna — openai/gpt-6-luna",
+        "fr": "gpt-6-luna — openai/gpt-6-luna",
+        "de": "gpt-6-luna — openai/gpt-6-luna",
+        "es": "gpt-6-luna — openai/gpt-6-luna",
+    },
+    "settings.llm.model.default": {
+        "it": "Default (variabile d'ambiente)",
+        "en": "Default (environment variable)",
+        "fr": "Défaut (variable d'environnement)",
+        "de": "Standard (Umgebungsvariable)",
+        "es": "Predeterminado (variable de entorno)",
+    },
+    "settings.llm.base.openrouter": {
+        "it": "OpenRouter (default)",
+        "en": "OpenRouter (default)",
+        "fr": "OpenRouter (défaut)",
+        "de": "OpenRouter (Standard)",
+        "es": "OpenRouter (predeterminado)",
+    },
+    "settings.llm.base.proxy": {
+        "it": "Proxy locale (pin Groq)",
+        "en": "Local proxy (Groq pin)",
+        "fr": "Proxy local (pin Groq)",
+        "de": "Lokaler Proxy (Groq-Pin)",
+        "es": "Proxy local (pin Groq)",
+    },
+    "settings.proxy.autostart": {
+        "it": "Avvia automaticamente il proxy provider",
+        "en": "Start the provider proxy automatically",
+        "fr": "Démarrer automatiquement le proxy de fournisseur",
+        "de": "Provider-Proxy automatisch starten",
+        "es": "Iniciar automáticamente el proxy de proveedor",
+    },
+    "settings.proxy.autostart.tip": {
+        "it": "Avvia in background il proxy locale (pin del provider, es. Groq) e usa automaticamente il suo indirizzo come base URL LLM. Richiede il motore veloce.",
+        "en": "Starts the local proxy in the background (provider pin, e.g. Groq) and uses its address as the LLM base URL. Requires the fast engine.",
+        "fr": "Démarre le proxy local en arrière-plan (pin du fournisseur, ex. Groq) et utilise son adresse comme URL de base LLM. Nécessite le moteur rapide.",
+        "de": "Startet den lokalen Proxy im Hintergrund (Provider-Pin, z. B. Groq) und nutzt dessen Adresse als LLM-Basis-URL. Erfordert die schnelle Engine.",
+        "es": "Inicia el proxy local en segundo plano (pin del proveedor, p. ej. Groq) y usa su dirección como URL base del LLM. Requiere el motor rápido.",
+    },
+    "settings.proxy.port": {
+        "it": "Porta del proxy",
+        "en": "Proxy port",
+        "fr": "Port du proxy",
+        "de": "Proxy-Port",
+        "es": "Puerto del proxy",
+    },
+    "settings.proxy.port.tip": {
+        "it": "Porta locale del proxy provider (default 8790).",
+        "en": "Local port of the provider proxy (default 8790).",
+        "fr": "Port local du proxy de fournisseur (défaut 8790).",
+        "de": "Lokaler Port des Provider-Proxys (Standard 8790).",
+        "es": "Puerto local del proxy de proveedor (predeterminado 8790).",
+    },
+    "settings.proxy.test": {
+        "it": "Prova provider",
+        "en": "Test provider",
+        "fr": "Tester le fournisseur",
+        "de": "Provider testen",
+        "es": "Probar proveedor",
+    },
+    "settings.proxy.test.tip": {
+        "it": "Invia una piccola richiesta e mostra quale provider risponde (es. Groq). Utile per verificare il pin.",
+        "en": "Sends a tiny request and shows which provider answers (e.g. Groq). Useful to verify the pin.",
+        "fr": "Envoie une petite requête et indique quel fournisseur répond (ex. Groq). Utile pour vérifier le pin.",
+        "de": "Sendet eine kleine Anfrage und zeigt, welcher Provider antwortet (z. B. Groq). Nützlich zur Pin-Prüfung.",
+        "es": "Envía una petición pequeña y muestra qué proveedor responde (p. ej. Groq). Útil para verificar el pin.",
+    },
+    "settings.proxy.test.running": {
+        "it": "Verifica in corso…",
+        "en": "Testing…",
+        "fr": "Vérification…",
+        "de": "Prüfung läuft…",
+        "es": "Comprobando…",
+    },
+    "settings.proxy.test.ok": {
+        "it": "Provider: {provider} — modello: {model}",
+        "en": "Provider: {provider} — model: {model}",
+        "fr": "Fournisseur : {provider} — modèle : {model}",
+        "de": "Provider: {provider} — Modell: {model}",
+        "es": "Proveedor: {provider} — modelo: {model}",
+    },
+    "settings.proxy.test.error": {
+        "it": "Errore: {error}",
+        "en": "Error: {error}",
+        "fr": "Erreur : {error}",
+        "de": "Fehler: {error}",
+        "es": "Error: {error}",
     },
     # ── notifiche (contenuti) ───────────────────────────────────────────────
     "notify.batch.title": {
@@ -2241,13 +2548,61 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
     out-of-range values degrade to the defaults/clamps instead of crashing.
     """
     out = dict(defaults)
-    if raw.get("lang") in LANGUAGES:
-        out["lang"] = raw["lang"]
-    if raw.get("src_lang") in TRANSLATION_LANGUAGES:
-        out["src_lang"] = raw["src_lang"]
+
+    # Merge generico forward-compatible: per ogni chiave nota nei default,
+    # conserva il valore salvato (con coercizione di tipo). Prima molte chiavi
+    # (engine, theme, notify_*, llm_pool_workers, stringhe LLM…) venivano
+    # ignorate e tornavano al default a ogni riavvio.
+    for key, default in defaults.items():
+        if key not in raw:
+            continue
+        value = raw[key]
+        if isinstance(default, bool):
+            out[key] = _to_bool(value, default)
+        elif isinstance(default, int):
+            try:
+                out[key] = int(value)
+            except (TypeError, ValueError):
+                pass
+        elif isinstance(default, float):
+            try:
+                out[key] = float(value)
+            except (TypeError, ValueError):
+                pass
+        elif isinstance(default, str):
+            if isinstance(value, str):
+                out[key] = value
+        elif isinstance(default, dict):
+            if isinstance(value, dict):
+                out[key] = value
+
+    out["lang"] = raw["lang"] if raw.get("lang") in LANGUAGES else defaults["lang"]
+    out["src_lang"] = (
+        raw["src_lang"]
+        if raw.get("src_lang") in TRANSLATION_LANGUAGES
+        else defaults["src_lang"]
+    )
     dst = raw.get("dst_lang")
-    if dst in TRANSLATION_LANGUAGES and dst != "auto":
-        out["dst_lang"] = dst
+    out["dst_lang"] = (
+        dst if (dst in TRANSLATION_LANGUAGES and dst != "auto") else defaults["dst_lang"]
+    )
+    out["engine"] = (
+        raw["engine"]
+        if raw.get("engine") in TRANSLATION_ENGINES
+        else defaults["engine"]
+    )
+    theme = str(raw.get("theme", "")).strip().lower()
+    out["theme"] = theme if theme in ("dark", "light", "system") else defaults["theme"]
+    preset = str(raw.get("performance_preset", "")).strip().lower()
+    out["performance_preset"] = (
+        preset if preset in ("normal", "fast", "fastest")
+        else defaults["performance_preset"]
+    )
+    effort = str(raw.get("llm_reasoning_effort", "")).strip().lower()
+    out["llm_reasoning_effort"] = (
+        effort if effort in ("", "minimal", "low", "medium", "high")
+        else defaults["llm_reasoning_effort"]
+    )
     try:
         out["zoom"] = min(4.0, max(0.5, float(raw.get("zoom", out["zoom"]))))
     except (TypeError, ValueError):
@@ -2256,10 +2611,25 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed"):
+    try:
+        out["llm_pool_workers"] = min(
+            16, max(1, int(raw.get("llm_pool_workers", out["llm_pool_workers"])))
+        )
+    except (TypeError, ValueError):
+        pass
+    try:
+        out["llm_proxy_port"] = min(
+            65535, max(1024, int(raw.get("llm_proxy_port", out["llm_proxy_port"])))
+        )
+    except (TypeError, ValueError):
+        pass
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode", "notify_on_finish", "notify_sound", "prevent_sleep", "llm_proxy_autostart", "numeric_lists"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
-    if raw.get("last_tab") in ("original", "translated", "images"):
-        out["last_tab"] = raw["last_tab"]
+    out["last_tab"] = (
+        raw["last_tab"]
+        if raw.get("last_tab") in ("original", "translated", "images")
+        else defaults["last_tab"]
+    )
     pages = raw.get("last_pages")
     if isinstance(pages, dict):
         cleaned: dict[str, int] = {}

@@ -23,6 +23,6 @@ fi
 if [ ! -d .venv2 ]; then
   "$UV" venv --python python3.12 .venv2
 fi
-"$UV" pip install --python .venv2/bin/python -q pdf2zh_next
+"$UV" pip install --python .venv2/bin/python -q pdf2zh_next==2.9.0
 
 exec .venv/bin/python main.py "$@"

@@ -132,6 +132,117 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         chime.assert_called_once_with(True)
         dlg.close()
 
+    def test_llm_model_and_base_are_combos_with_presets(self):
+        dlg = self.main.SettingsDialog()
+        models = [
+            dlg._llm_model_combo.itemData(i)
+            for i in range(dlg._llm_model_combo.count())
+        ]
+        self.assertIn("inception/mercury-2.5", models)
+        self.assertIn("openai/gpt-oss-120b", models)
+        bases = [
+            dlg._llm_base_combo.itemData(i)
+            for i in range(dlg._llm_base_combo.count())
+        ]
+        self.assertIn("__proxy__", bases)
+        self.assertIn("", bases)
+
+    def test_llm_values_map_combo_selection(self):
+        dlg = self.main.SettingsDialog()
+        idx = dlg._llm_model_combo.findData("openai/gpt-oss-120b")
+        dlg._llm_model_combo.setCurrentIndex(idx)
+        idx = dlg._llm_base_combo.findData("__proxy__")
+        dlg._llm_base_combo.setCurrentIndex(idx)
+        dlg._proxy_port_spin.setValue(8791)
+        values = dlg.values()
+        self.assertEqual(values["llm_model"], "openai/gpt-oss-120b")
+        self.assertEqual(values["llm_base_url"], "http://127.0.0.1:8791/v1")
+        dlg.close()
+
+    def test_performance_presets_fill_fields(self):
+        dlg = self.main.SettingsDialog()
+        # La sezione è attiva solo col motore LLM.
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
+        cases = {
+            "normal": dict(
+                fast=False, worker=False, model="inception/mercury-2.5",
+                proxy=False, pool=4, reasoning="", base="",
+            ),
+            "fast": dict(
+                fast=True, worker=True, model="inception/mercury-2.5",
+                proxy=False, pool=4, reasoning="", base="",
+            ),
+            "fastest": dict(
+                fast=True, worker=True, model="openai/gpt-oss-120b",
+                proxy=True, pool=8, reasoning="minimal",
+                base="http://127.0.0.1:8790/v1",
+            ),
+        }
+        for name, exp in cases.items():
+            dlg._select_preset(name)
+            self.assertTrue(dlg._preset_radios[name].isChecked(), name)
+            v = dlg.values()
+            self.assertEqual(v["performance_preset"], name)
+            self.assertEqual(v["fast_engine"], exp["fast"], name)
+            self.assertEqual(v["fast_worker"], exp["worker"], name)
+            self.assertEqual(v["llm_model"], exp["model"], name)
+            self.assertEqual(v["llm_pool_workers"], exp["pool"], name)
+            self.assertEqual(v["llm_reasoning_effort"], exp["reasoning"], name)
+            self.assertEqual(v["llm_proxy_autostart"], exp["proxy"], name)
+            self.assertEqual(v["llm_base_url"], exp["base"], name)
+            # Solo "Massima velocità" imposta un prompt di sistema di default.
+            if name == "fastest":
+                self.assertTrue(v["llm_system_prompt"])
+            else:
+                self.assertEqual(v["llm_system_prompt"], "")
+        # I campi dipendenti sono di sola lettura (governati dal preset).
+        self.assertFalse(dlg._fast_engine_check.isEnabled())
+        self.assertFalse(dlg._llm_model_combo.isEnabled())
+        self.assertTrue(dlg._btn_proxy_test.isEnabled())
+        dlg.close()
+
+    def test_perf_presets_visible_for_all_engines(self):
+        dlg = self.main.SettingsDialog()
+        for engine in ("google", "bing"):
+            dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData(engine))
+            self.assertTrue(dlg._box_perf.isEnabled(), engine)
+            self.assertTrue(dlg._preset_radios["normal"].isEnabled(), engine)
+            self.assertTrue(dlg._preset_radios["fast"].isEnabled(), engine)
+            # 'Massima velocità' è solo per il motore LLM.
+            self.assertFalse(dlg._preset_radios["fastest"].isEnabled(), engine)
+            self.assertFalse(dlg._btn_proxy_test.isEnabled(), engine)
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
+        self.assertTrue(dlg._preset_radios["fastest"].isEnabled())
+        self.assertTrue(dlg._btn_proxy_test.isEnabled())
+        dlg.close()
+
+    def test_advanced_section_toggles(self):
+        dlg = self.main.SettingsDialog()
+        self.assertTrue(dlg._advanced_widget.isHidden())
+        dlg._btn_advanced.click()
+        self.assertFalse(dlg._advanced_widget.isHidden())
+        dlg.close()
+
+    def test_presets_do_not_enable_quality_flags(self):
+        """I preset non attivano i flag B2 (precisione); restano opt-in."""
+        dlg = self.main.SettingsDialog()
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
+        for name in ("normal", "fast", "fastest"):
+            dlg._select_preset(name)
+            self.assertFalse(dlg.values()["fast_flags"], name)
+        dlg._select_preset("fast")
+        self.assertTrue(dlg._fast_flags_check.isEnabled())  # opt-in manuale
+        dlg.close()
+
+    def test_preset_works_for_google(self):
+        dlg = self.main.SettingsDialog()
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("google"))
+        dlg._select_preset("fast")
+        values = dlg.values()
+        self.assertTrue(values["fast_engine"])
+        self.assertTrue(values["fast_worker"])
+        dlg.close()
+
 
 @unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
 class MainWindowRefinementsTests(unittest.TestCase):

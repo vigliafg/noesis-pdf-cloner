@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.6** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.7** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -519,12 +519,167 @@ rilievo). Suite: **482 OK** (24 skip).
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
   pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag -a v0.1.6 -m "v0.1.6" && git push origin v0.1.6`).
+  (`git tag -a v0.1.7 -m "v0.1.7" && git push origin v0.1.7`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
 
-## 10. Contesto utente
+## 10. Feature sperimentale — "motore veloce" (26/09)
+
+Obiettivo: ridurre la latenza **a freddo** (prima traduzione, LLM chiamato)
+di una pagina tradotta verso i **≤ 30 s**. Le misure *a caldo* (cache interna
+del motore) restano solo **diagnostiche** (isolano il pavimento fisso della
+pipeline PDF). Analisi completa in `.opencode/plan/velocita-traduzione.md`
+(fuori dal repo). Sintesi misurata: il collo di bottiglia non è solo l'LLM; una
+pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
+(ri-hash dei font, monitor memoria, import Python, load modello).
+
+### Cosa è stato aggiunto (feature **default OFF**, reversibile)
+
+- `engine_patch.py` — patch runtime del motore:
+  - memoizza `babeldoc.assets.assets.get_font_and_metadata` (i font in cache
+    sono immutabili; oggi ri-hash 7×/pagina ≈ 6 s);
+  - sostituisce `MemoryMonitor` con un no-op (~2-3 s/pagina).
+  Idempotente e difensiva: se `babeldoc` manca/cambia, la patch è saltata.
+- `engine_wrapper.py` — launcher che applica le patch e delega a `pdf2zh_next`.
+- `clone_engine.py` — `fast_engine`/`fast_flags` (default OFF) + pool esplicito
+  (`--pool-max-workers`/`--qps`, anche =1) + preset "traduzione rapida"
+  (`--skip-scanned-detection` solo se la pagina ha testo,
+  `--skip-formula-offset-calculation`, `--no-remove-non-formula-lines`) +
+  marker cache `-fast1` + fallback automatico al binario.
+- `i18n.py` / `main.py` — due toggle in **Impostazioni → Prestazioni**
+  ("Motore veloce", "Traduzione rapida").
+- `tools/bench_page.py` — banco di misura (usa `CloneEngine`, `--fresh` =
+  `--ignore-cache`); `tools/child_profile.py` — profiler del processo figlio.
+
+### Fase 2 — worker persistente
+- `engine_worker.py` (lato `.venv2`): processo caldo (import + patch + warmup una
+  volta), per job esegue `do_translate_file_async` **in-process**; protocollo
+  JSON-lines su socket locale.
+- `engine_client.py` (lato app): avvio/riavvio, cancel/timeout, riavvio se cambia
+  l'ambiente rilevante; **fail-safe** verso il subprocess.
+- `CloneEngine.warmup()/prewarm()/close()`; pre-avvio in background all'apertura
+  (il costo di avvio non ricade sulla prima pagina). Toggle **"Worker
+  persistente"** in Impostazioni.
+
+### Fase 3 — LLM avanzato
+- `--openai-reasoning-effort` e `--openai-enable-json-mode` (setting UI + env
+  `PDF_LLM_REASONING_EFFORT`/`PDF_LLM_JSON_MODE`), gated da `fast_engine`.
+- **Preset prestazioni** (Impostazioni → Prestazioni): tre **card radio**
+  sempre visibili (Normale / Veloce / Massima velocità) con descrizione e tempo
+  atteso inline:
+  - *Normale*: tutto OFF, Mercury, OpenRouter (~40 s/pagina);
+  - *Veloce (consigliato)*: patch + worker, Mercury, OpenRouter (~33 s);
+  - *Massima velocità*: patch + worker + gpt-oss-120B + proxy locale (autostart)
+    + reasoning minimal + pool 8 + **prompt di sistema di default** (traduce i
+    nomi dei farmaci, non traduce citazioni/sigle) (~20-23 s).
+  I campi che il preset governa stanno in **"Avanzate"** (collassato di default)
+  e sono di sola lettura. **Stato provider inline** + "Prova provider" sotto le
+  card. I preset valgono per tutti i motori (patch+worker anche su google/bing);
+  la card *Massima velocità* e "Prova provider" sono attive **solo col motore
+  LLM** (grigie altrove, con tooltip).
+  **I preset NON attivano i flag B2** ("traduzione rapida":
+  `--skip-formula-offset-calculation` ecc.): saltano elaborazioni di
+  layout/formule, riducono la precisione e nel benchmark davano ~0,5 s. Restano
+  come **opt-in manuale** (checkbox in Avanzate, non governata dal preset).
+- **Liste numerate/alfabetiche** (Avanzate → "Rileva liste numerate", opt-in):
+  BabelDOC riconosce solo i bullet grafici, quindi le liste `1. 2. 3.` finivano
+  fuse in un paragrafo. Una patch runtime (`engine_patch`,
+  `NOESIS_NUMERIC_LISTS`) spezza i paragrafi sui marcatori di lista. Validato
+  sulla pagina 401 di `ha22.pdf` (8 voci separate). Richiede il wrapper (patch
+  runtime); marker cache `-lists1`. Riverberato al service (`NUMERIC_LISTS`).
+- **Modello e base URL** sono tendine (non testo libero): *Mercury* /
+  *gpt-oss-120B* / *gpt-6-luna* / *Default*, e *OpenRouter* / *Proxy locale*.
+- **Prompt di sistema LLM** (`llm_system_prompt`, campo in Avanzate):
+  `--custom-system-prompt`, per guidare terminologia/stile (es. tradurre i nomi
+  dei farmaci, non tradurre le citazioni). Marker cache dedicato.
+- **Fix invio reasoning effort**: `--openai-reasoning-effort` da solo **non**
+  veniva inviato a pdf2zh; ora si passa anche `--openai-send-reasoning-effort`.
+- **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →
+  Prestazioni, "Avvia automaticamente il proxy provider" + porta; l'app avvia
+  `tools/provider_proxy.py` in background, punta la base URL al proxy e lo
+  ferma alla chiusura. Idempotente (non ne avvia un secondo se è già attivo).
+- **"Prova provider"**: pulsante che invia una piccola richiesta e mostra quale
+  provider risponde (es. Groq) — verifica immediata del pin.
+- `tools/provider_proxy.py`: proxy **model-aware** che pinna il provider (Groq)
+  su OpenRouter **solo per i modelli scelti** (`PROXY_MODELS`, default
+  `openai/gpt-oss-120b`); gli altri (DeepSeek, Gemini, Mercury) passano
+  invariati. Serve perché `pdf2zh_next` non espone il routing provider.
+- **Fix persistenza config** (`i18n._validate_config`): molte impostazioni
+  (engine, theme, notify_*, `llm_pool_workers`, tutte le stringhe) **tornavano
+  ai default a ogni riavvio**; ora un merge generico le conserva (con
+  coercizione di tipo e validazione degli enum).
+- **Allowlist account-wide OpenRouter** (Settings → Privacy → Allowed Providers)
+  provata: pinna sì, ma è **globale** e blocca DeepSeek/Gemini → **scartata** a
+  favore del proxy per-richiesta.
+
+### Reversibilità (runbook)
+
+1. Impostazioni → disattiva i due toggle (secondi).
+2. `NOESIS_FAST_ENGINE=0` / `NOESIS_FAST_FLAGS=0` (kill-switch, senza UI).
+3. `git checkout main` sul branch `experiment/fast-engine` (non mergiato).
+4. `git revert -m 1 <merge>` se mergiato; oppure rimozione dei file nuovi.
+Con feature OFF il comando al motore è **identico** a prima (test dedicati).
+
+### Service
+
+Allineato nello stesso branch `experiment/fast-engine` di
+`noesis-pdf-cloner-service`: `app/engine_patch.py`, `app/engine_wrapper.py`,
+`app/engine.py`, `app/config.py` (`llm_pool_workers`/`fast_engine`/`fast_flags`,
+env `PDF_LLM_POOL_WORKERS`/`FAST_ENGINE`/`FAST_FLAGS`), `worker`/`cli`/`estimate`.
+Default OFF; a OFF comportamento invariato (290 test verdi).
+
+### Follow-up noti
+
+- **Packaging**: `.github/workflows/release.yml` non bundle ancora
+  `engine_wrapper.py`/`engine_patch.py`/`engine_worker.py` (come
+  `gtranslate_cli.py`). Finché non lo si aggiunge, nelle build PyInstaller la
+  feature degrada al binario (fail-safe). Il file era già modificato per pin di
+  action non correlati: da aggiungere in un commit dedicato.
+- **Groq/LLM**: per usare gpt-oss-120b serve il pin del provider via
+  `tools/provider_proxy.py` (model-aware), puntando la base URL al proxy da
+  Impostazioni. Prezzi e disponibilità del provider possono cambiare.
+- **Upstream BabelDOC**: proporre memoizzazione di `get_font_and_metadata` e
+  `MemoryMonitor` opzionale, così il wrapper diventa temporaneo.
+- **`content = None`**: aggiungere retry (marker transitorio) — vedi
+  `BENCH_LLM.md`. Il worker riduce ma non elimina questa classe di errori.
+- **Worker**: valutare un pool di worker (uno per processo server) e la
+  classificazione degli errori dal `log_tail` (oggi il worker restituisce solo
+  rc + tail).
+
+### Risultati benchmark (pagina 3575, EN→IT, 4 core, 3 run con `--fresh`)
+
+Mediana dei tempi (`tools/bench_page.py`, `tools/bench_results.jsonl`):
+
+| Config | run (s) | mediana | note |
+|---|---:|---:|---|
+| baseline (feature OFF) | 52,7 / 42,5 / 40,3 | **42,5** | ~coerente con `BENCH_LLM.md` |
+| patch sole (worker 4) | 38,7 / 35,7 / 34,1 | **35,7** | −6,8 s |
+| fast + preset rapido (4) | 34,7 / 35,9 / 35,2 | **35,2** | B2 quasi nullo su questa pagina |
+| fast + preset rapido (12) | 33,9 / 33,8 / 36,1 | **33,9** | +2-3 worker ≈ −1,3 s |
+| **cache calda** (fast+flags, 4) | 21,9 / 21,0 / 21,0 | **21,0** | scenario desktop (usa la cache) |
+| cache calda (feature OFF, 4) | 31,4 / 30,2 / 29,7 | **30,2** | pavimento "puro" senza patch |
+| google (fast+flags, 4) | 26,4 / 22,6 | ~24,5 | il wrapper vale anche sulla catena gratuita |
+| Fase 2: Mercury + worker (4) | 36,1 / 32,4 | ~34,2 | worker: −2,8 s sul run a regime |
+| **Fase 3: gpt-oss/Groq + minimal (8)** | 27,3 / 28,6 / 31,3 | **28,6** | senza worker |
+| **Fase 1+2+3: gpt-oss + minimal + worker (8)** | 24,1 / 22,2 / 24,1 / 22,5 / 22,5 / 30,1 | **23,3** | min 22,2 — **≤ 30 s a freddo** |
+
+Lettura:
+- la Fase 1 riduce di ~7-9 s la traduzione fresca (≈ −17-20%); il grosso viene
+  dalle **patch** (font cache + MemoryMonitor), non dai flag B2;
+- il **pavimento CPU** resta ~21 s (run a cache calda: LLM quasi assente);
+  senza patch il pavimento è ~30 s (quota fissa −9 s);
+- **Fase 3** (gpt-oss-120b su Groq + `reasoning-effort minimal`) porta il caso
+  freddo a ~28,6 s;
+- **Fase 2** (worker persistente) toglie ~2,8 s di costi di avvio per pagina;
+- **combinata Fase 1+2+3**: mediana **23,3 s a freddo** (min 22,2) → **obiettivo
+  ≤ 30 s raggiunto** con margine, contro i 42,5 s di baseline (**−45%**).
+- Il "worker persistente" si pre-avvia in background: la prima pagina non paga
+  più l'avvio.
+
+---
+
+## 11. Contesto utente
 
 - Lingua utente: **italiano** — rispondere in italiano.
 - Requisito originale: "creare una app utilizzando il codice di noesis-pdf-reader-lite e
@@ -534,3 +689,35 @@ rilievo). Suite: **482 OK** (24 skip).
   pubblico con remote SSH; barra motori collassabile con restituzione dello spazio e
   persistenza.
 - `OPENROUTER_API_KEY` presente nell'ambiente (motore LLM operativo).
+
+---
+
+## 11. Release 0.1.7 — preparazione (26/09)
+
+Audit pre-release eseguito. Modifiche di release:
+
+- **Packaging** (`.github/workflows/release.yml`): aggiunti gli `--add-data`
+  per `engine_patch.py`, `engine_wrapper.py`, `engine_worker.py`,
+  `engine_client.py`, `proxy_manager.py` (→ `.`) e `tools/provider_proxy.py`
+  (→ `tools`). Senza, nelle build PyInstaller il motore veloce/worker degradavano
+  e il proxy provider non era disponibile.
+- **Versione**: `installer.nsi` → `0.1.7`.
+- **Motore pinnato**: `pdf2zh_next==2.9.0` (costante `ENGINE_PACKAGE` in
+  `clone_engine.py`, `setup_engine.sh/.ps1`, `run.sh`) — versione testata con le
+  patch runtime.
+- **Proxy robusto**: gestione `BrokenPipeError` + **idle-timeout** (default
+  1800 s, `PROXY_IDLE_TIMEOUT`) per evitare processi orfani.
+- **Guida utente** (`docs/help/*`, 5 lingue): nuova sezione **Prestazioni**
+  (Normale/Veloce/Massima, modello/base URL, prompt, proxy + Prova provider,
+  liste numerate).
+- **`.gitignore`**: esclusi `*_mockup.html` e `BENCH_LLM.md`.
+- **File legali/comunità** versionati (LICENSE, NOTICE, CLA, CONTRIBUTING,
+  SECURITY, TRADEMARK, ADDITIONAL_TERMS, dependabot).
+- **Default OFF**: `fast_engine`/`fast_flags`/`fast_worker`/`numeric_lists`/
+  `llm_proxy_autostart` = False, preset `normal` → comportamento invariato.
+- Test: desktop **536 OK**, service **310**.
+
+### Smoke post-build (da eseguire per piattaforma)
+Normal (Mercury/google/bing) · Veloce (Mercury) · Massima (proxy autostart +
+"Prova provider" → Groq) · liste numerate (pag. 401) · persistenza impostazioni
+al riavvio · nessun processo orfano alla chiusura.

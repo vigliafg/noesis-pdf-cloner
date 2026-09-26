@@ -436,6 +436,24 @@
         <li><strong>Moteur de traduction</strong> — Google, Bing ou LLM.</li>
       </ul>
 
+      <h3>Performances</h3>
+      <p>La section <strong>Performances</strong> (moteur LLM uniquement) propose
+      trois préréglages qui remplissent automatiquement les options :</p>
+      <ul>
+        <li><strong>Normal</strong> — compatibilité maximale, aucune optimisation
+          (~40 s/page).</li>
+        <li><strong>Rapide</strong> — optimisations du pipeline (patch + worker),
+          Mercury sur OpenRouter (~33 s).</li>
+        <li><strong>Maximum</strong> — gpt-oss sur Groq avec proxy local,
+          raisonnement minimal et prompt système (~20-23 s).</li>
+      </ul>
+      <p>Les champs contrôlés par le préréglage se trouvent sous
+      <strong>Avancé</strong> (replié) et sont en lecture seule : modèle, URL de
+      base, prompt système, pool LLM, proxy de fournisseur (démarrage auto +
+      port). Le bouton <strong>Tester le fournisseur</strong> indique quel
+      fournisseur répond (ex. Groq). Pour les documents avec listes, activez
+      <strong>Détecter les listes numérotées</strong>.</p>
+
       <h3>Moteur de clonage</h3>
       <ul>
         <li><strong>Chemin de <code>pdf2zh_next</code></strong> — vide pour la
