@@ -65,9 +65,28 @@ class EnginePatchTests(unittest.TestCase):
         state = engine_patch.apply_all()
         self.assertEqual(
             set(state),
-            {engine_patch.FONT_METADATA_CACHE, engine_patch.MEMORY_MONITOR},
+            {
+                engine_patch.FONT_METADATA_CACHE,
+                engine_patch.MEMORY_MONITOR,
+                engine_patch.NUMERIC_LISTS,
+            },
         )
         self.assertTrue(all(isinstance(v, bool) for v in state.values()))
+        # numeric_lists è opt-in: senza env resta False.
+        self.assertFalse(state[engine_patch.NUMERIC_LISTS])
+
+    def test_numeric_lists_env_enables_patch(self):
+        engine_patch._STATE = None
+        with mock.patch.dict("os.environ", {"NOESIS_NUMERIC_LISTS": "1"}):
+            state = engine_patch.apply_all()
+        # Senza BabelDOC non è applicabile, ma il tentativo avviene (bool).
+        self.assertIn(engine_patch.NUMERIC_LISTS, state)
+
+    def test_looks_like_list_marker(self):
+        for text in ("1. Obtain", "12) Compare", "a. Item", "b) Item", "  3. x"):
+            self.assertTrue(engine_patch._looks_like_list_marker(text), text)
+        for text in ("Obtain", "1.5 g/dL", "e.g. something", "2019 was", ""):
+            self.assertFalse(engine_patch._looks_like_list_marker(text), text)
 
     def test_apply_all_is_idempotent(self):
         first = engine_patch.apply_all()

@@ -266,6 +266,23 @@ class FastEngineTests(unittest.TestCase):
         self.assertIn(clone_engine.FAST_ENGINE_TAG, tag_on)
         self.assertNotEqual(tag_off, tag_on)
 
+    def test_numeric_lists_uses_wrapper_and_env(self):
+        self.engine.numeric_lists = True
+        wrapper = Path(self._tmp.name) / "engine_wrapper.py"
+        wrapper.write_text("")
+        with mock.patch.object(
+            clone_engine, "_engine_wrapper_path", return_value=wrapper
+        ), mock.patch.object(
+            clone_engine, "venv_python_for", return_value="/venv/python"
+        ):
+            # Senza fast_engine, numeric_lists usa comunque il wrapper.
+            prefix = self.engine._engine_launch_prefix(self.pdf2zh)
+            self.assertEqual(prefix, ["/venv/python", str(wrapper)])
+            env = self.engine._engine_env()
+            self.assertEqual(env.get("NOESIS_NUMERIC_LISTS"), "1")
+            tag = self.engine._version_tag()
+            self.assertIn("lists1", tag)
+
     def test_translate_page_uses_wrapper_and_quality_flags(self):
         import subprocess
 

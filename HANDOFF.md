@@ -581,6 +581,12 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   `--skip-formula-offset-calculation` ecc.): saltano elaborazioni di
   layout/formule, riducono la precisione e nel benchmark davano ~0,5 s. Restano
   come **opt-in manuale** (checkbox in Avanzate, non governata dal preset).
+- **Liste numerate/alfabetiche** (Avanzate → "Rileva liste numerate", opt-in):
+  BabelDOC riconosce solo i bullet grafici, quindi le liste `1. 2. 3.` finivano
+  fuse in un paragrafo. Una patch runtime (`engine_patch`,
+  `NOESIS_NUMERIC_LISTS`) spezza i paragrafi sui marcatori di lista. Validato
+  sulla pagina 401 di `ha22.pdf` (8 voci separate). Richiede il wrapper (patch
+  runtime); marker cache `-lists1`. Riverberato al service (`NUMERIC_LISTS`).
 - **Modello e base URL** sono tendine (non testo libero): *Mercury* /
   *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →

@@ -553,6 +553,8 @@ class CloneEngine:
         self.fast_flags: bool = False
         # Fase 2: worker persistente (richiede fast_engine attivo).
         self.fast_worker: bool = False
+        # Opt-in: riconoscimento delle liste numerate/alfabetiche (patch runtime).
+        self.numeric_lists: bool = False
         self._worker_client = None
         self._worker_lock = threading.Lock()
 
@@ -639,6 +641,8 @@ class CloneEngine:
             tag += "-" + hashlib.sha1(model.encode()).hexdigest()[:8]
         if self._fast_engine_active():
             tag += f"-{FAST_ENGINE_TAG}"
+        if self.numeric_lists:
+            tag += "-lists1"
         return tag
 
     def split_path(self, page: int) -> Path:
@@ -1012,6 +1016,9 @@ class CloneEngine:
         llm_key = os.environ.get("OPENROUTER_API_KEY", "")
         if llm_key:
             env["PDF2ZH_OPENAI_API_KEY"] = llm_key
+        if self.numeric_lists:
+            # Attiva la patch delle liste numerate nel wrapper/worker.
+            env["NOESIS_NUMERIC_LISTS"] = "1"
         return env
 
     def warmup(self) -> None:
@@ -1106,6 +1113,13 @@ class CloneEngine:
                 "fast_engine attivo ma engine_wrapper.py assente: uso il "
                 "binario diretto"
             )
+        elif self.numeric_lists:
+            # La patch delle liste numerate gira nel wrapper: serve il wrapper
+            # anche senza "motore veloce".
+            wrapper = _engine_wrapper_path()
+            if wrapper.is_file():
+                py = venv_python_for(pdf2zh)
+                return [py, str(wrapper)]
         return [str(pdf2zh)]
 
     def _quality_flags(self, split_path: Path) -> list[str]:

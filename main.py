@@ -5246,6 +5246,13 @@ class SettingsDialog(QDialog):
         self._fast_flags_check = QCheckBox(T("settings.performance.fast_flags"))
         self._fast_flags_check.setToolTip(T("settings.performance.fast_flags.tip"))
         perf_form.addRow(self._fast_flags_check)
+        self._numeric_lists_check = QCheckBox(
+            T("settings.performance.numeric_lists")
+        )
+        self._numeric_lists_check.setToolTip(
+            T("settings.performance.numeric_lists.tip")
+        )
+        perf_form.addRow(self._numeric_lists_check)
         self._fast_worker_check = QCheckBox(T("settings.performance.fast_worker"))
         self._fast_worker_check.setToolTip(T("settings.performance.fast_worker.tip"))
         perf_form.addRow(self._fast_worker_check)
@@ -5594,6 +5601,7 @@ class SettingsDialog(QDialog):
         self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
         preset = str(cfg.get("performance_preset", "normal") or "normal")
         self._select_preset(preset)
+        self._numeric_lists_check.setChecked(bool(cfg.get("numeric_lists", False)))
         # I flag B2 sono seedati OFF dai preset (precisione): non si ripristina
         # un eventuale valore vecchio/errato salvato in config.
         self._update_perf_enabled()
@@ -5682,6 +5690,12 @@ class SettingsDialog(QDialog):
         self._fast_flags_check.setToolTip(
             T("settings.performance.fast_flags.tip")
         )
+        self._numeric_lists_check.setText(
+            T("settings.performance.numeric_lists")
+        )
+        self._numeric_lists_check.setToolTip(
+            T("settings.performance.numeric_lists.tip")
+        )
         self._fast_worker_check.setText(T("settings.performance.fast_worker"))
         self._fast_worker_check.setToolTip(
             T("settings.performance.fast_worker.tip")
@@ -5738,6 +5752,7 @@ class SettingsDialog(QDialog):
             ),
             "fast_engine": bool(self._fast_engine_check.isChecked()),
             "fast_flags": bool(self._fast_flags_check.isChecked()),
+            "numeric_lists": bool(self._numeric_lists_check.isChecked()),
             "fast_worker": bool(self._fast_worker_check.isChecked()),
             "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
@@ -8647,6 +8662,7 @@ class MainWindow(QMainWindow):
             self._clone_engine.llm_base_url = f"http://127.0.0.1:{port}/v1"
             self._ensure_proxy_async(port)
         self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
+        self._clone_engine.numeric_lists = bool(get_setting("numeric_lists", False))
         if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
             # Pre-avvia il worker persistente (in background): il costo di avvio
             # non ricade sulla prima pagina.
@@ -9359,6 +9375,7 @@ class MainWindow(QMainWindow):
             )
             export_engine.llm_json_mode = self._clone_engine.llm_json_mode
             export_engine.fast_worker = self._clone_engine.fast_worker
+            export_engine.numeric_lists = self._clone_engine.numeric_lists
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,

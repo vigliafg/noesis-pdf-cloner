@@ -116,6 +116,8 @@ DEFAULTS: dict = {
     # Proxy provider locale (pin Groq): avvio automatico dall'app + porta.
     "llm_proxy_autostart": False,
     "llm_proxy_port": 8790,
+    # Riconoscimento liste numerate/alfabetiche (patch runtime, opt-in).
+    "numeric_lists": False,
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -2172,6 +2174,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Erweitert",
         "es": "Avanzado",
     },
+    "settings.performance.numeric_lists": {
+        "it": "Rileva liste numerate/alfabetiche",
+        "en": "Detect numbered/lettered lists",
+        "fr": "Détecter les listes numérotées/lettrées",
+        "de": "Nummerierte/Buchstaben-Listen erkennen",
+        "es": "Detectar listas numeradas/con letras",
+    },
+    "settings.performance.numeric_lists.tip": {
+        "it": "Fa riconoscere a BabelDOC le liste numerate (1., 2.) e alfabetiche (a., b.) come voci separate, invece di fonderle in un paragrafo. Piccola patch runtime, default OFF.",
+        "en": "Makes BabelDOC treat numbered (1., 2.) and lettered (a., b.) lists as separate items instead of merging them into a paragraph. Small runtime patch, default OFF.",
+        "fr": "Fait reconnaître à BabelDOC les listes numérotées (1., 2.) et lettrées (a., b.) comme des éléments séparés, au lieu de les fusionner. Petite patch runtime, désactivée par défaut.",
+        "de": "Lässt BabelDOC nummerierte (1., 2.) und alphabetische (a., b.) Listen als einzelne Einträge erkennen, statt sie zu einem Absatz zu verschmelzen. Kleiner Runtime-Patch, standardmäßig AUS.",
+        "es": "Hace que BabelDOC reconozca listas numeradas (1., 2.) y con letras (a., b.) como elementos separados, en vez de fusionarlas en un párrafo. Pequeño parche runtime, desactivado por defecto.",
+    },
     "settings.performance.llm_workers": {
         "it": "Richieste LLM in parallelo (per pagina)",
         "en": "Parallel LLM requests (per page)",
@@ -2584,7 +2600,7 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         )
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode", "notify_on_finish", "notify_sound", "prevent_sleep", "llm_proxy_autostart"):
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode", "notify_on_finish", "notify_sound", "prevent_sleep", "llm_proxy_autostart", "numeric_lists"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     out["last_tab"] = (
         raw["last_tab"]
