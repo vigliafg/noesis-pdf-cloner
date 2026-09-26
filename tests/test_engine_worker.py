@@ -201,5 +201,31 @@ class ConsoleKwargsTests(unittest.TestCase):
         self.assertEqual(kwargs["creationflags"], 0x08000000)
 
 
+class InprocTranslateTests(unittest.TestCase):
+    """La traduzione in-process è attiva di default solo su Windows."""
+
+    def setUp(self):
+        import engine_worker
+
+        self.engine_worker = engine_worker
+        self._prev = os.environ.pop("NOESIS_INPROC", None)
+
+    def tearDown(self):
+        if self._prev is not None:
+            os.environ["NOESIS_INPROC"] = self._prev
+
+    def test_default_only_on_windows(self):
+        with mock.patch.object(self.engine_worker.os, "name", "posix"):
+            self.assertFalse(self.engine_worker._inproc_enabled())
+        with mock.patch.object(self.engine_worker.os, "name", "nt"):
+            self.assertTrue(self.engine_worker._inproc_enabled())
+
+    def test_env_override(self):
+        with mock.patch.dict(os.environ, {"NOESIS_INPROC": "1"}):
+            self.assertTrue(self.engine_worker._inproc_enabled())
+        with mock.patch.dict(os.environ, {"NOESIS_INPROC": "0"}):
+            self.assertFalse(self.engine_worker._inproc_enabled())
+
+
 if __name__ == "__main__":
     unittest.main()

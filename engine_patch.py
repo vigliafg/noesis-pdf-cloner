@@ -39,6 +39,7 @@ _STATE: dict[str, bool] | None = None
 FONT_METADATA_CACHE = "font_metadata_cache"
 MEMORY_MONITOR = "memory_monitor"
 NUMERIC_LISTS = "numeric_lists"
+INPROC_TRANSLATE = "inproc_translate"
 
 # Riconosce un marcatore di lista a inizio riga: "1." "12)" "a." "b)" …
 _LIST_MARKER_RE = re.compile(r"^\s*(?:\d{1,3}[.)]|[A-Za-z][.)])\s+\S")
@@ -80,6 +81,45 @@ def apply_all() -> dict[str, bool]:
 def applied() -> dict[str, bool]:
     """Stato corrente (senza applicare): ``{}`` se non ancora applicate."""
     return dict(_STATE or {})
+
+
+def apply_inproc_translate() -> bool:
+    """Esegue la traduzione **nel processo del worker** (niente child per pagina).
+
+    Su Windows il child ``multiprocessing`` usa ``spawn``: riparte freddo a ogni
+    pagina e non eredita lo stato caldo del worker né le patch (misurato:
+    ~15s in più per pagina, ~50s totali). Si sostituisce
+    ``_translate_in_subprocess`` con la variante in-process, la stessa che
+    pdf2zh usa con ``--debug`` ma **senza** attivare il debug (nomi file e
+    artefatti invariati).
+
+    Va applicata solo nel **worker persistente** (che è già un processo
+    dedicato); nel percorso a subprocess per pagina non serve.
+    """
+    try:
+        from pdf2zh_next import high_level as hl  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        log.debug("inproc_translate: pdf2zh_next non disponibile (%s)", exc)
+        return False
+    if getattr(hl, "_noesis_inproc", False):
+        return True  # già applicata (idempotenza)
+    if getattr(hl, "_translate_in_subprocess", None) is None:
+        log.warning("inproc_translate: _translate_in_subprocess assente")
+        return False
+    create_config = getattr(hl, "create_babeldoc_config", None)
+    translate = getattr(hl, "babeldoc_translate", None)
+    if create_config is None or translate is None:
+        log.warning("inproc_translate: API pdf2zh_next inattesa")
+        return False
+
+    async def _inproc_translate_in_subprocess(settings, file):  # noqa: ANN001
+        config = create_config(settings, file)
+        async for event in translate(translation_config=config):
+            yield event
+
+    hl._translate_in_subprocess = _inproc_translate_in_subprocess
+    hl._noesis_inproc = True
+    return True
 
 
 def _patch_font_metadata_cache() -> bool:

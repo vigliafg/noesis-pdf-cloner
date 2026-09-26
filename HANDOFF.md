@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.10** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.11** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -519,7 +519,7 @@ rilievo). Suite: **482 OK** (24 skip).
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
   pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag -a v0.1.10 -m "v0.1.10" && git push origin v0.1.10`).
+  (`git tag -a v0.1.11 -m "v0.1.11" && git push origin v0.1.11`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
@@ -693,6 +693,19 @@ Lettura:
 ---
 
 ## 12. Release — preparazione (26/09)
+
+### 0.1.11 (fix 50s su Windows)
+- **Traduzione in-process nel worker** (`engine_worker.py`, `engine_patch.py`):
+  `pdf2zh_next` lancia un child `multiprocessing` **per pagina**. Su Windows il
+  default è `spawn` → il child riparte freddo e non eredita lo stato caldo del
+  worker né le patch (misurato simulando lo spawn su Linux: 22.6s → 37.8s; su
+  Windows ~50s). Nel worker la traduzione ora gira in-process (stessa strada di
+  `--debug`, ma senza debug), **solo su Windows** (su Linux/macOS resta `fork`).
+  Aggiunto `gc.collect()` dopo ogni pagina (memoria 3.0GB → 0.8-1.3GB).
+  Kill-switch: `NOESIS_INPROC=0`.
+- Misure (pag. 3575, gpt-oss+Groq): parità Windows (spawn) **26.9s**; Linux
+  default 22.2s. Test: desktop **553 OK**, service **310**.
+- Allineato il service (`app/engine_patch.py`, `app/engine_worker.py`).
 
 ### 0.1.10 (correzioni da test sul campo)
 - **Worker senza finestra** (`engine_client.py`): il worker persistente era

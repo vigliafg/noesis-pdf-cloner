@@ -120,6 +120,57 @@ class EnginePatchTests(unittest.TestCase):
         self.assertIsInstance(engine_patch.PATCH_VERSION, str)
         self.assertTrue(engine_patch.PATCH_VERSION)
 
+    def test_apply_inproc_translate_patches_and_is_idempotent(self):
+        import asyncio
+
+        high_level = types.ModuleType("pdf2zh_next.high_level")
+
+        def _original(settings, file):  # noqa: ANN001
+            yield None
+
+        def _create_config(settings, file):  # noqa: ANN001
+            return "config"
+
+        async def _translate(translation_config=None):  # noqa: ANN001
+            yield {"type": "finish", "config": translation_config}
+
+        high_level._translate_in_subprocess = _original
+        high_level.create_babeldoc_config = _create_config
+        high_level.babeldoc_translate = _translate
+
+        package = types.ModuleType("pdf2zh_next")
+        package.high_level = high_level
+        modules = {
+            "pdf2zh_next": package,
+            "pdf2zh_next.high_level": high_level,
+        }
+        with mock.patch.dict(sys.modules, modules):
+            self.assertTrue(engine_patch.apply_inproc_translate())
+            self.assertIsNot(
+                high_level._translate_in_subprocess, _original
+            )
+            self.assertTrue(getattr(high_level, "_noesis_inproc", False))
+            # Idempotente: la seconda chiamata non ricambia la funzione.
+            patched = high_level._translate_in_subprocess
+            self.assertTrue(engine_patch.apply_inproc_translate())
+            self.assertIs(high_level._translate_in_subprocess, patched)
+            # La variante in-process produce gli stessi eventi.
+            events = asyncio.run(
+                _collect(high_level._translate_in_subprocess(None, "f.pdf"))
+            )
+        self.assertEqual(events, [{"type": "finish", "config": "config"}])
+
+    def test_apply_inproc_translate_without_engine_is_false(self):
+        # Nel venv dell'app pdf2zh_next non è installato: no-op senza errori.
+        self.assertIsInstance(engine_patch.apply_inproc_translate(), bool)
+
+
+async def _collect(agen):
+    out = []
+    async for item in agen:
+        out.append(item)
+    return out
+
 
 if __name__ == "__main__":
     unittest.main()

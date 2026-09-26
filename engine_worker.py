@@ -26,6 +26,8 @@ import asyncio
 import contextlib
 import json
 import logging
+import multiprocessing
+import os
 import socket
 import sys
 from pathlib import Path
@@ -38,11 +40,33 @@ logging.basicConfig(
 log = logging.getLogger("engine_worker")
 
 
+def _inproc_enabled() -> bool:
+    """Traduzione in-process nel worker.
+
+    Default: **solo su Windows**, dove il child multiprocessing usa ``spawn`` e
+    riparte freddo a ogni pagina (~15-25s in più). Su Linux/macOS il default
+    ``fork`` eredita lo stato caldo, quindi si mantiene (memoria più contenuta).
+    Override: ``NOESIS_INPROC=1`` / ``=0``.
+    """
+    raw = (os.environ.get("NOESIS_INPROC") or "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    return os.name == "nt"
+
+
 def _load_engine():
     """Importa il motore, applica le patch e fa il warmup degli asset."""
     import engine_patch  # noqa: PLC0415
 
     applied = engine_patch.apply_all()
+    if _inproc_enabled():
+        # Su Windows evita il child multiprocessing per pagina (spawn freddo):
+        # la traduzione gira nel worker caldo. ~15s in meno per pagina.
+        applied[engine_patch.INPROC_TRANSLATE] = (
+            engine_patch.apply_inproc_translate()
+        )
     log.warning("engine_patch applicate: %s", applied)
     import babeldoc.assets.assets as assets  # noqa: PLC0415
     from pdf2zh_next.config.main import ConfigManager  # noqa: PLC0415
@@ -57,6 +81,14 @@ def _flush_logs() -> None:
     for handler in logging.root.handlers:
         with contextlib.suppress(Exception):
             handler.flush()
+
+
+def _collect_garbage() -> None:
+    """Libera la memoria accumulata dalla traduzione in-process."""
+    import gc  # noqa: PLC0415
+
+    with contextlib.suppress(Exception):
+        gc.collect()
 
 
 def _log_tail(path: Path | None, limit: int = 8192) -> str:
@@ -84,6 +116,7 @@ def _run_one_job(argv: list[str], refs) -> dict:
         return {"rc": 1, "error": f"{type(exc).__name__}: {exc}"}
     finally:
         _flush_logs()
+        _collect_garbage()
 
 
 def _serve(listener: socket.socket, idle_timeout: float, refs, log_path: Path | None) -> int:
@@ -140,6 +173,16 @@ def main() -> int:
     parser.add_argument("--log-file", default="")
     parser.add_argument("--idle-timeout", type=float, default=300.0)
     args = parser.parse_args()
+
+    # Diagnostica/parità Windows: su Linux il default è "fork" e il child
+    # eredita gli import caldi del worker. Forzando "spawn" si riproduce il
+    # comportamento di Windows (child freddo) per misurare il divario.
+    if (os.environ.get("NOESIS_MP_SPAWN") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    ):
+        with contextlib.suppress(RuntimeError):
+            multiprocessing.set_start_method("spawn", force=True)
+        log.warning("multiprocessing start method forzato a spawn")
 
     log_path = Path(args.log_file) if args.log_file else None
     refs = _load_engine()
