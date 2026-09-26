@@ -107,6 +107,31 @@ class ManagerTests(unittest.TestCase):
             ):
                 self.assertEqual(proxy_manager._proxy_python(), str(py))
 
+    def test_console_kwargs_empty_on_non_windows(self):
+        with mock.patch.object(proxy_manager.os, "name", "posix"):
+            self.assertEqual(proxy_manager._console_kwargs(), {})
+
+    def test_console_kwargs_minimizes_console_on_windows(self):
+        """Su Windows il proxy parte ridotto a icona, senza rubare il focus."""
+
+        class _FakeStartupInfo:
+            def __init__(self):
+                self.dwFlags = 0
+                self.wShowWindow = None
+
+        with mock.patch.object(proxy_manager.os, "name", "nt"), mock.patch.object(
+            proxy_manager.subprocess, "STARTUPINFO", _FakeStartupInfo, create=True
+        ), mock.patch.object(
+            proxy_manager.subprocess, "STARTF_USESHOWWINDOW", 1, create=True
+        ):
+            kwargs = proxy_manager._console_kwargs()
+        startupinfo = kwargs.get("startupinfo")
+        self.assertIsNotNone(startupinfo)
+        self.assertEqual(startupinfo.wShowWindow, proxy_manager._SW_SHOWMINNOACTIVE)
+        self.assertTrue(startupinfo.dwFlags & 1)
+        # Niente CREATE_NO_WINDOW: la console deve esistere, ma minimizzata.
+        self.assertNotIn("creationflags", kwargs)
+
 
 if __name__ == "__main__":
     unittest.main()

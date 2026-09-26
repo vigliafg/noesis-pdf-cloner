@@ -71,20 +71,26 @@ def _proxy_python() -> str:
     return sys.executable
 
 
-def _no_window_kwargs() -> dict:
-    """Su Windows evita la finestra console quando parte il proxy."""
+# SW_SHOWMINNOACTIVE: mostra la finestra ridotta a icona senza attivarla.
+_SW_SHOWMINNOACTIVE = 7
+
+
+def _console_kwargs() -> dict:
+    """Su Windows avvia il proxy con la console **ridotta a icona**.
+
+    Il proxy è un processo console: senza opzioni Windows gli creerebbe una
+    finestra in primo piano. Lo si avvia minimizzato e senza rubare il focus
+    (``SW_SHOWMINNOACTIVE``); sugli altri sistemi non serve nulla.
+    """
     if os.name != "nt":
         return {}
-    kwargs: dict = {}
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    if flags:
-        kwargs["creationflags"] = flags
     startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
-    if startupinfo_cls is not None:
-        startupinfo = startupinfo_cls()
-        startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
-        kwargs["startupinfo"] = startupinfo
-    return kwargs
+    if startupinfo_cls is None:
+        return {}
+    startupinfo = startupinfo_cls()
+    startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
+    startupinfo.wShowWindow = _SW_SHOWMINNOACTIVE
+    return {"startupinfo": startupinfo}
 
 
 def _health_ok(port: int, timeout: float = 2.0) -> bool:
@@ -148,7 +154,7 @@ class ProxyManager:
                     stderr=subprocess.STDOUT,
                     env=env,
                     start_new_session=(os.name != "nt"),
-                    **_no_window_kwargs(),
+                    **_console_kwargs(),
                 )
             except OSError:
                 return False

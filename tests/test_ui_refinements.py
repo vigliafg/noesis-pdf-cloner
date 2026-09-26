@@ -383,6 +383,48 @@ class MainWindowRefinementsTests(unittest.TestCase):
             self.window._setup_tray()
         self.assertIsNone(self.window._tray)
 
+    def test_performance_preset_persists_across_reopen(self):
+        """Il preset scelto non deve tornare a "Normale" alla riapertura."""
+        self.window._ensure_proxy_async = lambda port: None
+        self.window._clone_engine.warmup = lambda: None
+        dlg = self.main.SettingsDialog(self.window)
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
+        dlg._select_preset("fastest")
+        self.window._apply_settings(dlg.values())
+        self.assertEqual(i18n.get_setting("performance_preset"), "fastest")
+        self.assertTrue(self.window._clone_engine.fast_engine)
+        self.assertTrue(i18n.get_setting("llm_proxy_autostart"))
+        # Riapertura + OK: il preset e il motore restano attivi.
+        dlg2 = self.main.SettingsDialog(self.window)
+        self.assertTrue(dlg2._preset_radios["fastest"].isChecked())
+        v2 = dlg2.values()
+        self.assertEqual(v2["performance_preset"], "fastest")
+        self.assertTrue(v2["fast_engine"])
+        self.assertEqual(v2["llm_model"], "openai/gpt-oss-120b")
+        self.window._apply_settings(v2)
+        self.assertTrue(self.window._clone_engine.fast_engine)
+        dlg2.close()
+
+    def test_numeric_lists_persists(self):
+        dlg = self.main.SettingsDialog(self.window)
+        dlg._numeric_lists_check.setChecked(True)
+        self.window._apply_settings(dlg.values())
+        self.assertTrue(i18n.get_setting("numeric_lists"))
+        dlg.close()
+
+    def test_old_config_without_preset_is_not_reset(self):
+        """Config di versioni che non salvavano il preset: si inferisce."""
+        i18n.set_setting("performance_preset", "normal")
+        i18n.set_setting("fast_engine", True)
+        i18n.set_setting("fast_worker", True)
+        i18n.set_setting("llm_model", "")
+        i18n.set_setting("llm_proxy_autostart", False)
+        dlg = self.main.SettingsDialog(self.window)
+        self.assertTrue(dlg._preset_radios["fast"].isChecked())
+        self.assertTrue(dlg.values()["fast_engine"])
+        self.assertTrue(dlg.values()["fast_worker"])
+        dlg.close()
+
 
 if __name__ == "__main__":
     unittest.main()

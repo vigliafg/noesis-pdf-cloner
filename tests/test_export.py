@@ -453,12 +453,18 @@ class ExportWizardDialogTests(unittest.TestCase):
             )
         dlg.done(0)
 
-    def test_range_spins_are_compact(self):
-        dlg = self._dialog()
-        self.assertLessEqual(dlg._from_spin.maximumWidth(), 70)
-        self.assertLessEqual(dlg._to_spin.maximumWidth(), 70)
+    def test_range_spins_fit_page_digits(self):
+        """I numbox devono mostrare tutte le cifre del numero di pagine."""
+        dlg = self._dialog(current=400, total=4132)
+        for sp in (dlg._from_spin, dlg._to_spin):
+            need = sp.fontMetrics().horizontalAdvance("4132")
+            # Larghezza minima sufficiente per le 4 cifre + le frecce.
+            self.assertGreaterEqual(sp.minimumWidth(), need)
+            # Nessun clamp fisso che tagli il testo (prima era 62px).
+            self.assertGreater(sp.maximumWidth(), 70)
         self.assertEqual(dlg._lbl_from.text(), i18n.T("export.range.from.short"))
         self.assertEqual(dlg._lbl_to.text(), i18n.T("export.range.to.short"))
+        dlg.done(0)
 
     def test_preview_info_uses_space_right_of_thumbnails(self):
         dlg = self._dialog()

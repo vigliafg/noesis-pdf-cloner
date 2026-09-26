@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.8** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.9** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -519,7 +519,7 @@ rilievo). Suite: **482 OK** (24 skip).
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
   pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag -a v0.1.8 -m "v0.1.8" && git push origin v0.1.8`).
+  (`git tag -a v0.1.9 -m "v0.1.9" && git push origin v0.1.9`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
@@ -693,6 +693,23 @@ Lettura:
 ---
 
 ## 12. Release — preparazione (26/09)
+
+### 0.1.9 (correzioni da test sul campo)
+- **Preset non persistito** (`main.py`): `performance_preset` (e
+  `numeric_lists`) non erano salvati da `_apply_settings`; riaprendo le
+  impostazioni il preset tornava a "Normale" e, dando OK, `fast_engine` veniva
+  azzerato → la traduzione (singola e batch) ripartiva lenta. Ora il preset è
+  salvato; in `_load_values` i valori salvati vincono sui default del preset e,
+  per le config delle versioni precedenti (senza preset ma con motore veloce
+  attivo), il preset viene **inferito** invece di azzerare tutto.
+- **Numbox del wizard** (`main.py` + `theme.py`): i campi "da/a pagina" erano
+  limitati a 62px → si vedevano due cifre e le frecce coprivano il testo. Ora
+  la larghezza minima è calcolata dalle metriche del font per tutte le cifre
+  del numero di pagine, niente clamp fisso, e il QSS riserva lo spazio a destra
+  per i pulsanti freccia.
+- **Proxy su Windows** (`proxy_manager.py`): avviato **ridotto a icona** senza
+  rubare il focus (`SW_SHOWMINNOACTIVE`), invece di `CREATE_NO_WINDOW`.
+- `installer.nsi` → `0.1.9`. Test: **543 OK**.
 
 ### 0.1.8 (correzione)
 - **Fix proxy nella build Windows/congelata**: `proxy_manager` usava

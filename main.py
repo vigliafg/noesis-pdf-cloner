@@ -5588,6 +5588,16 @@ class SettingsDialog(QDialog):
             return f"http://127.0.0.1:{port}/v1"
         return selected
 
+    def _base_combo_value(self, url: str) -> str:
+        """Valore del combo base URL per un URL salvato (proxy → ``__proxy__``)."""
+        url = (url or "").strip()
+        if not url:
+            return ""
+        port = int(self._proxy_port_spin.value())
+        if url == f"http://127.0.0.1:{port}/v1":
+            return "__proxy__"
+        return url
+
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
         cfg = self._cfg
@@ -5617,9 +5627,45 @@ class SettingsDialog(QDialog):
         )
         # Porta proxy dal config, poi applica il preset (che governa i campi).
         self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
-        preset = str(cfg.get("performance_preset", "normal") or "normal")
-        self._select_preset(preset)
         self._numeric_lists_check.setChecked(bool(cfg.get("numeric_lists", False)))
+
+        # Modello/base salvati: assicura che siano nelle combo (anche custom),
+        # così il preset non li perde se differiscono dai suoi default.
+        saved_model = str(cfg.get("llm_model", "") or "").strip()
+        saved_base = str(cfg.get("llm_base_url", "") or "").strip()
+        self._populate_llm_combos(saved_model, self._base_combo_value(saved_base))
+
+        # Preset: se manca o è "normal" ma il motore veloce è attivo (config
+        # scritte da versioni che non salvavano il preset), inferiscilo dai
+        # valori salvati invece di azzerare tutto a "Normale".
+        preset = str(cfg.get("performance_preset", "normal") or "normal")
+        if preset not in self._PRESETS:
+            preset = "normal"
+        if preset == "normal" and bool(cfg.get("fast_engine", False)):
+            fastest = bool(cfg.get("llm_proxy_autostart", False)) or (
+                saved_model == "openai/gpt-oss-120b"
+            )
+            preset = "fastest" if fastest else "fast"
+        self._select_preset(preset)
+
+        # I valori effettivi salvati vincono sui default del preset: una config
+        # parzialmente incoerente non viene comunque azzerata.
+        self._fast_engine_check.setChecked(bool(cfg.get("fast_engine", False)))
+        self._fast_flags_check.setChecked(bool(cfg.get("fast_flags", False)))
+        self._fast_worker_check.setChecked(bool(cfg.get("fast_worker", False)))
+        self._llm_workers_spin.setValue(int(cfg.get("llm_pool_workers", 4) or 4))
+        self._select_combo_data(
+            self._reasoning_combo, str(cfg.get("llm_reasoning_effort", "") or "")
+        )
+        self._json_mode_check.setChecked(bool(cfg.get("llm_json_mode", False)))
+        self._select_combo_data(self._llm_model_combo, saved_model)
+        if saved_base:
+            self._select_combo_data(
+                self._llm_base_combo, self._base_combo_value(saved_base)
+            )
+        self._proxy_autostart_check.setChecked(
+            bool(cfg.get("llm_proxy_autostart", False))
+        )
         # Prompt: un valore salvato non vuoto vince sul default del preset.
         saved_prompt = str(cfg.get("llm_system_prompt", "") or "").strip()
         if saved_prompt:
@@ -6114,10 +6160,16 @@ class ExportWizardDialog(QDialog):
         for sp in (self._from_spin, self._to_spin):
             sp.setObjectName("wizSpin")
             sp.setRange(1, self._page_count)
-            sp.setValue(self._current_page + 1)
             sp.setAlignment(Qt.AlignmentFlag.AlignRight)
-            sp.setMinimumWidth(56)
-            sp.setMaximumWidth(62)
+            # Larghezza sufficiente per tutte le cifre del numero massimo di
+            # pagine + i pulsanti freccia: con 4 cifre il campo era largo 62px
+            # e il testo veniva coperto dalle frecce. `sizeHint()` non è
+            # affidabile prima che il widget sia inserito nel parent, quindi la
+            # calcolo dalle metriche del font.
+            digits = len(str(max(1, self._page_count)))
+            text_w = sp.fontMetrics().horizontalAdvance("0" * digits)
+            sp.setMinimumWidth(text_w + 58)
+            sp.setValue(self._current_page + 1)
         self._from_label = QLabel("")
         self._from_label.setObjectName("wizHint")
         self._to_label = QLabel("")
@@ -8436,6 +8488,7 @@ class MainWindow(QMainWindow):
                     "resume_last_page", "remember_tab", "save_edits",
                     "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
                     "prevent_sleep", "llm_pool_workers",
+                    "performance_preset", "numeric_lists",
                     "fast_engine", "fast_flags",
                     "llm_reasoning_effort", "llm_json_mode", "fast_worker",
                     "llm_model", "llm_base_url",

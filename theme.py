@@ -481,7 +481,7 @@ _WIZARD_QSS = Template(
         background: $wiz_panel; border: 1px solid $wiz_line; color: $wiz_title;
         border-radius: 9px; padding: 8px 10px; font-size: 13px;
     }
-    QSpinBox#wizSpin { padding: 6px 4px; font-size: 13px; }
+    QSpinBox#wizSpin { padding: 6px 4px; padding-right: 24px; font-size: 13px; }
     QFrame#wizModeSep { background: $wiz_line; border: none; max-width: 1px; }
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: $wiz_accent; }
     QComboBox QAbstractItemView { background: $wiz_panel; color: $wiz_title;
