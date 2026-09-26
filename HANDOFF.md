@@ -568,6 +568,12 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 - **Modello e base URL in Impostazioni** (`llm_model`, `llm_base_url`; vuoto =
   default o env `PDF_LLM_MODEL`/`PDF_LLM_BASE_URL`): si passa da Mercury a
   gpt-oss o al proxy senza variabili d'ambiente.
+- **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →
+  Prestazioni, "Avvia automaticamente il proxy provider" + porta; l'app avvia
+  `tools/provider_proxy.py` in background, punta la base URL al proxy e lo
+  ferma alla chiusura. Idempotente (non ne avvia un secondo se è già attivo).
+- **"Prova provider"**: pulsante che invia una piccola richiesta e mostra quale
+  provider risponde (es. Groq) — verifica immediata del pin.
 - `tools/provider_proxy.py`: proxy **model-aware** che pinna il provider (Groq)
   su OpenRouter **solo per i modelli scelti** (`PROXY_MODELS`, default
   `openai/gpt-oss-120b`); gli altri (DeepSeek, Gemini, Mercury) passano

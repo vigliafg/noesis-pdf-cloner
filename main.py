@@ -41,6 +41,9 @@ import layout_engine
 import clone_engine
 from clone_engine import ENGINES as CLONE_ENGINES
 
+# Proxy provider locale (avvio automatico + prova provider).
+import proxy_manager
+
 # Archivio per-utente della chiave OpenRouter (file, cross-platform).
 import keystore
 
@@ -2453,6 +2456,27 @@ class ExtractThread(QThread):
         self.result_ready.emit(
             self._generation, self._page_num, text, label, raw, elapsed
         )
+
+
+class ProviderTestThread(QThread):
+    """Prova il provider LLM in background (una piccola richiesta)."""
+
+    result = pyqtSignal(dict)
+
+    def __init__(self, base_url: str, model: str, api_key: str, parent=None):
+        super().__init__(parent)
+        self._base_url = base_url
+        self._model = model
+        self._api_key = api_key
+
+    def run(self):
+        try:
+            outcome = proxy_manager.probe(
+                self._base_url, self._model, self._api_key
+            )
+        except Exception as exc:  # noqa: BLE001 — riportato in UI
+            outcome = {"ok": False, "error": str(exc)}
+        self.result.emit(outcome)
 
 
 class CloneTranslateThread(QThread):
@@ -5196,6 +5220,26 @@ class SettingsDialog(QDialog):
         self._llm_base_edit = QLineEdit()
         self._llm_base_edit.setToolTip(T("settings.llm.base_url.tip"))
         perf_form.addRow(self._lbl_llm_base, self._llm_base_edit)
+        # Proxy provider locale: avvio automatico + prova.
+        self._proxy_autostart_check = QCheckBox(T("settings.proxy.autostart"))
+        self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
+        self._proxy_autostart_check.toggled.connect(
+            self._on_proxy_autostart_toggled
+        )
+        perf_form.addRow(self._proxy_autostart_check)
+        self._lbl_proxy_port = QLabel(T("settings.proxy.port"))
+        self._proxy_port_spin = QSpinBox()
+        self._proxy_port_spin.setRange(1024, 65535)
+        self._proxy_port_spin.setToolTip(T("settings.proxy.port.tip"))
+        perf_form.addRow(self._lbl_proxy_port, self._proxy_port_spin)
+        self._btn_proxy_test = QPushButton(T("settings.proxy.test"))
+        self._btn_proxy_test.setToolTip(T("settings.proxy.test.tip"))
+        self._btn_proxy_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_proxy_test.clicked.connect(self._on_test_provider)
+        perf_form.addRow(self._btn_proxy_test)
+        self._proxy_test_result = QLabel("")
+        self._proxy_test_result.setWordWrap(True)
+        perf_form.addRow(self._proxy_test_result)
         inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
@@ -5289,9 +5333,56 @@ class SettingsDialog(QDialog):
         self._fast_worker_check.setEnabled(enabled)
         self._reasoning_combo.setEnabled(enabled)
         self._json_mode_check.setEnabled(enabled)
+        self._proxy_autostart_check.setEnabled(enabled)
+        self._proxy_port_spin.setEnabled(enabled and self._proxy_autostart_check.isChecked())
+        self._btn_proxy_test.setEnabled(enabled)
         if not enabled:
             self._fast_flags_check.setChecked(False)
             self._fast_worker_check.setChecked(False)
+            self._proxy_autostart_check.setChecked(False)
+
+    def _on_proxy_autostart_toggled(self, enabled: bool):
+        self._proxy_port_spin.setEnabled(enabled and self._fast_engine_check.isChecked())
+
+    def _on_test_provider(self):
+        """Avvia la prova provider in background e mostra l'esito."""
+        parent = self.parent()
+        autostart = self._proxy_autostart_check.isChecked()
+        port = int(self._proxy_port_spin.value())
+        if autostart:
+            base = f"http://127.0.0.1:{port}/v1"
+            ensure = getattr(parent, "ensure_proxy", None)
+            if callable(ensure):
+                ensure(port)
+        else:
+            base = (
+                self._llm_base_edit.text().strip()
+                or clone_engine.DEFAULT_BASE_URL
+            )
+        model = self._llm_model_edit.text().strip() or clone_engine.DEFAULT_MODEL
+        key = (os.environ.get(keystore.ENV_VAR) or "").strip()
+        self._proxy_test_result.setText(T("settings.proxy.test.running"))
+        self._proxy_test_result.setStyleSheet(_status_style("text5"))
+        thread = ProviderTestThread(base, model, key, self)
+        thread.result.connect(self._on_provider_result)
+        self._proxy_test_thread = thread  # evita il garbage collector
+        thread.start()
+
+    def _on_provider_result(self, outcome: dict):
+        if outcome.get("ok"):
+            self._proxy_test_result.setText(
+                T(
+                    "settings.proxy.test.ok",
+                    provider=outcome.get("provider") or "?",
+                    model=outcome.get("model") or "?",
+                )
+            )
+            self._proxy_test_result.setStyleSheet(_status_style("ok"))
+        else:
+            self._proxy_test_result.setText(
+                T("settings.proxy.test.error", error=outcome.get("error") or "?")
+            )
+            self._proxy_test_result.setStyleSheet(_status_style("err"))
 
     def _load_values(self):
         """Populate the widgets from the current config (bozza)."""
@@ -5339,6 +5430,15 @@ class SettingsDialog(QDialog):
         self._json_mode_check.setEnabled(fast_on)
         self._llm_model_edit.setText(str(cfg.get("llm_model", "") or ""))
         self._llm_base_edit.setText(str(cfg.get("llm_base_url", "") or ""))
+        self._proxy_autostart_check.setChecked(
+            bool(cfg.get("llm_proxy_autostart", False))
+        )
+        self._proxy_port_spin.setValue(int(cfg.get("llm_proxy_port", 8790) or 8790))
+        self._proxy_autostart_check.setEnabled(fast_on)
+        self._proxy_port_spin.setEnabled(
+            fast_on and self._proxy_autostart_check.isChecked()
+        )
+        self._btn_proxy_test.setEnabled(fast_on)
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -5430,6 +5530,12 @@ class SettingsDialog(QDialog):
         self._llm_model_edit.setToolTip(T("settings.llm.model.tip"))
         self._lbl_llm_base.setText(T("settings.llm.base_url"))
         self._llm_base_edit.setToolTip(T("settings.llm.base_url.tip"))
+        self._proxy_autostart_check.setText(T("settings.proxy.autostart"))
+        self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
+        self._lbl_proxy_port.setText(T("settings.proxy.port"))
+        self._proxy_port_spin.setToolTip(T("settings.proxy.port.tip"))
+        self._btn_proxy_test.setText(T("settings.proxy.test"))
+        self._btn_proxy_test.setToolTip(T("settings.proxy.test.tip"))
         self._btn_ok.setText(T("settings.ok"))
         self._btn_cancel.setText(T("settings.cancel"))
 
@@ -5466,6 +5572,8 @@ class SettingsDialog(QDialog):
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
             "llm_model": self._llm_model_edit.text().strip(),
             "llm_base_url": self._llm_base_edit.text().strip(),
+            "llm_proxy_autostart": bool(self._proxy_autostart_check.isChecked()),
+            "llm_proxy_port": int(self._proxy_port_spin.value()),
         }
 
 
@@ -7130,6 +7238,10 @@ class MainWindow(QMainWindow):
             pdf2zh_bin=get_setting("pdf2zh_bin", "") or None,
             max_concurrent=1,
         )
+        # Proxy provider locale (avvio automatico opzionale + prova provider).
+        self._proxy_manager = proxy_manager.ProxyManager(
+            log_dir=_app_data_base() / "clones" / "_tmp"
+        )
         self._clone_thread: CloneTranslateThread | None = None
         self._retired_clone_threads: list[CloneTranslateThread] = []
         self._orig_pixmap: QPixmap | None = None
@@ -8115,7 +8227,8 @@ class MainWindow(QMainWindow):
                     "prevent_sleep", "llm_pool_workers",
                     "fast_engine", "fast_flags",
                     "llm_reasoning_effort", "llm_json_mode", "fast_worker",
-                    "llm_model", "llm_base_url"):
+                    "llm_model", "llm_base_url",
+                    "llm_proxy_autostart", "llm_proxy_port"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8354,11 +8467,37 @@ class MainWindow(QMainWindow):
         self._clone_engine.llm_base_url = base or os.environ.get(
             "PDF_LLM_BASE_URL", clone_engine.DEFAULT_BASE_URL
         )
+        # Proxy provider locale: se l'avvio automatico è attivo, punta la base
+        # URL al proxy e avvialo in background.
+        if self._clone_engine.fast_engine and bool(
+            get_setting("llm_proxy_autostart", False)
+        ):
+            port = int(get_setting("llm_proxy_port", 8790) or 8790)
+            self._clone_engine.llm_base_url = f"http://127.0.0.1:{port}/v1"
+            self._ensure_proxy_async(port)
         self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
         if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
             # Pre-avvia il worker persistente (in background): il costo di avvio
             # non ricade sulla prima pagina.
             self._clone_engine.warmup()
+
+    def _ensure_proxy_async(self, port: int) -> None:
+        """Avvia il proxy provider in background (best effort, non bloccante)."""
+        def _go() -> None:
+            try:
+                self._proxy_manager.ensure_started(int(port))
+            except Exception:  # noqa: BLE001
+                pass
+
+        threading.Thread(target=_go, name="proxy-start", daemon=True).start()
+
+    def ensure_proxy(self, port: int | None = None) -> bool:
+        """Assicura il proxy provider (usato dal pulsante "Prova provider")."""
+        port = int(port or get_setting("llm_proxy_port", 8790) or 8790)
+        try:
+            return self._proxy_manager.ensure_started(port)
+        except Exception:  # noqa: BLE001
+            return False
 
     def _update_engine_banner(self):
         """Aggiorna le strisce informative (motore e chiave mancanti)."""
@@ -9389,6 +9528,9 @@ class MainWindow(QMainWindow):
         # Termina l'eventuale worker persistente del motore (Fase 2).
         with contextlib.suppress(Exception):
             self._clone_engine.close()
+        # Termina l'eventuale proxy provider avviato dall'app.
+        with contextlib.suppress(Exception):
+            self._proxy_manager.stop()
         super().closeEvent(event)
 
 

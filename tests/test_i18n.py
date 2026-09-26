@@ -269,6 +269,8 @@ class ConfigV2Tests(unittest.TestCase):
             "llm_model": "openai/gpt-oss-120b",
             "llm_base_url": "http://127.0.0.1:8790/v1",
             "fast_engine": True,
+            "llm_proxy_autostart": True,
+            "llm_proxy_port": 8899,
         })
         cfg = i18n.load_config(self._path)
         self.assertEqual(cfg["engine"], "bing")
@@ -280,6 +282,8 @@ class ConfigV2Tests(unittest.TestCase):
         self.assertEqual(cfg["llm_model"], "openai/gpt-oss-120b")
         self.assertEqual(cfg["llm_base_url"], "http://127.0.0.1:8790/v1")
         self.assertTrue(cfg["fast_engine"])
+        self.assertTrue(cfg["llm_proxy_autostart"])
+        self.assertEqual(cfg["llm_proxy_port"], 8899)
 
     def test_invalid_enum_values_fall_back_to_defaults(self):
         self._write({

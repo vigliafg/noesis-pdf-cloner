@@ -111,6 +111,9 @@ DEFAULTS: dict = {
     # Modello e base URL LLM (vuoto = default/env PDF_LLM_MODEL / PDF_LLM_BASE_URL).
     "llm_model": "",
     "llm_base_url": "",
+    # Proxy provider locale (pin Groq): avvio automatico dall'app + porta.
+    "llm_proxy_autostart": False,
+    "llm_proxy_port": 8790,
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -2223,6 +2226,69 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "OpenAI-kompatibler Endpunkt. Standard OpenRouter; z. B. http://127.0.0.1:8790/v1 für den Provider-Proxy (Groq-Pin). Leer = Standard (oder PDF_LLM_BASE_URL).",
         "es": "Endpoint compatible con OpenAI. Por defecto OpenRouter; p. ej. http://127.0.0.1:8790/v1 para el proxy de proveedor (pin Groq). Vacío = predeterminado (o PDF_LLM_BASE_URL).",
     },
+    "settings.proxy.autostart": {
+        "it": "Avvia automaticamente il proxy provider",
+        "en": "Start the provider proxy automatically",
+        "fr": "Démarrer automatiquement le proxy de fournisseur",
+        "de": "Provider-Proxy automatisch starten",
+        "es": "Iniciar automáticamente el proxy de proveedor",
+    },
+    "settings.proxy.autostart.tip": {
+        "it": "Avvia in background il proxy locale (pin del provider, es. Groq) e usa automaticamente il suo indirizzo come base URL LLM. Richiede il motore veloce.",
+        "en": "Starts the local proxy in the background (provider pin, e.g. Groq) and uses its address as the LLM base URL. Requires the fast engine.",
+        "fr": "Démarre le proxy local en arrière-plan (pin du fournisseur, ex. Groq) et utilise son adresse comme URL de base LLM. Nécessite le moteur rapide.",
+        "de": "Startet den lokalen Proxy im Hintergrund (Provider-Pin, z. B. Groq) und nutzt dessen Adresse als LLM-Basis-URL. Erfordert die schnelle Engine.",
+        "es": "Inicia el proxy local en segundo plano (pin del proveedor, p. ej. Groq) y usa su dirección como URL base del LLM. Requiere el motor rápido.",
+    },
+    "settings.proxy.port": {
+        "it": "Porta del proxy",
+        "en": "Proxy port",
+        "fr": "Port du proxy",
+        "de": "Proxy-Port",
+        "es": "Puerto del proxy",
+    },
+    "settings.proxy.port.tip": {
+        "it": "Porta locale del proxy provider (default 8790).",
+        "en": "Local port of the provider proxy (default 8790).",
+        "fr": "Port local du proxy de fournisseur (défaut 8790).",
+        "de": "Lokaler Port des Provider-Proxys (Standard 8790).",
+        "es": "Puerto local del proxy de proveedor (predeterminado 8790).",
+    },
+    "settings.proxy.test": {
+        "it": "Prova provider",
+        "en": "Test provider",
+        "fr": "Tester le fournisseur",
+        "de": "Provider testen",
+        "es": "Probar proveedor",
+    },
+    "settings.proxy.test.tip": {
+        "it": "Invia una piccola richiesta e mostra quale provider risponde (es. Groq). Utile per verificare il pin.",
+        "en": "Sends a tiny request and shows which provider answers (e.g. Groq). Useful to verify the pin.",
+        "fr": "Envoie une petite requête et indique quel fournisseur répond (ex. Groq). Utile pour vérifier le pin.",
+        "de": "Sendet eine kleine Anfrage und zeigt, welcher Provider antwortet (z. B. Groq). Nützlich zur Pin-Prüfung.",
+        "es": "Envía una petición pequeña y muestra qué proveedor responde (p. ej. Groq). Útil para verificar el pin.",
+    },
+    "settings.proxy.test.running": {
+        "it": "Verifica in corso…",
+        "en": "Testing…",
+        "fr": "Vérification…",
+        "de": "Prüfung läuft…",
+        "es": "Comprobando…",
+    },
+    "settings.proxy.test.ok": {
+        "it": "Provider: {provider} — modello: {model}",
+        "en": "Provider: {provider} — model: {model}",
+        "fr": "Fournisseur : {provider} — modèle : {model}",
+        "de": "Provider: {provider} — Modell: {model}",
+        "es": "Proveedor: {provider} — modelo: {model}",
+    },
+    "settings.proxy.test.error": {
+        "it": "Errore: {error}",
+        "en": "Error: {error}",
+        "fr": "Erreur : {error}",
+        "de": "Fehler: {error}",
+        "es": "Error: {error}",
+    },
     # ── notifiche (contenuti) ───────────────────────────────────────────────
     "notify.batch.title": {
         "it": "Traduzione completata", "en": "Translation complete",
@@ -2414,7 +2480,13 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         )
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode", "notify_on_finish", "notify_sound", "prevent_sleep"):
+    try:
+        out["llm_proxy_port"] = min(
+            65535, max(1024, int(raw.get("llm_proxy_port", out["llm_proxy_port"])))
+        )
+    except (TypeError, ValueError):
+        pass
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode", "notify_on_finish", "notify_sound", "prevent_sleep", "llm_proxy_autostart"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     out["last_tab"] = (
         raw["last_tab"]

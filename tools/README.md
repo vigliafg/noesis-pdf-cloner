@@ -87,3 +87,15 @@ l'engine. Il bench li usa con `--fast-worker --prewarm`.
 Questi tool usano `.venv/bin/python` (app: PyMuPDF) per il bench e
 `.venv2/bin/python` (motore) per il profilo. I PDF di test (`ha22.pdf`) non sono
 versionati.
+
+## Avvio automatico dall'app + "Prova provider"
+
+Da **Impostazioni → Prestazioni** (con Motore veloce attivo):
+- **"Avvia automaticamente il proxy provider"** (+ porta): l'app avvia
+  `provider_proxy.py` in background, punta la base URL LLM al proxy e lo ferma
+  alla chiusura.
+- **"Prova provider"**: invia una piccola richiesta e mostra il provider che
+  risponde (es. `Groq`), per verificare subito il pin.
+
+Il gestore è `proxy_manager.py` (lato app, stdlib): avvio idempotente, stop su
+chiusura, log in `~/.local/share/noesis-pdf-cloner/clones/_tmp/proxy.log`.
