@@ -1,5 +1,5 @@
 # Core GUI framework
-PyQt6>=6.6
+PyQt6>=6.11.0
 
 # PDF rendering (pagina originale e clone tradotto)
 pymupdf>=1.24
