@@ -104,6 +104,9 @@ DEFAULTS: dict = {
     # OFF, reversibile). Vedi .opencode/plan/velocita-traduzione.md.
     "fast_engine": False,      # motore veloce (wrapper + patch runtime)
     "fast_flags": False,       # preset "traduzione rapida" (salta controlli)
+    # Opzioni LLM avanzate (usate solo a fast_engine attivo).
+    "llm_reasoning_effort": "",  # "" | minimal | low | medium | high
+    "llm_json_mode": False,      # --openai-enable-json-mode
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -2146,6 +2149,34 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Fügt Optionen hinzu, die Geometrie-/Formelprüfungen bei Textseiten überspringen. Schneller, aber Formel- und Layouttreue kann geringer sein. Ohne Wirkung bei gescannten Seiten.",
         "es": "Añade opciones que omiten comprobaciones de geometría/fórmulas cuando la página tiene texto. Más rápido, pero la fidelidad de fórmulas y diseño puede ser menor. Sin efecto en páginas escaneadas.",
     },
+    "settings.performance.reasoning_effort": {
+        "it": "LLM: reasoning effort",
+        "en": "LLM: reasoning effort",
+        "fr": "LLM : effort de raisonnement",
+        "de": "LLM: Reasoning-Aufwand",
+        "es": "LLM: esfuerzo de razonamiento",
+    },
+    "settings.performance.reasoning_effort.tip": {
+        "it": "Per i modelli ragionativi (es. gpt-oss): valori bassi come 'minimal' riducono i token di ragionamento e la latenza. Richiede il motore veloce attivo.",
+        "en": "For reasoning models (e.g. gpt-oss): low values like 'minimal' cut reasoning tokens and latency. Requires the fast engine.",
+        "fr": "Pour les modèles de raisonnement (ex. gpt-oss) : des valeurs basses comme « minimal » réduisent les tokens de raisonnement et la latence. Nécessite le moteur rapide.",
+        "de": "Für Reasoning-Modelle (z. B. gpt-oss): niedrige Werte wie 'minimal' reduzieren Reasoning-Tokens und Latenz. Erfordert die schnelle Engine.",
+        "es": "Para modelos de razonamiento (p. ej. gpt-oss): valores bajos como 'minimal' reducen los tokens de razonamiento y la latencia. Requiere el motor rápido.",
+    },
+    "settings.performance.json_mode": {
+        "it": "LLM: JSON mode",
+        "en": "LLM: JSON mode",
+        "fr": "LLM : mode JSON",
+        "de": "LLM: JSON-Modus",
+        "es": "LLM: modo JSON",
+    },
+    "settings.performance.json_mode.tip": {
+        "it": "Chiede al provider risposte JSON strutturate (se supportato). Può ridurre errori di parsing. Richiede il motore veloce attivo.",
+        "en": "Asks the provider for structured JSON responses (if supported). May reduce parsing errors. Requires the fast engine.",
+        "fr": "Demande au fournisseur des réponses JSON structurées (si pris en charge). Peut réduire les erreurs d'analyse. Nécessite le moteur rapide.",
+        "de": "Fordert strukturierte JSON-Antworten vom Anbieter an (falls unterstützt). Kann Parsing-Fehler reduzieren. Erfordert die schnelle Engine.",
+        "es": "Solicita al proveedor respuestas JSON estructuradas (si se admite). Puede reducir errores de análisis. Requiere el motor rápido.",
+    },
     # ── notifiche (contenuti) ───────────────────────────────────────────────
     "notify.batch.title": {
         "it": "Traduzione completata", "en": "Translation complete",
@@ -2288,7 +2319,7 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags"):
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "llm_json_mode"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
     if raw.get("last_tab") in ("original", "translated", "images"):
         out["last_tab"] = raw["last_tab"]

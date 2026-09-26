@@ -300,6 +300,19 @@ class FastEngineTests(unittest.TestCase):
         self.assertEqual(cmd[:2], ["/venv/python", str(wrapper)])
         self.assertIn("--skip-scanned-detection", cmd)
 
+    def test_llm_reasoning_and_json_flags_only_when_fast(self):
+        self.engine.llm_reasoning_effort = "minimal"
+        self.engine.llm_json_mode = True
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertNotIn("--openai-reasoning-effort", flags)  # feature OFF
+        self.assertNotIn("--openai-enable-json-mode", flags)
+        self.engine.fast_engine = True
+        flags, _ = self.engine._translator_flags("llm")
+        self.assertEqual(
+            flags[flags.index("--openai-reasoning-effort") + 1], "minimal"
+        )
+        self.assertIn("--openai-enable-json-mode", flags)
+
     def test_ignore_cache_flag_for_benchmark(self):
         import subprocess
 

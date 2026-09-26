@@ -60,6 +60,11 @@ def normalize_engine(engine: str) -> str:
     code = (engine or "").strip().lower()
     return ENGINE_ALIASES.get(code, code)
 
+
+def _env_truthy(value: str | None) -> bool:
+    """True per ``1/true/yes/on`` (case-insensitive); False per vuoto/altro."""
+    return (value or "").strip().lower() in ("1", "true", "yes", "on")
+
 DEFAULT_MODEL = "inception/mercury-2.5"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 PAGE_TIMEOUT = 900  # secondi: pdf2zh_next + BabelDOC su una pagina densa
@@ -520,6 +525,12 @@ class CloneEngine:
         # alza il throughput. Impostato dall'app da ``llm_pool_workers``.
         self.llm_pool_workers: int = 4
         self.llm_timeout: int = LLM_TIMEOUT
+        # Opzioni LLM sperimentali (usate solo a fast_engine attivo):
+        # reasoning effort per i modelli ragionativi e JSON mode.
+        self.llm_reasoning_effort: str = os.environ.get(
+            "PDF_LLM_REASONING_EFFORT", ""
+        ).strip()
+        self.llm_json_mode: bool = _env_truthy(os.environ.get("PDF_LLM_JSON_MODE"))
 
         # Feature sperimentale "motore veloce" (default OFF). Quando attiva il
         # motore viene lanciato via ``engine_wrapper.py`` (patch runtime) e, se
@@ -997,6 +1008,14 @@ class CloneEngine:
                     "--pool-max-workers", str(workers),
                     "--qps", str(workers),
                 ]
+                # Opzioni LLM avanzate (Fase 3): tagliano i token di CoT dei
+                # modelli ragionativi e possono ridurre la latenza per chiamata.
+                if self.llm_reasoning_effort:
+                    flags += [
+                        "--openai-reasoning-effort", self.llm_reasoning_effort,
+                    ]
+                if self.llm_json_mode:
+                    flags += ["--openai-enable-json-mode"]
             elif workers > 1:
                 # Più segmenti tradotti insieme dentro la stessa pagina.
                 flags += ["--pool-max-workers", str(workers)]

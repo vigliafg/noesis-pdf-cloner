@@ -5174,6 +5174,17 @@ class SettingsDialog(QDialog):
         # Il preset "traduzione rapida" ha senso solo col motore veloce attivo.
         self._fast_engine_check.toggled.connect(self._on_fast_engine_toggled)
         perf_form.addRow(self._fast_flags_check)
+        self._lbl_reasoning = QLabel(T("settings.performance.reasoning_effort"))
+        self._reasoning_combo = QComboBox()
+        for value in ("", "minimal", "low", "medium", "high"):
+            self._reasoning_combo.addItem(value or "—", value)
+        self._reasoning_combo.setToolTip(
+            T("settings.performance.reasoning_effort.tip")
+        )
+        perf_form.addRow(self._lbl_reasoning, self._reasoning_combo)
+        self._json_mode_check = QCheckBox(T("settings.performance.json_mode"))
+        self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
+        perf_form.addRow(self._json_mode_check)
         inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
@@ -5262,8 +5273,10 @@ class SettingsDialog(QDialog):
         QMessageBox.information(self, T("settings.title"), T("settings.edits.clear_done"))
 
     def _on_fast_engine_toggled(self, enabled: bool):
-        """Abilita/disabilita il preset rapido in base al motore veloce."""
+        """Abilita/disabilita le opzioni dipendenti dal motore veloce."""
         self._fast_flags_check.setEnabled(enabled)
+        self._reasoning_combo.setEnabled(enabled)
+        self._json_mode_check.setEnabled(enabled)
         if not enabled:
             self._fast_flags_check.setChecked(False)
 
@@ -5300,6 +5313,13 @@ class SettingsDialog(QDialog):
             fast_on and bool(cfg.get("fast_flags", False))
         )
         self._fast_flags_check.setEnabled(fast_on)
+        idx = self._reasoning_combo.findData(
+            str(cfg.get("llm_reasoning_effort", "") or "")
+        )
+        self._reasoning_combo.setCurrentIndex(max(0, idx))
+        self._reasoning_combo.setEnabled(fast_on)
+        self._json_mode_check.setChecked(bool(cfg.get("llm_json_mode", False)))
+        self._json_mode_check.setEnabled(fast_on)
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -5377,6 +5397,12 @@ class SettingsDialog(QDialog):
         self._fast_flags_check.setToolTip(
             T("settings.performance.fast_flags.tip")
         )
+        self._lbl_reasoning.setText(T("settings.performance.reasoning_effort"))
+        self._reasoning_combo.setToolTip(
+            T("settings.performance.reasoning_effort.tip")
+        )
+        self._json_mode_check.setText(T("settings.performance.json_mode"))
+        self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
         self._btn_ok.setText(T("settings.ok"))
         self._btn_cancel.setText(T("settings.cancel"))
 
@@ -5408,6 +5434,8 @@ class SettingsDialog(QDialog):
             "llm_pool_workers": int(self._llm_workers_spin.value()),
             "fast_engine": bool(self._fast_engine_check.isChecked()),
             "fast_flags": bool(self._fast_flags_check.isChecked()),
+            "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
+            "llm_json_mode": bool(self._json_mode_check.isChecked()),
         }
 
 
@@ -8055,7 +8083,8 @@ class MainWindow(QMainWindow):
                     "resume_last_page", "remember_tab", "save_edits",
                     "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
                     "prevent_sleep", "llm_pool_workers",
-                    "fast_engine", "fast_flags"):
+                    "fast_engine", "fast_flags",
+                    "llm_reasoning_effort", "llm_json_mode"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8281,6 +8310,10 @@ class MainWindow(QMainWindow):
         # Feature sperimentale "motore veloce" (default OFF, reversibile).
         self._clone_engine.fast_engine = bool(get_setting("fast_engine", False))
         self._clone_engine.fast_flags = bool(get_setting("fast_flags", False))
+        self._clone_engine.llm_reasoning_effort = str(
+            get_setting("llm_reasoning_effort", "") or ""
+        )
+        self._clone_engine.llm_json_mode = bool(get_setting("llm_json_mode", False))
 
     def _update_engine_banner(self):
         """Aggiorna le strisce informative (motore e chiave mancanti)."""
@@ -8966,6 +8999,10 @@ class MainWindow(QMainWindow):
             export_engine.llm_pool_workers = self._clone_engine.llm_pool_workers
             export_engine.fast_engine = self._clone_engine.fast_engine
             export_engine.fast_flags = self._clone_engine.fast_flags
+            export_engine.llm_reasoning_effort = (
+                self._clone_engine.llm_reasoning_effort
+            )
+            export_engine.llm_json_mode = self._clone_engine.llm_json_mode
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,

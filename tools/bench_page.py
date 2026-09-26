@@ -67,6 +67,9 @@ def _build_engine(args, cache_root: Path) -> clone_engine.CloneEngine:
     engine.fast_engine = bool(args.fast)
     engine.fast_flags = bool(args.fast_flags)
     engine.ignore_cache = bool(args.fresh)
+    if args.reasoning_effort:
+        engine.llm_reasoning_effort = args.reasoning_effort
+    engine.llm_json_mode = bool(args.json_mode)
     return engine
 
 
@@ -119,6 +122,10 @@ def main() -> int:
                         help="preset 'traduzione rapida' (B2)")
     parser.add_argument("--fresh", action="store_true",
                         help="ignora la cache interna del motore (--ignore-cache)")
+    parser.add_argument("--reasoning-effort", default="",
+                        help="LLM: minimal|low|medium|high (fast_engine)")
+    parser.add_argument("--json-mode", action="store_true",
+                        help="LLM: abilita JSON mode (fast_engine)")
     parser.add_argument("--label", default="")
     parser.add_argument("--out", default=str(ROOT / "tools" / "bench_results.jsonl"))
     parser.add_argument("--cache-dir", default="")
@@ -173,6 +180,8 @@ def main() -> int:
             "fast": args.fast,
             "fast_flags": args.fast_flags,
             "fresh": args.fresh,
+            "reasoning_effort": args.reasoning_effort,
+            "json_mode": args.json_mode,
             "run": i,
             "wall_s": round(wall, 3),
             "child_cpu_s": round(cpu, 3),
