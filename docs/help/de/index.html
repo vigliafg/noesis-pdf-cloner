@@ -422,6 +422,24 @@
         <li><strong>Übersetzungsdienst</strong> — Google, Bing oder LLM.</li>
       </ul>
 
+      <h3>Leistung</h3>
+      <p>Der Abschnitt <strong>Leistung</strong> (nur LLM-Engine) bietet drei
+      Presets, die die Optionen automatisch füllen:</p>
+      <ul>
+        <li><strong>Normal</strong> — maximale Kompatibilität, keine Optimierung
+          (~40 s/Seite).</li>
+        <li><strong>Schnell</strong> — Pipeline-Optimierungen (Patch + Worker),
+          Mercury über OpenRouter (~33 s).</li>
+        <li><strong>Maximal</strong> — gpt-oss über Groq mit lokalem Proxy,
+          minimalem Reasoning und System-Prompt (~20-23 s).</li>
+      </ul>
+      <p>Die vom Preset gesteuerten Felder liegen unter <strong>Erweitert</strong>
+      (eingeklappt) und sind schreibgeschützt: Modell, Basis-URL, System-Prompt,
+      LLM-Pool, Provider-Proxy (Autostart + Port). Die Schaltfläche
+      <strong>Provider testen</strong> zeigt, welcher Provider antwortet (z. B.
+      Groq). Für Dokumente mit Listen <strong>Nummerierte Listen erkennen</strong>
+      aktivieren.</p>
+
       <h3>Klon-Engine</h3>
       <ul>
         <li><strong>Pfad zu <code>pdf2zh_next</code></strong> — leer für

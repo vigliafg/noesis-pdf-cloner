@@ -426,6 +426,24 @@
         <li><strong>Motor de traducción</strong> — Google, Bing o LLM.</li>
       </ul>
 
+      <h3>Rendimiento</h3>
+      <p>La sección <strong>Rendimiento</strong> (solo motor LLM) ofrece tres
+      preajustes que rellenan las opciones automáticamente:</p>
+      <ul>
+        <li><strong>Normal</strong> — máxima compatibilidad, sin optimizaciones
+          (~40 s/página).</li>
+        <li><strong>Rápido</strong> — optimizaciones del pipeline (patch + worker),
+          Mercury en OpenRouter (~33 s).</li>
+        <li><strong>Máxima</strong> — gpt-oss en Groq con proxy local,
+          razonamiento mínimo y prompt del sistema (~20-23 s).</li>
+      </ul>
+      <p>Los campos que controla el preajuste están en <strong>Avanzado</strong>
+      (plegado) y son de solo lectura: modelo, URL base, prompt del sistema, pool
+      LLM, proxy de proveedor (inicio automático + puerto). El botón
+      <strong>Probar proveedor</strong> muestra qué proveedor responde (p. ej.
+      Groq). Para documentos con listas, activa
+      <strong>Detectar listas numeradas</strong>.</p>
+
       <h3>Motor de clonación</h3>
       <ul>
         <li><strong>Ruta de <code>pdf2zh_next</code></strong> — vacía para

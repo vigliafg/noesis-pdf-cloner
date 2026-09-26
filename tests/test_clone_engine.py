@@ -1083,7 +1083,7 @@ class EngineInstallTests(unittest.TestCase):
             self.assertEqual(found.name, clone_engine._bin_name("pdf2zh_next"))
             self.assertTrue(any(c[1] == "venv" for c in calls))
             self.assertTrue(any(c[1] == "pip" for c in calls))
-            self.assertTrue(any("pdf2zh_next" in c for c in calls))
+            self.assertTrue(any("pdf2zh_next" in " ".join(c) for c in calls))
             self.assertTrue(lines)  # il log ha ricevuto le righe di uv
 
     def test_app_data_dir_honours_override(self):

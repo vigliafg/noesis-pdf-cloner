@@ -31,6 +31,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -40,6 +42,10 @@ PROXY_PORT = int(os.environ.get("PROXY_PORT", "8790"))
 PROXY_PROVIDER = os.environ.get("PROXY_PROVIDER", "groq").strip()
 PROXY_UPSTREAM = os.environ.get("PROXY_UPSTREAM", "https://openrouter.ai/api/v1").rstrip("/")
 API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
+# Se nessuna richiesta per questo tempo, il proxy esce (evita processi orfani
+# se l'app termina in modo anomalo). 0 = mai.
+IDLE_TIMEOUT = float(os.environ.get("PROXY_IDLE_TIMEOUT", "1800"))
+_last_activity = time.monotonic()
 # Modelli a cui applicare il pin (match per sottostringa, case-insensitive).
 # "*" = pinna tutto (comportamento storico). Default: solo gpt-oss.
 PROXY_MODELS: tuple[str, ...] = tuple(
@@ -152,6 +158,8 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def _forward(self, body: bytes, path: str) -> None:
+        global _last_activity
+        _last_activity = time.monotonic()
         url = _upstream_url(path)
         request = urllib.request.Request(url, data=body or None, method=self.command)
         request.add_header("Content-Type", "application/json")
@@ -196,6 +204,16 @@ def main() -> int:
         file=sys.stderr,
     )
     print(f"NOESIS_PROXY_READY {PROXY_PORT}", file=sys.stdout, flush=True)
+    if IDLE_TIMEOUT > 0:
+        def _watch_idle() -> None:
+            while True:
+                time.sleep(min(30.0, IDLE_TIMEOUT))
+                if time.monotonic() - _last_activity > IDLE_TIMEOUT:
+                    print("proxy: idle timeout, esco", file=sys.stderr, flush=True)
+                    server.shutdown()
+                    return
+
+        threading.Thread(target=_watch_idle, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

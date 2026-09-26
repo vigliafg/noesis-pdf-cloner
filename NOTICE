@@ -1,0 +1,43 @@
+Noesis PDF Cloner
+Copyright (C) 2026 vigliafg
+
+Questo programma è software libero: puoi ridistribuirlo e/o modificarlo secondo
+i termini della GNU Affero General Public License (AGPL) come pubblicata dalla
+Free Software Foundation, versione 3 o (a tua scelta) qualsiasi versione
+successiva. Vedi il file LICENSE.
+
+Il programma è distribuito nella speranza che sia utile, ma SENZA ALCUNA
+GARANZIA. Vedi la AGPL per i dettagli.
+
+Termini aggiuntivi ai sensi della sezione 7 della AGPL-3.0 (conservazione delle
+note, marchio, divieto di misrappresentazione dell'origine, garanzia e
+responsabilità): vedi ADDITIONAL_TERMS.md. Tali termini sono severabili: se una
+clausola non è valida, restano efficaci l'AGPL e le altre clausole.
+
+── Componenti di terze parti ────────────────────────────────────────────────
+
+Il programma incorpora, usa o ridistribuisce, come dipendenze separate, software
+di terze parti con licenze proprie. In particolare, componenti sotto AGPL-3.0 o
+copyleft:
+
+- pdf2zh_next (PDFMathTranslate-next) — AGPL-3.0
+  https://github.com/PDFMathTranslate-next/PDFMathTranslate-next
+- BabelDOC — AGPL-3.0
+  https://github.com/funstory-ai/BabelDOC
+- PyMuPDF — AGPL-3.0 (o licenza commerciale Artifex)
+  https://github.com/pymupdf/PyMuPDF
+- PyQt6 — GPL-3.0 (o licenza commerciale Riverbank); compatibile con AGPL-3.0
+  https://www.riverbankcomputing.com/software/pyqt/
+
+Le altre dipendenze sono elencate in requirements.txt e nel lockfile del motore,
+con le rispettive licenze (MIT, BSD, Apache-2.0 ecc.). Tra queste:
+
+- Markdown (Python-Markdown) — BSD-3-Clause
+- uv (in `vendor/`, ridistribuito) — MIT / Apache-2.0, vedi
+  vendor/uv-licenses/.
+
+Obblighi AGPL: chi distribuisce il programma (es. pacchetti di release) deve
+rendere disponibile il codice sorgente corrispondente, in particolare dei
+componenti AGPL. I sorgenti sono pubblici ai link sopra; il codice di questo
+progetto è pubblicato in
+https://github.com/vigliafg/noesis-pdf-cloner

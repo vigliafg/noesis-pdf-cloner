@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.6** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.7** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -519,7 +519,7 @@ rilievo). Suite: **482 OK** (24 skip).
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
   pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag -a v0.1.6 -m "v0.1.6" && git push origin v0.1.6`).
+  (`git tag -a v0.1.7 -m "v0.1.7" && git push origin v0.1.7`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
@@ -689,3 +689,35 @@ Lettura:
   pubblico con remote SSH; barra motori collassabile con restituzione dello spazio e
   persistenza.
 - `OPENROUTER_API_KEY` presente nell'ambiente (motore LLM operativo).
+
+---
+
+## 11. Release 0.1.7 — preparazione (26/09)
+
+Audit pre-release eseguito. Modifiche di release:
+
+- **Packaging** (`.github/workflows/release.yml`): aggiunti gli `--add-data`
+  per `engine_patch.py`, `engine_wrapper.py`, `engine_worker.py`,
+  `engine_client.py`, `proxy_manager.py` (→ `.`) e `tools/provider_proxy.py`
+  (→ `tools`). Senza, nelle build PyInstaller il motore veloce/worker degradavano
+  e il proxy provider non era disponibile.
+- **Versione**: `installer.nsi` → `0.1.7`.
+- **Motore pinnato**: `pdf2zh_next==2.9.0` (costante `ENGINE_PACKAGE` in
+  `clone_engine.py`, `setup_engine.sh/.ps1`, `run.sh`) — versione testata con le
+  patch runtime.
+- **Proxy robusto**: gestione `BrokenPipeError` + **idle-timeout** (default
+  1800 s, `PROXY_IDLE_TIMEOUT`) per evitare processi orfani.
+- **Guida utente** (`docs/help/*`, 5 lingue): nuova sezione **Prestazioni**
+  (Normale/Veloce/Massima, modello/base URL, prompt, proxy + Prova provider,
+  liste numerate).
+- **`.gitignore`**: esclusi `*_mockup.html` e `BENCH_LLM.md`.
+- **File legali/comunità** versionati (LICENSE, NOTICE, CLA, CONTRIBUTING,
+  SECURITY, TRADEMARK, ADDITIONAL_TERMS, dependabot).
+- **Default OFF**: `fast_engine`/`fast_flags`/`fast_worker`/`numeric_lists`/
+  `llm_proxy_autostart` = False, preset `normal` → comportamento invariato.
+- Test: desktop **536 OK**, service **310**.
+
+### Smoke post-build (da eseguire per piattaforma)
+Normal (Mercury/google/bing) · Veloce (Mercury) · Massima (proxy autostart +
+"Prova provider" → Groq) · liste numerate (pag. 401) · persistenza impostazioni
+al riavvio · nessun processo orfano alla chiusura.

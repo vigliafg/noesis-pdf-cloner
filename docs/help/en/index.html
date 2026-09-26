@@ -422,6 +422,23 @@
         <li><strong>Translation engine</strong> — Google, Bing or LLM.</li>
       </ul>
 
+      <h3>Performance</h3>
+      <p>The <strong>Performance</strong> section (LLM engine only) offers three
+      presets that fill the options automatically:</p>
+      <ul>
+        <li><strong>Normal</strong> — maximum compatibility, no optimizations
+          (~40 s/page).</li>
+        <li><strong>Fast</strong> — pipeline optimizations (patch + worker),
+          Mercury on OpenRouter (~33 s).</li>
+        <li><strong>Fastest</strong> — gpt-oss on Groq with a local proxy,
+          minimal reasoning and a system prompt (~20-23 s).</li>
+      </ul>
+      <p>The fields the preset controls live under <strong>Advanced</strong>
+      (collapsed) and are read-only: model, base URL, system prompt, LLM pool,
+      provider proxy (auto-start + port). The <strong>Test provider</strong>
+      button shows which provider answers (e.g. Groq). For documents with lists,
+      enable <strong>Detect numbered lists</strong>.</p>
+
       <h3>Cloning engine</h3>
       <ul>
         <li><strong>Path to <code>pdf2zh_next</code></strong> — empty for

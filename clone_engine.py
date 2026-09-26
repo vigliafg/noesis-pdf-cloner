@@ -67,6 +67,9 @@ def _env_truthy(value: str | None) -> bool:
 
 DEFAULT_MODEL = "inception/mercury-2.5"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+# Versione del motore testata con questa release (le patch runtime sono
+# difensive, ma fissare la versione evita sorprese tra una release e l'altra).
+ENGINE_PACKAGE = "pdf2zh_next==2.9.0"
 PAGE_TIMEOUT = 900  # secondi: pdf2zh_next + BabelDOC su una pagina densa
 LLM_TIMEOUT = 90  # secondi: timeout per singola chiamata LLM
 
@@ -437,8 +440,8 @@ def install_engine(
     if not python.is_file():
         _emit(f"$ {uv} venv --python 3.12 {venv}")
         _run([uv, "venv", "--python", "3.12", str(venv)])
-    _emit(f"$ {uv} pip install --python {python} pdf2zh_next")
-    _run([uv, "pip", "install", "--python", str(python), "pdf2zh_next"])
+    _emit(f"$ {uv} pip install --python {python} {ENGINE_PACKAGE}")
+    _run([uv, "pip", "install", "--python", str(python), ENGINE_PACKAGE])
 
     installed = engine_venv_dir(base) / ("Scripts" if _is_windows() else "bin")
     installed = installed / _bin_name("pdf2zh_next")

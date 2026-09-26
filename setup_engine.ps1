@@ -27,7 +27,7 @@ if (-not (Get-Command $uv -ErrorAction SilentlyContinue)) {
 if (-not (Test-Path ".venv2")) {
     & $uv venv --python 3.12 .venv2
 }
-& $uv pip install --python .venv2\Scripts\python.exe -q pdf2zh_next
+& $uv pip install --python .venv2\Scripts\python.exe -q pdf2zh_next==2.9.0
 
 Write-Host "Motore installato in: $PSScriptRoot\.venv2\Scripts\pdf2zh_next.exe"
 Write-Host "Noesis PDF Cloner lo rileverà automaticamente."

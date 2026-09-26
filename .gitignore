@@ -29,3 +29,7 @@ ha22_pag*.pdf
 # risultati dei benchmark (artefatti locali)
 tools/bench_results.jsonl
 *.prof
+
+# mockup e documenti di lavoro locali
+*_mockup.html
+BENCH_LLM.md
