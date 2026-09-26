@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 import urllib.error
+from pathlib import Path
 from unittest import mock
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -84,6 +85,27 @@ class ManagerTests(unittest.TestCase):
 
     def test_stop_without_proc_is_safe(self):
         proxy_manager.ProxyManager().stop()  # non deve sollevare
+
+    def test_proxy_python_not_frozen_is_current_interpreter(self):
+        with mock.patch.object(
+            proxy_manager.sys, "frozen", False, create=True
+        ):
+            self.assertEqual(proxy_manager._proxy_python(), proxy_manager.sys.executable)
+
+    def test_proxy_python_frozen_uses_engine_venv(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            py = Path(tmp) / "python.exe"
+            py.write_text("")
+            with mock.patch.object(
+                proxy_manager.sys, "frozen", True, create=True
+            ), mock.patch(
+                "clone_engine.find_pdf2zh_bin", return_value=Path(tmp) / "pdf2zh_next"
+            ), mock.patch(
+                "clone_engine.venv_python_for", return_value=str(py)
+            ):
+                self.assertEqual(proxy_manager._proxy_python(), str(py))
 
 
 if __name__ == "__main__":

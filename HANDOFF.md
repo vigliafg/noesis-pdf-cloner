@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.7** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.8** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -519,7 +519,7 @@ rilievo). Suite: **482 OK** (24 skip).
   <https://vigliafg.github.io/noesis-pdf-cloner/help/> (HTTP 200).
 - Release: esistenti **v0.1.2**, **v0.1.3**, **v0.1.5**, **v0.1.6**; per
   pubblicarne una nuova creare un tag `v*` e pusharlo
-  (`git tag -a v0.1.7 -m "v0.1.7" && git push origin v0.1.7`).
+  (`git tag -a v0.1.8 -m "v0.1.8" && git push origin v0.1.8`).
   Un `workflow_dispatch` su `main` produce solo artifact, senza release.
 
 ---
@@ -692,10 +692,17 @@ Lettura:
 
 ---
 
-## 11. Release 0.1.7 — preparazione (26/09)
+## 12. Release — preparazione (26/09)
 
-Audit pre-release eseguito. Modifiche di release:
+### 0.1.8 (correzione)
+- **Fix proxy nella build Windows/congelata**: `proxy_manager` usava
+  `sys.executable` (che in PyInstaller è l'eseguibile dell'app, non Python) →
+  il proxy non partiva e "Prova provider" dava errore. Ora usa il **Python del
+  venv del motore** (`.venv2`), con fallback a `python`/`python3`/`py` dal PATH;
+  aggiunto `CREATE_NO_WINDOW` (niente finestra console).
+- `installer.nsi` → `0.1.8`.
 
+### 0.1.7
 - **Packaging** (`.github/workflows/release.yml`): aggiunti gli `--add-data`
   per `engine_patch.py`, `engine_wrapper.py`, `engine_worker.py`,
   `engine_client.py`, `proxy_manager.py` (→ `.`) e `tools/provider_proxy.py`

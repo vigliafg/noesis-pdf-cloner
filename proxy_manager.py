@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -34,6 +35,56 @@ def _proxy_script() -> Path:
         if bundled.is_file():
             return bundled
     return here
+
+
+def _proxy_python() -> str:
+    """Interprete Python per il proxy.
+
+    In una build **congelata** ``sys.executable`` è l'eseguibile dell'app, non
+    Python: usarlo rilancierebbe la GUI e il proxy non partirebbe. Si usa quindi
+    il Python del venv del motore (``.venv2``), che basta (il proxy è stdlib-only).
+    """
+    if not getattr(sys, "frozen", False):
+        return sys.executable
+    with contextlib.suppress(Exception):
+        import clone_engine  # noqa: PLC0415
+
+        binary = clone_engine.find_pdf2zh_bin()
+        if binary is not None:
+            candidate = Path(clone_engine.venv_python_for(binary))
+            if candidate.is_file():
+                return str(candidate)
+    with contextlib.suppress(Exception):
+        import clone_engine  # noqa: PLC0415
+
+        for venv in (
+            clone_engine.engine_venv_dir(),
+            clone_engine.engine_venv_dir(clone_engine.user_engine_base()),
+        ):
+            candidate = clone_engine.engine_venv_python(venv)
+            if candidate.is_file():
+                return str(candidate)
+    for name in ("python", "python3", "py"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return sys.executable
+
+
+def _no_window_kwargs() -> dict:
+    """Su Windows evita la finestra console quando parte il proxy."""
+    if os.name != "nt":
+        return {}
+    kwargs: dict = {}
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if flags:
+        kwargs["creationflags"] = flags
+    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_cls is not None:
+        startupinfo = startupinfo_cls()
+        startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 1)
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
 
 
 def _health_ok(port: int, timeout: float = 2.0) -> bool:
@@ -91,12 +142,13 @@ class ProxyManager:
                 stdout = self._log_handle
             try:
                 self._proc = subprocess.Popen(
-                    [sys.executable, str(script)],
+                    [_proxy_python(), str(script)],
                     cwd=str(script.parent),
                     stdout=stdout,
                     stderr=subprocess.STDOUT,
                     env=env,
                     start_new_session=(os.name != "nt"),
+                    **_no_window_kwargs(),
                 )
             except OSError:
                 return False
