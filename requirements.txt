@@ -2,7 +2,7 @@
 PyQt6>=6.6
 
 # PDF rendering (pagina originale e clone tradotto)
-pymupdf>=1.24
+pymupdf>=1.28.2
 
 # Markdown rendering — usato solo dal pannello testo dormiente (futura Docling)
 markdown>=3.5
