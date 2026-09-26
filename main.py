@@ -84,12 +84,14 @@ except ImportError:
     _has_pymupdf = False
 
 from PyQt6.QtCore import (
-    Qt, QThread, QTimer, QEvent, pyqtSignal, QUrl, QStandardPaths, QRectF,
-    QRect, QLocale, QEventLoop, QPoint, QPropertyAnimation, QEasingCurve,
+    Qt, QThread, QTimer, QEvent, pyqtSignal, pyqtProperty, QUrl,
+    QStandardPaths, QRectF, QRect, QLocale, QEventLoop, QPoint,
+    QPropertyAnimation, QEasingCurve,
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QFont, QKeySequence, QShortcut, QIcon,
-    QPen, QBrush, QColor, QPainter, QDesktopServices, QLinearGradient,
+    QPen, QBrush, QColor, QPainter, QPainterPath, QDesktopServices,
+    QLinearGradient,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -3772,6 +3774,100 @@ class LiquidOverlay(QWidget):
             painter.drawText(box, flags, self._caption)
 
 
+class _SheenButton(QPushButton):
+    """QPushButton con un riflesso luminoso ("scintilla") che ne attraversa la superficie.
+
+    Qt non supporta le animazioni dei fogli di stile, quindi il riflesso è
+    disegnato in ``paintEvent`` e la sua posizione è animata da una
+    ``QPropertyAnimation`` sulla property ``sheenPos`` (0→1). Il colore arriva
+    dal token di tema ``fab_spark``: bianco sul tema scuro, blu su quello chiaro
+    (dove un riflesso bianco sarebbe invisibile su pagina bianca).
+
+    Il riflesso è pensato per il pulsante flottante "Azioni pagina": viene
+    avviato alla comparsa e fermato alla scomparsa, in parallelo al glow.
+    """
+
+    # Durata del ciclo del riflesso (ms), coerente col mockup (2.4 s).
+    SHEEN_MS = 2400
+    # Raggio degli angoli: allineato al ``border-radius: 15px`` del QSS del FAB.
+    SHEEN_RADIUS = 15.0
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sheen_pos = 0.0
+        self._sheen_enabled = False
+        self._sheen_color = QColor("#ffffff")
+        self._sheen_anim = QPropertyAnimation(self, b"sheenPos", self)
+        self._sheen_anim.setDuration(self.SHEEN_MS)
+        self._sheen_anim.setLoopCount(-1)
+        self._sheen_anim.setStartValue(0.0)
+        # Raggiunge il bordo destro al 55% del ciclo, poi "riposa" fuori campo:
+        # imita la pausa tra due passate del riflesso.
+        self._sheen_anim.setKeyValueAt(0.55, 1.0)
+        self._sheen_anim.setEndValue(1.0)
+        self._sheen_anim.setEasingCurve(QEasingCurve.Type.Linear)
+
+    # ── property animata ────────────────────────────────────────────────
+    def _get_sheen_pos(self) -> float:
+        return self._sheen_pos
+
+    def _set_sheen_pos(self, value: float):
+        self._sheen_pos = float(value)
+        self.update()
+
+    sheenPos = pyqtProperty(float, _get_sheen_pos, _set_sheen_pos)
+
+    # ── API ─────────────────────────────────────────────────────────────
+    def set_sheen_color(self, color) -> None:
+        """Aggiorna il colore del riflesso (dal tema attivo)."""
+        self._sheen_color = QColor(color)
+        self.update()
+
+    def start_sheen(self) -> None:
+        """Avvia il riflesso in loop (pulsante visibile)."""
+        self._sheen_enabled = True
+        self._sheen_anim.start()
+
+    def stop_sheen(self) -> None:
+        """Ferma il riflesso e lo riporta fuori campo."""
+        self._sheen_enabled = False
+        self._sheen_anim.stop()
+        self._sheen_pos = 0.0
+        self.update()
+
+    def is_sheen_running(self) -> bool:
+        return self._sheen_enabled
+
+    # ── disegno ─────────────────────────────────────────────────────────
+    def paintEvent(self, event):  # noqa: N802 (API Qt)
+        super().paintEvent(event)
+        if not self._sheen_enabled:
+            return
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Clip agli angoli arrotondati del pulsante (meno il bordo di 2px).
+        path = QPainterPath()
+        path.addRoundedRect(
+            QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0),
+            self.SHEEN_RADIUS, self.SHEEN_RADIUS,
+        )
+        painter.setClipPath(path)
+        # Banda diagonale che scorre da sinistra a destra.
+        band = max(24.0, w * 0.5)
+        x = -band + (w + 2.0 * band) * self._sheen_pos
+        grad = QLinearGradient(x, 0.0, x + band, float(h))
+        edge = QColor(self._sheen_color)
+        edge.setAlpha(0)
+        grad.setColorAt(0.0, edge)
+        grad.setColorAt(0.5, QColor(self._sheen_color))
+        grad.setColorAt(1.0, edge)
+        painter.fillRect(self.rect(), grad)
+        painter.end()
+
+
 class TranslatedPagePanel(QWidget):
     """Right panel — clone of the current page, translated, layout preserved.
 
@@ -4014,7 +4110,7 @@ class TranslatedPagePanel(QWidget):
         # Overlay figlio del PANNELLO (fuori layout), indipendente dalla barra
         # motori: resta visibile anche quando la barra è collassata. Posizionato
         # in alto a destra (sotto la barra, o accanto al chevron se collassata).
-        self._fab = QPushButton(T("clone.fab.title"), self)
+        self._fab = _SheenButton(T("clone.fab.title"), self)
         self._fab.setObjectName("pageFab")
         self._fab.setCursor(Qt.CursorShape.PointingHandCursor)
         self._fab.setToolTip(T("clone.fab.tip"))
@@ -4128,10 +4224,12 @@ class TranslatedPagePanel(QWidget):
         self._reposition_fab()
         self._reposition_fab_dot()
         self._start_fab_glow()
+        self._fab.start_sheen()
 
     def hide_page_actions(self):
         """Nasconde il pulsante Azioni (cambio pagina, nuova traduzione)."""
         self._stop_fab_glow()
+        self._fab.stop_sheen()
         self._clear_fab_badge()
         self._fab_menu.hide()
         self._fab.hide()
@@ -4241,7 +4339,7 @@ class TranslatedPagePanel(QWidget):
         # Il menu è stato aperto: il pallino ha fatto il suo lavoro.
         self._clear_fab_badge()
         self._fab_menu.adjustSize()
-        pos = self._fab.mapToGlobal(QPoint(0, self._fab.height() + 2))
+        pos = self._fab.mapToGlobal(QPoint(0, self._fab.height() + 4))
         x = pos.x() + self._fab.width() - self._fab_menu.width()
         self._fab_menu.popup(QPoint(max(0, x), pos.y()))
 
@@ -4471,20 +4569,40 @@ class TranslatedPagePanel(QWidget):
                 self._start_fab_glow()
             else:
                 self._stop_fab_glow()
+        # Scintilla: colore dipendente dal tema, avviata solo a pulsante visibile.
+        if getattr(self, "_fab", None) is not None:
+            self._fab.set_sheen_color(q("fab_spark"))
+            if self._fab.isVisible():
+                self._fab.start_sheen()
+            else:
+                self._fab.stop_sheen()
         self._fab_dot.setStyleSheet(
             "QLabel#pageFabDot { background: %s; border-radius: 4px; }"
             % q("badge")
         )
+        # Menu del FAB: bordo più spesso e a rilievo (lato alto/sinistro chiaro,
+        # basso/destro scuro) su fondo a gradiente verticale, per staccarlo
+        # nettamente dalla pagina e dargli tridimensionalità. Qt non ha
+        # box-shadow nei QSS: il rilievo è affidato a bordo + gradiente.
         self._fab_menu.setStyleSheet(
-            "QMenu#pageFabMenu { background: %s; color: %s;"
-            " border: 1px solid %s; padding: 6px; }"
-            "QMenu#pageFabMenu::item { padding: 7px 22px 7px 12px;"
-            " border-radius: 5px; }"
+            "QMenu#pageFabMenu {"
+            " background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            " stop:0 %s, stop:1 %s);"
+            " color: %s;"
+            " border: 2px solid %s;"
+            " border-top-color: %s; border-left-color: %s;"
+            " border-bottom-color: %s; border-right-color: %s;"
+            " border-radius: 9px; padding: 6px; }"
+            "QMenu#pageFabMenu::item { padding: 8px 22px 8px 12px;"
+            " border-radius: 6px; }"
             "QMenu#pageFabMenu::item:selected { background: %s;"
             " color: %s; }"
             "QMenu#pageFabMenu::item:disabled { color: %s; }"
             % (
-                q("menu_bg"), q("menu_text"), q("menu_border"),
+                q("menu_bg_top"), q("menu_bg_bottom"), q("menu_text"),
+                q("menu_border"),
+                q("menu_border_hi"), q("menu_border_hi"),
+                q("menu_border_lo"), q("menu_border_lo"),
                 q("sel_bg"), q("sel_text"), q("menu_disabled"),
             )
         )

@@ -78,10 +78,17 @@ DARK: dict[str, str] = {
     "fab_hover_bg": "#27436b",
     "fab_hover_border": "#7cb2ff",
     "fab_glow": "#4800f0",
+    # riflesso "scintilla" sul FAB: bianco traslucido sul tema scuro
+    "fab_spark": "#d9ffffff",
     "badge": "#4a90d9",
+    # menu a comparsa del FAB: fondo a gradiente + bordo a rilievo (3D)
     "menu_bg": "#2b2b2b",
+    "menu_bg_top": "#3d3d3d",
+    "menu_bg_bottom": "#232323",
     "menu_text": "#e8e8e8",
-    "menu_border": "#3a3a3a",
+    "menu_border": "#555555",
+    "menu_border_hi": "#6a6a6a",
+    "menu_border_lo": "#141414",
     "menu_disabled": "#777777",
     # strisce informative
     "banner_engine_bg": "#4a3f1c",
@@ -179,10 +186,18 @@ LIGHT: dict[str, str] = {
     "fab_hover_bg": "#eaf1ff",
     "fab_hover_border": "#1e6bff",
     "fab_glow": "#1e6bff",
+    # riflesso "scintilla" sul FAB: blu traslucido (il bianco sarebbe
+    # invisibile sul pulsante chiaro appoggiato a una pagina bianca)
+    "fab_spark": "#8c2f6fe0",
     "badge": "#2f6fe0",
+    # menu a comparsa del FAB: fondo a gradiente + bordo a rilievo (3D)
     "menu_bg": "#ffffff",
+    "menu_bg_top": "#ffffff",
+    "menu_bg_bottom": "#e9edf3",
     "menu_text": "#1c2430",
-    "menu_border": "#c9ced6",
+    "menu_border": "#9aa3b0",
+    "menu_border_hi": "#c3cad4",
+    "menu_border_lo": "#7f8895",
     "menu_disabled": "#9aa1ac",
     # strisce informative
     "banner_engine_bg": "#fdf3d6",

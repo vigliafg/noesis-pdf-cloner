@@ -183,6 +183,50 @@ class PageActionsFabTests(unittest.TestCase):
         self.assertNotEqual(dark, light)
         self.panel.hide_page_actions()
 
+    def test_fab_has_sheen_sweep(self):
+        # Scintilla: riflesso animato in loop, attivo solo a pulsante visibile.
+        self.panel.show_page_actions()
+        self._app.processEvents()
+        fab = self.panel._fab
+        self.assertTrue(fab.is_sheen_running())
+        self.assertEqual(fab._sheen_anim.loopCount(), -1)
+        self.assertEqual(
+            fab._sheen_anim.state(), QAbstractAnimation.State.Running
+        )
+        self.panel.hide_page_actions()
+        self.assertFalse(fab.is_sheen_running())
+        self.assertEqual(
+            fab._sheen_anim.state(), QAbstractAnimation.State.Stopped
+        )
+
+    def test_fab_sheen_color_follows_theme(self):
+        import theme
+        self.panel.show_page_actions()
+        theme.set_mode("dark")
+        self.panel.apply_theme()
+        dark = self.panel._fab._sheen_color.rgb()
+        theme.set_mode("light")
+        self.panel.apply_theme()
+        light = self.panel._fab._sheen_color.rgb()
+        theme.set_mode("dark")
+        self.panel.apply_theme()
+        self.assertNotEqual(dark, light)
+        self.panel.hide_page_actions()
+
+    def test_sheen_pos_property_is_animatable(self):
+        fab = self.panel._fab
+        fab.sheenPos = 0.42
+        self.assertAlmostEqual(fab.sheenPos, 0.42, places=5)
+
+    def test_fab_menu_has_thick_3d_border(self):
+        # Bordo più spesso (2px) e a rilievo su fondo a gradiente.
+        qss = self.panel._fab_menu.styleSheet()
+        self.assertIn("QMenu#pageFabMenu", qss)
+        self.assertIn("border: 2px solid", qss)
+        self.assertIn("qlineargradient", qss)
+        self.assertIn("border-top-color", qss)
+        self.assertIn("border-bottom-color", qss)
+
     def test_menu_has_six_translated_actions(self):
         labels = [a.text() for a in self.panel._fab_menu.actions()]
         self.assertEqual(

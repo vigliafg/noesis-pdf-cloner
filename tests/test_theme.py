@@ -46,6 +46,13 @@ class PaletteTests(unittest.TestCase):
         self.assertEqual(theme.color("bg"), theme.DARK["bg"])
         self.assertEqual(theme.color("does-not-exist", "#123456"), "#123456")
 
+    def test_menu_bevel_tokens_give_depth(self):
+        # Il menu del FAB usa gradiente + bordo a rilievo: i token devono
+        # esistere in entrambe le tavolozze e differire tra loro.
+        for pal in (theme.DARK, theme.LIGHT):
+            self.assertNotEqual(pal["menu_bg_top"], pal["menu_bg_bottom"])
+            self.assertNotEqual(pal["menu_border_hi"], pal["menu_border_lo"])
+
 
 class QssTests(unittest.TestCase):
     def tearDown(self):

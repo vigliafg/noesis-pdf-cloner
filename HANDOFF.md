@@ -447,6 +447,38 @@ Nuovi test: `test_theme.py`, `test_notifications.py`, `test_power.py`,
 > I punti 1–5 e la scelta "tutto sequenziale" sono specifici del desktop:
 > non da riverberare.
 
+### Fatto il 26/09 (FAB — effetto "Scintilla")
+
+Richiesta: rendere **più visibile** il pulsante "✓ Azioni pagina" a fine
+traduzione; il glow da solo era insufficiente su tema chiaro e scuro.
+
+- Creato il mockup interattivo **`fab_effects_mockup.html`** con **30 effetti**
+  (12 cicli colore, 9 forma, 9 movimento), ognuno mostrato su entrambi i temi
+  con sfondo pagina bianca, selezione singola/multipla e note di implementazione
+  Qt. È un artefatto locale (come `glow_mockup.html`), **non** da versionare.
+- Scelto e implementato l'effetto **09 Scintilla**: un riflesso luminoso che
+  attraversa la superficie del FAB. Nuova classe `_SheenButton` in `main.py`
+  (`paintEvent` + `QLinearGradient` ritagliato con `QPainterPath`; posizione
+  animata da `QPropertyAnimation` sulla property `sheenPos`, ciclo 2,4 s in
+  loop). Il colore arriva dal nuovo token di tema `fab_spark`: bianco
+  traslucido sul tema scuro, blu traslucido su quello chiaro (il bianco sarebbe
+  invisibile sul pulsante chiaro appoggiato a pagina bianca).
+- La scintilla parte in `show_page_actions()` e si ferma in
+  `hide_page_actions()`, in parallelo al glow; `apply_theme()` aggiorna colore e
+  stato.
+
+- Modifica collaterale: il **menu del FAB** aveva un bordo quasi invisibile
+  (`menu_border` #3a3a3a su fondo #2b2b2b). Ora bordo **2px** con **rilievo 3D**
+  (lato alto/sinistro chiaro, basso/destro scuro) su fondo a **gradiente
+  verticale**; nuovi token `menu_bg_top/bottom`, `menu_border_hi/lo` in
+  `theme.py`, raggio 9px e voci con più respiro.
+
+Nuovi test in `tests/test_page_actions.py` (scintilla in loop, colore per tema,
+property animabile, menu con bordo 3D) e in `tests/test_theme.py` (token del
+rilievo). Suite: **482 OK** (24 skip).
+
+> Solo desktop: il FAB non ha controparte nel servizio, nessuna riverberazione.
+
 ---
 
 ## 8. File chiave
