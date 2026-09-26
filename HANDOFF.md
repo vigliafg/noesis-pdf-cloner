@@ -573,8 +573,10 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   - *Massima velocità*: patch + worker + gpt-oss-120B + proxy locale (autostart)
     + reasoning minimal + pool 8 (~23 s).
   Gli altri campi sono di sola lettura; "Prova provider" resta sempre attivo.
-  La sezione è **grigia (disabilitata) quando il motore è google o bing**:
-  si applica solo al motore LLM.
+  I preset sono **visibili e usabili per tutti i motori** (patch+worker valgono
+  anche per google/bing); le opzioni solo-LLM (modello, base URL, reasoning,
+  JSON, proxy) non si applicano a google/bing e "Prova provider" è attivo solo
+  col motore LLM.
 - **Modello e base URL** sono tendine (non testo libero): *Mercury* /
   *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →

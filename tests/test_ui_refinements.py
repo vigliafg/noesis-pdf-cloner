@@ -195,13 +195,27 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         self.assertTrue(dlg._btn_proxy_test.isEnabled())
         dlg.close()
 
-    def test_perf_section_greyed_for_google_and_bing(self):
+    def test_perf_presets_visible_for_all_engines(self):
         dlg = self.main.SettingsDialog()
-        for engine in ("google", "bing"):
+        for engine in ("google", "bing", "llm"):
             dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData(engine))
-            self.assertFalse(dlg._box_perf.isEnabled(), engine)
+            self.assertTrue(dlg._box_perf.isEnabled(), engine)
+            self.assertTrue(dlg._preset_combo.isEnabled(), engine)
+            self.assertEqual(dlg._preset_combo.count(), 3)
+        # Il test provider è solo per il motore LLM.
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("google"))
+        self.assertFalse(dlg._btn_proxy_test.isEnabled())
         dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
-        self.assertTrue(dlg._box_perf.isEnabled())
+        self.assertTrue(dlg._btn_proxy_test.isEnabled())
+        dlg.close()
+
+    def test_preset_works_for_google(self):
+        dlg = self.main.SettingsDialog()
+        dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("google"))
+        dlg._preset_combo.setCurrentIndex(dlg._preset_combo.findData("fast"))
+        values = dlg.values()
+        self.assertTrue(values["fast_engine"])
+        self.assertTrue(values["fast_worker"])
         dlg.close()
 
 

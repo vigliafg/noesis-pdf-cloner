@@ -5419,16 +5419,15 @@ class SettingsDialog(QDialog):
         self._update_perf_enabled()
 
     def _update_perf_enabled(self) -> None:
-        """La sezione Prestazioni vale solo per il motore LLM (grigia altrove)."""
+        """I preset valgono per tutti i motori; il test provider solo per LLM."""
         engine = self._engine_combo.currentData() or "google"
         llm = engine == "llm"
         box = getattr(self, "_box_perf", None)
-        if box is None:
-            return
-        box.setEnabled(llm)
-        if llm:
-            # Campi governati dal preset: di sola lettura.
-            self._set_preset_fields_enabled(False)
+        if box is not None:
+            # Preset sempre visibili/usabili (patch+worker valgono per ogni
+            # motore); le opzioni solo-LLM restano di sola lettura.
+            box.setEnabled(True)
+        self._btn_proxy_test.setEnabled(llm)
 
     def _on_test_provider(self):
         """Avvia la prova provider in background e mostra l'esito."""
