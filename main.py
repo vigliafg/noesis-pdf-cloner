@@ -5188,6 +5188,14 @@ class SettingsDialog(QDialog):
         self._json_mode_check = QCheckBox(T("settings.performance.json_mode"))
         self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
         perf_form.addRow(self._json_mode_check)
+        self._lbl_llm_model = QLabel(T("settings.llm.model"))
+        self._llm_model_edit = QLineEdit()
+        self._llm_model_edit.setToolTip(T("settings.llm.model.tip"))
+        perf_form.addRow(self._lbl_llm_model, self._llm_model_edit)
+        self._lbl_llm_base = QLabel(T("settings.llm.base_url"))
+        self._llm_base_edit = QLineEdit()
+        self._llm_base_edit.setToolTip(T("settings.llm.base_url.tip"))
+        perf_form.addRow(self._lbl_llm_base, self._llm_base_edit)
         inner.addWidget(self._box_perf)
 
         # ── Pulsanti ────────────────────────────────────────────────────
@@ -5329,6 +5337,8 @@ class SettingsDialog(QDialog):
         self._reasoning_combo.setEnabled(fast_on)
         self._json_mode_check.setChecked(bool(cfg.get("llm_json_mode", False)))
         self._json_mode_check.setEnabled(fast_on)
+        self._llm_model_edit.setText(str(cfg.get("llm_model", "") or ""))
+        self._llm_base_edit.setText(str(cfg.get("llm_base_url", "") or ""))
 
     def _on_ui_preview(self, index: int):
         """Live preview: re-label the dialog when the UI language changes."""
@@ -5416,6 +5426,10 @@ class SettingsDialog(QDialog):
         )
         self._json_mode_check.setText(T("settings.performance.json_mode"))
         self._json_mode_check.setToolTip(T("settings.performance.json_mode.tip"))
+        self._lbl_llm_model.setText(T("settings.llm.model"))
+        self._llm_model_edit.setToolTip(T("settings.llm.model.tip"))
+        self._lbl_llm_base.setText(T("settings.llm.base_url"))
+        self._llm_base_edit.setToolTip(T("settings.llm.base_url.tip"))
         self._btn_ok.setText(T("settings.ok"))
         self._btn_cancel.setText(T("settings.cancel"))
 
@@ -5450,6 +5464,8 @@ class SettingsDialog(QDialog):
             "fast_worker": bool(self._fast_worker_check.isChecked()),
             "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
+            "llm_model": self._llm_model_edit.text().strip(),
+            "llm_base_url": self._llm_base_edit.text().strip(),
         }
 
 
@@ -8098,7 +8114,8 @@ class MainWindow(QMainWindow):
                     "pdf2zh_bin", "theme", "notify_on_finish", "notify_sound",
                     "prevent_sleep", "llm_pool_workers",
                     "fast_engine", "fast_flags",
-                    "llm_reasoning_effort", "llm_json_mode", "fast_worker"):
+                    "llm_reasoning_effort", "llm_json_mode", "fast_worker",
+                    "llm_model", "llm_base_url"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8328,6 +8345,15 @@ class MainWindow(QMainWindow):
             get_setting("llm_reasoning_effort", "") or ""
         )
         self._clone_engine.llm_json_mode = bool(get_setting("llm_json_mode", False))
+        # Modello / base URL: setting esplicito, altrimenti env o default.
+        model = str(get_setting("llm_model", "") or "").strip()
+        self._clone_engine.llm_model = model or os.environ.get(
+            "PDF_LLM_MODEL", clone_engine.DEFAULT_MODEL
+        )
+        base = str(get_setting("llm_base_url", "") or "").strip()
+        self._clone_engine.llm_base_url = base or os.environ.get(
+            "PDF_LLM_BASE_URL", clone_engine.DEFAULT_BASE_URL
+        )
         self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
         if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
             # Pre-avvia il worker persistente (in background): il costo di avvio

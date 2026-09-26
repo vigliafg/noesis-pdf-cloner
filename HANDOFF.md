@@ -565,8 +565,20 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 ### Fase 3 — LLM avanzato
 - `--openai-reasoning-effort` e `--openai-enable-json-mode` (setting UI + env
   `PDF_LLM_REASONING_EFFORT`/`PDF_LLM_JSON_MODE`), gated da `fast_engine`.
-- `tools/provider_proxy.py`: proxy che **pinna il provider** (Groq) su OpenRouter
-  (pdf2zh non espone il routing).
+- **Modello e base URL in Impostazioni** (`llm_model`, `llm_base_url`; vuoto =
+  default o env `PDF_LLM_MODEL`/`PDF_LLM_BASE_URL`): si passa da Mercury a
+  gpt-oss o al proxy senza variabili d'ambiente.
+- `tools/provider_proxy.py`: proxy **model-aware** che pinna il provider (Groq)
+  su OpenRouter **solo per i modelli scelti** (`PROXY_MODELS`, default
+  `openai/gpt-oss-120b`); gli altri (DeepSeek, Gemini, Mercury) passano
+  invariati. Serve perché `pdf2zh_next` non espone il routing provider.
+- **Fix persistenza config** (`i18n._validate_config`): molte impostazioni
+  (engine, theme, notify_*, `llm_pool_workers`, tutte le stringhe) **tornavano
+  ai default a ogni riavvio**; ora un merge generico le conserva (con
+  coercizione di tipo e validazione degli enum).
+- **Allowlist account-wide OpenRouter** (Settings → Privacy → Allowed Providers)
+  provata: pinna sì, ma è **globale** e blocca DeepSeek/Gemini → **scartata** a
+  favore del proxy per-richiesta.
 
 ### Reversibilità (runbook)
 
@@ -592,8 +604,8 @@ Default OFF; a OFF comportamento invariato (290 test verdi).
   feature degrada al binario (fail-safe). Il file era già modificato per pin di
   action non correlati: da aggiungere in un commit dedicato.
 - **Groq/LLM**: per usare gpt-oss-120b serve il pin del provider via
-  `tools/provider_proxy.py` (`--openai-base-url` verso il proxy). Prezzi e
-  disponibilità del provider possono cambiare.
+  `tools/provider_proxy.py` (model-aware), puntando la base URL al proxy da
+  Impostazioni. Prezzi e disponibilità del provider possono cambiare.
 - **Upstream BabelDOC**: proporre memoizzazione di `get_font_and_metadata` e
   `MemoryMonitor` opzionale, così il wrapper diventa temporaneo.
 - **`content = None`**: aggiungere retry (marker transitorio) — vedi

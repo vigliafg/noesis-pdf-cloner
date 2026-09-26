@@ -257,6 +257,45 @@ class ConfigV2Tests(unittest.TestCase):
         self.assertFalse(cfg["show_header"])
         self.assertEqual(cfg["last_tab"], "original")
 
+    def test_known_keys_survive_roundtrip(self):
+        """Le impostazioni note (anche stringhe) non tornano ai default al load."""
+        self._write({
+            "engine": "bing",
+            "theme": "light",
+            "notify_on_finish": False,
+            "prevent_sleep": False,
+            "llm_pool_workers": 8,
+            "llm_reasoning_effort": "minimal",
+            "llm_model": "openai/gpt-oss-120b",
+            "llm_base_url": "http://127.0.0.1:8790/v1",
+            "fast_engine": True,
+        })
+        cfg = i18n.load_config(self._path)
+        self.assertEqual(cfg["engine"], "bing")
+        self.assertEqual(cfg["theme"], "light")
+        self.assertFalse(cfg["notify_on_finish"])
+        self.assertFalse(cfg["prevent_sleep"])
+        self.assertEqual(cfg["llm_pool_workers"], 8)
+        self.assertEqual(cfg["llm_reasoning_effort"], "minimal")
+        self.assertEqual(cfg["llm_model"], "openai/gpt-oss-120b")
+        self.assertEqual(cfg["llm_base_url"], "http://127.0.0.1:8790/v1")
+        self.assertTrue(cfg["fast_engine"])
+
+    def test_invalid_enum_values_fall_back_to_defaults(self):
+        self._write({
+            "engine": "bogus",
+            "theme": "bogus",
+            "llm_reasoning_effort": "bogus",
+        })
+        cfg = i18n.load_config(self._path)
+        self.assertEqual(cfg["engine"], "google")
+        self.assertEqual(cfg["theme"], "dark")
+        self.assertEqual(cfg["llm_reasoning_effort"], "")
+
+    def test_llm_pool_workers_is_clamped(self):
+        self._write({"llm_pool_workers": 99})
+        self.assertEqual(i18n.load_config(self._path)["llm_pool_workers"], 16)
+
     def test_get_set_setting_roundtrip_and_clamps(self):
         i18n.init_config(self._path)
         i18n.set_setting("zoom", 2.5)

@@ -52,10 +52,12 @@ il padre misura solo l'attesa. Questo wrapper sostituisce (a runtime)
 - `--patch` applica `engine_patch` prima di profilare (per confrontare con/senza).
 - Dopo `--` passano gli argomenti di `pdf2zh_next` invariati.
 
-## `provider_proxy.py` — pin del provider LLM
+## `provider_proxy.py` — pin del provider LLM (model-aware)
 
 `pdf2zh_next` non espone il routing del provider: per forzare Groq su OpenRouter
-serve il campo `provider` nel body. Il proxy lo inietta.
+serve il campo `provider` nel body. Il proxy lo inietta, **solo per i modelli
+scelti** (`PROXY_MODELS`, default `openai/gpt-oss-120b`; `*` = tutti): così gli
+altri modelli (DeepSeek, Gemini, Mercury…) passano invariati.
 
 ```bash
 PROXY_PORT=8790 .venv/bin/python tools/provider_proxy.py   # in background
@@ -65,8 +67,13 @@ PROXY_PORT=8790 .venv/bin/python tools/provider_proxy.py   # in background
     --reasoning-effort minimal --workers 8 --label gpt-oss-groq
 ```
 
-Richiede `OPENROUTER_API_KEY`; `PROXY_PROVIDER` (default `groq`) sceglie il
-provider.
+Nell'app si imposta da **Impostazioni → Prestazioni** (modello + base URL), senza
+variabili d'ambiente. Richiede `OPENROUTER_API_KEY`; `PROXY_PROVIDER` (default
+`groq`) sceglie il provider.
+
+Nota: in alternativa si può usare l'allowlist account-wide di OpenRouter
+(Settings → Privacy → Allowed Providers), ma è **globale** e blocca tutti gli
+altri provider/modelli — valutata e scartata a favore del proxy per-richiesta.
 
 ## Worker persistente (Fase 2)
 

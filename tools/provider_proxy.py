@@ -16,9 +16,14 @@ Poi punta il motore al proxy:
         --reasoning-effort minimal --fresh --label gpt-oss-groq
 
 Variabili: ``PROXY_PORT`` (default 8790), ``PROXY_PROVIDER`` (default ``groq``),
-``PROXY_UPSTREAM`` (default ``https://openrouter.ai/api/v1``),
+``PROXY_MODELS`` (lista di modelli da pinnare, default ``openai/gpt-oss-120b``;
+``*`` = tutti), ``PROXY_UPSTREAM`` (default ``https://openrouter.ai/api/v1``),
 ``OPENROUTER_API_KEY`` (obbligatoria, salvo header Authorization in ingresso).
 Solo stdlib: nessuna dipendenza.
+
+**Model-aware**: il campo ``provider`` è iniettato solo per i modelli in
+``PROXY_MODELS``; per gli altri (DeepSeek, Gemini, Mercury…) il body passa
+invariato. Così un'unica base URL serve tutti i modelli.
 """
 
 from __future__ import annotations
@@ -35,6 +40,25 @@ PROXY_PORT = int(os.environ.get("PROXY_PORT", "8790"))
 PROXY_PROVIDER = os.environ.get("PROXY_PROVIDER", "groq").strip()
 PROXY_UPSTREAM = os.environ.get("PROXY_UPSTREAM", "https://openrouter.ai/api/v1").rstrip("/")
 API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
+# Modelli a cui applicare il pin (match per sottostringa, case-insensitive).
+# "*" = pinna tutto (comportamento storico). Default: solo gpt-oss.
+PROXY_MODELS: tuple[str, ...] = tuple(
+    token.strip().lower()
+    for token in os.environ.get("PROXY_MODELS", "openai/gpt-oss-120b").split(",")
+    if token.strip()
+)
+
+
+def _should_pin(model: str) -> bool:
+    """True se il modello va pinnato al provider configurato.
+
+    Così un'unica base URL può servire tutti i modelli: gpt-oss → Groq, mentre
+    DeepSeek/Gemini/Mercury passano invariati verso OpenRouter.
+    """
+    if "*" in PROXY_MODELS:
+        return True
+    low = (model or "").strip().lower()
+    return any(token in low for token in PROXY_MODELS)
 
 
 def _upstream_url(path: str) -> str:
@@ -55,7 +79,14 @@ def _upstream_url(path: str) -> str:
 
 
 def _inject_provider(payload: dict[str, Any]) -> dict[str, Any]:
-    """Aggiunge/forza ``provider.only`` nel body della richiesta."""
+    """Aggiunge/forza ``provider.only`` nel body, **solo** per i modelli scelti.
+
+    Per i modelli non in ``PROXY_MODELS`` il body è restituito invariato, così
+    gli altri motori (DeepSeek, Gemini, Mercury…) funzionano normalmente.
+    """
+    model = str(payload.get("model", ""))
+    if not _should_pin(model):
+        return payload
     payload = dict(payload)
     existing = payload.get("provider")
     provider = dict(existing) if isinstance(existing, dict) else {}
@@ -95,7 +126,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.endswith("/chat/completions"):
             try:
                 payload = json.loads(raw or b"{}")
+                model = str(payload.get("model", ""))
+                pinned = _should_pin(model)
                 raw = json.dumps(_inject_provider(payload)).encode("utf-8")
+                self.log_message(
+                    "chat model=%s pin=%s", model, PROXY_PROVIDER if pinned else "-"
+                )
             except json.JSONDecodeError:
                 self._send_json(400, {"error": "invalid json body"})
                 return
@@ -145,7 +181,8 @@ def main() -> int:
     server = ThreadingHTTPServer(("127.0.0.1", PROXY_PORT), Handler)
     print(
         f"provider proxy su http://127.0.0.1:{PROXY_PORT}/v1 "
-        f"→ {PROXY_UPSTREAM} (provider={PROXY_PROVIDER})",
+        f"→ {PROXY_UPSTREAM} (provider={PROXY_PROVIDER}, "
+        f"modelli={','.join(PROXY_MODELS) or '-'})",
         file=sys.stderr,
     )
     print(f"NOESIS_PROXY_READY {PROXY_PORT}", file=sys.stdout, flush=True)

@@ -108,6 +108,9 @@ DEFAULTS: dict = {
     # Opzioni LLM avanzate (usate solo a fast_engine attivo).
     "llm_reasoning_effort": "",  # "" | minimal | low | medium | high
     "llm_json_mode": False,      # --openai-enable-json-mode
+    # Modello e base URL LLM (vuoto = default/env PDF_LLM_MODEL / PDF_LLM_BASE_URL).
+    "llm_model": "",
+    "llm_base_url": "",
     "last_tab": "original",  # ultima tab attiva (original|translated|images)
     "last_pages": {},        # nome.pdf → ultima pagina (max 20, LRU)
 }
@@ -2192,6 +2195,34 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Fordert strukturierte JSON-Antworten vom Anbieter an (falls unterstützt). Kann Parsing-Fehler reduzieren. Erfordert die schnelle Engine.",
         "es": "Solicita al proveedor respuestas JSON estructuradas (si se admite). Puede reducir errores de análisis. Requiere el motor rápido.",
     },
+    "settings.llm.model": {
+        "it": "LLM: modello",
+        "en": "LLM: model",
+        "fr": "LLM : modèle",
+        "de": "LLM: Modell",
+        "es": "LLM: modelo",
+    },
+    "settings.llm.model.tip": {
+        "it": "Modello del motore LLM (es. inception/mercury-2.5, openai/gpt-oss-120b). Vuoto = default (o variabile PDF_LLM_MODEL).",
+        "en": "LLM engine model (e.g. inception/mercury-2.5, openai/gpt-oss-120b). Empty = default (or PDF_LLM_MODEL env).",
+        "fr": "Modèle du moteur LLM (ex. inception/mercury-2.5, openai/gpt-oss-120b). Vide = défaut (ou variable PDF_LLM_MODEL).",
+        "de": "Modell der LLM-Engine (z. B. inception/mercury-2.5, openai/gpt-oss-120b). Leer = Standard (oder PDF_LLM_MODEL).",
+        "es": "Modelo del motor LLM (p. ej. inception/mercury-2.5, openai/gpt-oss-120b). Vacío = predeterminado (o PDF_LLM_MODEL).",
+    },
+    "settings.llm.base_url": {
+        "it": "LLM: base URL",
+        "en": "LLM: base URL",
+        "fr": "LLM : URL de base",
+        "de": "LLM: Basis-URL",
+        "es": "LLM: URL base",
+    },
+    "settings.llm.base_url.tip": {
+        "it": "Endpoint OpenAI-compatibile. Default OpenRouter; es. http://127.0.0.1:8790/v1 per il proxy provider (pin Groq). Vuoto = default (o variabile PDF_LLM_BASE_URL).",
+        "en": "OpenAI-compatible endpoint. Default OpenRouter; e.g. http://127.0.0.1:8790/v1 for the provider proxy (Groq pin). Empty = default (or PDF_LLM_BASE_URL env).",
+        "fr": "Endpoint compatible OpenAI. Par défaut OpenRouter ; ex. http://127.0.0.1:8790/v1 pour le proxy de fournisseur (pin Groq). Vide = défaut (ou PDF_LLM_BASE_URL).",
+        "de": "OpenAI-kompatibler Endpunkt. Standard OpenRouter; z. B. http://127.0.0.1:8790/v1 für den Provider-Proxy (Groq-Pin). Leer = Standard (oder PDF_LLM_BASE_URL).",
+        "es": "Endpoint compatible con OpenAI. Por defecto OpenRouter; p. ej. http://127.0.0.1:8790/v1 para el proxy de proveedor (pin Groq). Vacío = predeterminado (o PDF_LLM_BASE_URL).",
+    },
     # ── notifiche (contenuti) ───────────────────────────────────────────────
     "notify.batch.title": {
         "it": "Traduzione completata", "en": "Translation complete",
@@ -2319,13 +2350,56 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
     out-of-range values degrade to the defaults/clamps instead of crashing.
     """
     out = dict(defaults)
-    if raw.get("lang") in LANGUAGES:
-        out["lang"] = raw["lang"]
-    if raw.get("src_lang") in TRANSLATION_LANGUAGES:
-        out["src_lang"] = raw["src_lang"]
+
+    # Merge generico forward-compatible: per ogni chiave nota nei default,
+    # conserva il valore salvato (con coercizione di tipo). Prima molte chiavi
+    # (engine, theme, notify_*, llm_pool_workers, stringhe LLM…) venivano
+    # ignorate e tornavano al default a ogni riavvio.
+    for key, default in defaults.items():
+        if key not in raw:
+            continue
+        value = raw[key]
+        if isinstance(default, bool):
+            out[key] = _to_bool(value, default)
+        elif isinstance(default, int):
+            try:
+                out[key] = int(value)
+            except (TypeError, ValueError):
+                pass
+        elif isinstance(default, float):
+            try:
+                out[key] = float(value)
+            except (TypeError, ValueError):
+                pass
+        elif isinstance(default, str):
+            if isinstance(value, str):
+                out[key] = value
+        elif isinstance(default, dict):
+            if isinstance(value, dict):
+                out[key] = value
+
+    out["lang"] = raw["lang"] if raw.get("lang") in LANGUAGES else defaults["lang"]
+    out["src_lang"] = (
+        raw["src_lang"]
+        if raw.get("src_lang") in TRANSLATION_LANGUAGES
+        else defaults["src_lang"]
+    )
     dst = raw.get("dst_lang")
-    if dst in TRANSLATION_LANGUAGES and dst != "auto":
-        out["dst_lang"] = dst
+    out["dst_lang"] = (
+        dst if (dst in TRANSLATION_LANGUAGES and dst != "auto") else defaults["dst_lang"]
+    )
+    out["engine"] = (
+        raw["engine"]
+        if raw.get("engine") in TRANSLATION_ENGINES
+        else defaults["engine"]
+    )
+    theme = str(raw.get("theme", "")).strip().lower()
+    out["theme"] = theme if theme in ("dark", "light", "system") else defaults["theme"]
+    effort = str(raw.get("llm_reasoning_effort", "")).strip().lower()
+    out["llm_reasoning_effort"] = (
+        effort if effort in ("", "minimal", "low", "medium", "high")
+        else defaults["llm_reasoning_effort"]
+    )
     try:
         out["zoom"] = min(4.0, max(0.5, float(raw.get("zoom", out["zoom"]))))
     except (TypeError, ValueError):
@@ -2334,10 +2408,19 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         out["font_size"] = min(16, max(10, int(raw.get("font_size", out["font_size"]))))
     except (TypeError, ValueError):
         pass
-    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode"):
+    try:
+        out["llm_pool_workers"] = min(
+            16, max(1, int(raw.get("llm_pool_workers", out["llm_pool_workers"])))
+        )
+    except (TypeError, ValueError):
+        pass
+    for key in ("render_md", "show_header", "remember_tab", "resume_last_page", "save_edits", "clone_bar_collapsed", "fast_engine", "fast_flags", "fast_worker", "llm_json_mode", "notify_on_finish", "notify_sound", "prevent_sleep"):
         out[key] = _to_bool(raw.get(key, out[key]), out[key])
-    if raw.get("last_tab") in ("original", "translated", "images"):
-        out["last_tab"] = raw["last_tab"]
+    out["last_tab"] = (
+        raw["last_tab"]
+        if raw.get("last_tab") in ("original", "translated", "images")
+        else defaults["last_tab"]
+    )
     pages = raw.get("last_pages")
     if isinstance(pages, dict):
         cleaned: dict[str, int] = {}
