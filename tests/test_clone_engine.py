@@ -266,6 +266,20 @@ class FastEngineTests(unittest.TestCase):
         self.assertIn(clone_engine.FAST_ENGINE_TAG, tag_on)
         self.assertNotEqual(tag_off, tag_on)
 
+    def test_llm_reasoning_send_and_system_prompt(self):
+        self.engine.llm_reasoning_effort = "minimal"
+        self.engine.llm_system_prompt = "Mantieni i termini in italiano."
+        self.engine.fast_engine = True
+        flags, _ = self.engine._translator_flags("llm")
+        # Senza il flag di invio, pdf2zh ignora l'effort.
+        self.assertIn("--openai-reasoning-effort", flags)
+        self.assertIn("--openai-send-reasoning-effort", flags)
+        self.assertEqual(
+            flags[flags.index("--custom-system-prompt") + 1],
+            "Mantieni i termini in italiano.",
+        )
+        self.assertIn("-p", self.engine._version_tag())
+
     def test_numeric_lists_uses_wrapper_and_env(self):
         self.engine.numeric_lists = True
         wrapper = Path(self._tmp.name) / "engine_wrapper.py"

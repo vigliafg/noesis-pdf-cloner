@@ -544,6 +544,10 @@ class CloneEngine:
             "PDF_LLM_REASONING_EFFORT", ""
         ).strip()
         self.llm_json_mode: bool = _env_truthy(os.environ.get("PDF_LLM_JSON_MODE"))
+        # Prompt di sistema personalizzato (opzionale, motore LLM).
+        self.llm_system_prompt: str = os.environ.get(
+            "PDF_LLM_SYSTEM_PROMPT", ""
+        ).strip()
 
         # Feature sperimentale "motore veloce" (default OFF). Quando attiva il
         # motore viene lanciato via ``engine_wrapper.py`` (patch runtime) e, se
@@ -643,6 +647,9 @@ class CloneEngine:
             tag += f"-{FAST_ENGINE_TAG}"
         if self.numeric_lists:
             tag += "-lists1"
+        prompt = (self.llm_system_prompt or "").strip()
+        if prompt:
+            tag += "-p" + hashlib.sha1(prompt.encode()).hexdigest()[:6]
         return tag
 
     def split_path(self, page: int) -> Path:
@@ -1158,6 +1165,8 @@ class CloneEngine:
                 # estrae i termini con una chiamata extra): punto 6.
                 "--no-auto-extract-glossary",
             ]
+            if self.llm_system_prompt:
+                flags += ["--custom-system-prompt", self.llm_system_prompt]
             workers = max(1, int(getattr(self, "llm_pool_workers", 1) or 1))
             if self._fast_engine_active():
                 # Con la feature attiva il pool è sempre esplicito (anche =1):
@@ -1173,6 +1182,8 @@ class CloneEngine:
                 if self.llm_reasoning_effort:
                     flags += [
                         "--openai-reasoning-effort", self.llm_reasoning_effort,
+                        # Senza questo pdf2zh NON invia l'effort al provider.
+                        "--openai-send-reasoning-effort",
                     ]
                 if self.llm_json_mode:
                     flags += ["--openai-enable-json-mode"]

@@ -113,6 +113,8 @@ DEFAULTS: dict = {
     # Modello e base URL LLM (vuoto = default/env PDF_LLM_MODEL / PDF_LLM_BASE_URL).
     "llm_model": "",
     "llm_base_url": "",
+    # Prompt di sistema personalizzato per il motore LLM (vuoto = default).
+    "llm_system_prompt": "",
     # Proxy provider locale (pin Groq): avvio automatico dall'app + porta.
     "llm_proxy_autostart": False,
     "llm_proxy_port": 8790,
@@ -2299,6 +2301,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "Endpoint compatible OpenAI. Par défaut OpenRouter ; ex. http://127.0.0.1:8790/v1 pour le proxy de fournisseur (pin Groq). Vide = défaut (ou PDF_LLM_BASE_URL).",
         "de": "OpenAI-kompatibler Endpunkt. Standard OpenRouter; z. B. http://127.0.0.1:8790/v1 für den Provider-Proxy (Groq-Pin). Leer = Standard (oder PDF_LLM_BASE_URL).",
         "es": "Endpoint compatible con OpenAI. Por defecto OpenRouter; p. ej. http://127.0.0.1:8790/v1 para el proxy de proveedor (pin Groq). Vacío = predeterminado (o PDF_LLM_BASE_URL).",
+    },
+    "settings.llm.system_prompt": {
+        "it": "LLM: prompt di sistema",
+        "en": "LLM: system prompt",
+        "fr": "LLM : prompt système",
+        "de": "LLM: System-Prompt",
+        "es": "LLM: prompt del sistema",
+    },
+    "settings.llm.system_prompt.tip": {
+        "it": "Istruzioni aggiuntive per il motore LLM (es. 'mantieni i nomi dei farmaci in italiano, non tradurre le citazioni'). Vuoto = prompt predefinito.",
+        "en": "Extra instructions for the LLM engine (e.g. 'keep drug names in Italian, do not translate citations'). Empty = default prompt.",
+        "fr": "Instructions supplémentaires pour le moteur LLM (ex. « garder les noms de médicaments en italien, ne pas traduire les citations »). Vide = prompt par défaut.",
+        "de": "Zusätzliche Anweisungen für die LLM-Engine (z. B. 'Arzneimittelnamen auf Italienisch behalten, Zitate nicht übersetzen'). Leer = Standard-Prompt.",
+        "es": "Instrucciones adicionales para el motor LLM (p. ej. 'mantener los nombres de fármacos en italiano, no traducir las citas'). Vacío = prompt predeterminado.",
     },
     "settings.llm.model.mercury": {
         "it": "Mercury — inception/mercury-2.5",

@@ -5275,6 +5275,10 @@ class SettingsDialog(QDialog):
         self._llm_base_combo = QComboBox()
         self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
         perf_form.addRow(self._lbl_llm_base, self._llm_base_combo)
+        self._lbl_llm_prompt = QLabel(T("settings.llm.system_prompt"))
+        self._llm_prompt_edit = QLineEdit()
+        self._llm_prompt_edit.setToolTip(T("settings.llm.system_prompt.tip"))
+        perf_form.addRow(self._lbl_llm_prompt, self._llm_prompt_edit)
         self._populate_llm_combos()
         self._proxy_autostart_check = QCheckBox(T("settings.proxy.autostart"))
         self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
@@ -5602,6 +5606,7 @@ class SettingsDialog(QDialog):
         preset = str(cfg.get("performance_preset", "normal") or "normal")
         self._select_preset(preset)
         self._numeric_lists_check.setChecked(bool(cfg.get("numeric_lists", False)))
+        self._llm_prompt_edit.setText(str(cfg.get("llm_system_prompt", "") or ""))
         # I flag B2 sono seedati OFF dai preset (precisione): non si ripristina
         # un eventuale valore vecchio/errato salvato in config.
         self._update_perf_enabled()
@@ -5710,6 +5715,8 @@ class SettingsDialog(QDialog):
         self._llm_model_combo.setToolTip(T("settings.llm.model.tip"))
         self._lbl_llm_base.setText(T("settings.llm.base_url"))
         self._llm_base_combo.setToolTip(T("settings.llm.base_url.tip"))
+        self._lbl_llm_prompt.setText(T("settings.llm.system_prompt"))
+        self._llm_prompt_edit.setToolTip(T("settings.llm.system_prompt.tip"))
         self._populate_llm_combos()
         self._proxy_autostart_check.setText(T("settings.proxy.autostart"))
         self._proxy_autostart_check.setToolTip(T("settings.proxy.autostart.tip"))
@@ -5758,6 +5765,7 @@ class SettingsDialog(QDialog):
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
             "llm_model": self._llm_model_combo.currentData() or "",
             "llm_base_url": self._selected_base_url(),
+            "llm_system_prompt": self._llm_prompt_edit.text().strip(),
             "llm_proxy_autostart": bool(self._proxy_autostart_check.isChecked()),
             "llm_proxy_port": int(self._proxy_port_spin.value()),
         }
@@ -8414,7 +8422,7 @@ class MainWindow(QMainWindow):
                     "fast_engine", "fast_flags",
                     "llm_reasoning_effort", "llm_json_mode", "fast_worker",
                     "llm_model", "llm_base_url",
-                    "llm_proxy_autostart", "llm_proxy_port"):
+                    "llm_proxy_autostart", "llm_proxy_port", "llm_system_prompt"):
             if key in values:
                 set_setting(key, values[key])
         set_source_lang(src)   # setters validati (auto solo in sorgente)
@@ -8663,6 +8671,9 @@ class MainWindow(QMainWindow):
             self._ensure_proxy_async(port)
         self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
         self._clone_engine.numeric_lists = bool(get_setting("numeric_lists", False))
+        self._clone_engine.llm_system_prompt = str(
+            get_setting("llm_system_prompt", "") or ""
+        ).strip()
         if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
             # Pre-avvia il worker persistente (in background): il costo di avvio
             # non ricade sulla prima pagina.
@@ -9376,6 +9387,7 @@ class MainWindow(QMainWindow):
             export_engine.llm_json_mode = self._clone_engine.llm_json_mode
             export_engine.fast_worker = self._clone_engine.fast_worker
             export_engine.numeric_lists = self._clone_engine.numeric_lists
+            export_engine.llm_system_prompt = self._clone_engine.llm_system_prompt
 
         ok, count, failed = self._run_export_with_progress(
             export_engine,

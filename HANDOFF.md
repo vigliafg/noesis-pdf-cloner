@@ -589,6 +589,11 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   runtime); marker cache `-lists1`. Riverberato al service (`NUMERIC_LISTS`).
 - **Modello e base URL** sono tendine (non testo libero): *Mercury* /
   *gpt-oss-120B* / *Default*, e *OpenRouter* / *Proxy locale*.
+- **Prompt di sistema LLM** (`llm_system_prompt`, campo in Avanzate):
+  `--custom-system-prompt`, per guidare terminologia/stile (es. tradurre i nomi
+  dei farmaci, non tradurre le citazioni). Marker cache dedicato.
+- **Fix invio reasoning effort**: `--openai-reasoning-effort` da solo **non**
+  veniva inviato a pdf2zh; ora si passa anche `--openai-send-reasoning-effort`.
 - **Proxy provider automatico** (`proxy_manager.py`): da Impostazioni →
   Prestazioni, "Avvia automaticamente il proxy provider" + porta; l'app avvia
   `tools/provider_proxy.py` in background, punta la base URL al proxy e lo
