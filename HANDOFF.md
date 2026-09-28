@@ -11,11 +11,11 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.11** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.1.12** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
-- Test: **432 OK** (24 skip, regressioni su PDF reali non versionati).
+- Test: **557 OK** (24 skip, regressioni su PDF reali non versionati).
 
 ### Cosa NON è ancora fatto
 - Il motore **Docling** e gli strumenti a zone (dormienti) non sono reintegrati.
@@ -524,7 +524,7 @@ rilievo). Suite: **482 OK** (24 skip).
 
 ---
 
-## 10. Feature sperimentale — "motore veloce" (26/09)
+## 10. Motore veloce — **default ON** (Bilanciato) · agg. 28/09
 
 Obiettivo: ridurre la latenza **a freddo** (prima traduzione, LLM chiamato)
 di una pagina tradotta verso i **≤ 30 s**. Le misure *a caldo* (cache interna
@@ -534,7 +534,24 @@ pipeline PDF). Analisi completa in `.opencode/plan/velocita-traduzione.md`
 pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 (ri-hash dei font, monitor memoria, import Python, load modello).
 
-### Cosa è stato aggiunto (feature **default OFF**, reversibile)
+### 0.1.12 — preset a 3 passi + fast di default (28/09)
+
+- **Preset** (Impostazioni → Prestazioni), **default = Bilanciato**: *Precisione massima*
+  (tutto off), ***Bilanciato* (consigliato)**, *Massima velocità*. Il preset **pre-compila**
+  i parametri **e preseleziona il modello**; i campi "Avanzate" restano **sempre attivi**
+  (non più in sola lettura).
+- **Modelli LLM approvati** (tendina): `inception/mercury-2.5` · `openai/gpt-oss-120b`
+  (migliore: ~17 s, pulito) · `qwen/qwen3-30b-a3b-instruct-2507` (economico, ~26 s) ·
+  `openai/gpt-6-luna` (~32 s). Scartati: llama-4-scout, deepseek-v4.1-flash, seed-1.6-flash,
+  hy-mt2-30b (tedesco), e i lenti glm-5.3-flash / qwen3-32b / nemotron-3-super.
+- **Motore veloce di default**: `fast_engine`+`fast_worker` ON (+ migrazione una-tantum
+  `normal → fast`, flag `performance_preset_migrated`). `fast_flags` (B2) resta **opt-in**.
+- **UX**: box progress a 4 righe (motore · provider · preset · modello) con *Annulla* sotto
+  il box; wizard con miniatura pagina intera; dialogo "pagina già in cache"
+  (Ritraduci/Apri col lettore/Annulla); toast "Tradotta in N s" (3 s, in alto al centro);
+  placeholder "Premi ▶ Traduci" su 2 righe.
+
+### Cosa è stato aggiunto (feature reversibile; **default ON** dal 28/09)
 
 - `engine_patch.py` — patch runtime del motore:
   - memoizza `babeldoc.assets.assets.get_font_and_metadata` (i font in cache
@@ -542,7 +559,7 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
   - sostituisce `MemoryMonitor` con un no-op (~2-3 s/pagina).
   Idempotente e difensiva: se `babeldoc` manca/cambia, la patch è saltata.
 - `engine_wrapper.py` — launcher che applica le patch e delega a `pdf2zh_next`.
-- `clone_engine.py` — `fast_engine`/`fast_flags` (default OFF) + pool esplicito
+- `clone_engine.py` — `fast_engine`/`fast_flags` (**default ON** dal 28/09) + pool esplicito
   (`--pool-max-workers`/`--qps`, anche =1) + preset "traduzione rapida"
   (`--skip-scanned-detection` solo se la pagina ha testo,
   `--skip-formula-offset-calculation`, `--no-remove-non-formula-lines`) +
@@ -615,27 +632,26 @@ pagina costa ~30 s anche a LLM saltato, per costi fissi pagati a ogni subprocess
 
 ### Reversibilità (runbook)
 
-1. Impostazioni → disattiva i due toggle (secondi).
-2. `NOESIS_FAST_ENGINE=0` / `NOESIS_FAST_FLAGS=0` (kill-switch, senza UI).
-3. `git checkout main` sul branch `experiment/fast-engine` (non mergiato).
-4. `git revert -m 1 <merge>` se mergiato; oppure rimozione dei file nuovi.
+1. Impostazioni → preset **Precisione massima** (tutto off).
+2. `NOESIS_FAST_ENGINE=0` / `NOESIS_FAST_FLAGS=0` / `NOESIS_INPROC=0` (kill-switch, senza UI).
+3. Config: `performance_preset: "normal"` + `fast_engine/fast_worker: false`
+   (il flag `performance_preset_migrated` evita la ri-migrazione a "fast").
+4. `git revert` del commit/merge se serve lo stato precedente.
 Con feature OFF il comando al motore è **identico** a prima (test dedicati).
 
 ### Service
 
-Allineato nello stesso branch `experiment/fast-engine` di
-`noesis-pdf-cloner-service`: `app/engine_patch.py`, `app/engine_wrapper.py`,
-`app/engine.py`, `app/config.py` (`llm_pool_workers`/`fast_engine`/`fast_flags`,
-env `PDF_LLM_POOL_WORKERS`/`FAST_ENGINE`/`FAST_FLAGS`), `worker`/`cli`/`estimate`.
-Default OFF; a OFF comportamento invariato (290 test verdi).
+Allineato e **mergiato su `main`** di `noesis-pdf-cloner-service` (agg. 28/09):
+`app/engine_patch.py`, `app/engine_wrapper.py`, `app/engine.py`, `app/config.py`,
+`app/envfile.py` + `worker`/`cli`/`estimate`. Default **ON** come il desktop
+(`fast_engine`/`fast_worker`); `PERFORMANCE_PRESET` (`normal|fast|fastest`) governa i
+default dei flag, e in `/settings` il modello LLM è una **tendina** con i 4 approvati.
+Suite service: **317 test**.
 
 ### Follow-up noti
 
-- **Packaging**: `.github/workflows/release.yml` non bundle ancora
-  `engine_wrapper.py`/`engine_patch.py`/`engine_worker.py` (come
-  `gtranslate_cli.py`). Finché non lo si aggiunge, nelle build PyInstaller la
-  feature degrada al binario (fail-safe). Il file era già modificato per pin di
-  action non correlati: da aggiungere in un commit dedicato.
+- **Packaging**: ✅ risolto — `.github/workflows/release.yml` ora bundle
+  `engine_wrapper.py`/`engine_patch.py`/`engine_worker.py` (come `gtranslate_cli.py`).
 - **Groq/LLM**: per usare gpt-oss-120b serve il pin del provider via
   `tools/provider_proxy.py` (model-aware), puntando la base URL al proxy da
   Impostazioni. Prezzi e disponibilità del provider possono cambiare.
@@ -693,6 +709,24 @@ Lettura:
 ---
 
 ## 12. Release — preparazione (26/09)
+
+### 0.1.12 (28/09) — preset che sceglie il modello + motore veloce di default
+- **Preset a 3 passi** (Impostazioni → Prestazioni): *Precisione massima* (tutto off),
+  ***Bilanciato* (consigliato, default)** (patch+worker), *Massima velocità* (gpt-oss +
+  proxy + reasoning minimale). Il preset compila i parametri **e preseleziona il modello**;
+  i campi "Avanzate" restano **sempre attivi**.
+- **Modelli** (tendina): Mercury · gpt-oss-120b · **qwen3-30b-a3b** · gpt-6-luna · Default/env.
+- **Motore veloce di default**: `fast_engine`+`fast_worker` ON; migrazione una-tantum
+  `normal → fast` (`performance_preset_migrated`). `fast_flags` (B2) resta opt-in.
+- **UX**: box progress a 4 righe (motore · provider · preset · modello) con *Annulla* sotto
+  il box; wizard con miniatura pagina intera; dialogo "pagina già in cache"
+  (Ritraduci/Apri col lettore/Annulla); toast "Tradotta in N s" (3 s, in alto al centro);
+  placeholder "Premi ▶ Traduci" su 2 righe.
+- **E2E (pag. 3575, 1 run a freddo)**: Precisione **49,1 s** · Bilanciato **43,1 s** ·
+  Massima **29,5 s** (gpt-oss su Groq). Qualità pulita in tutti e 3.
+- Test: desktop **557 OK**; service **317**.
+- Service allineato su `main` (modello a tendina + `PERFORMANCE_PRESET`; default fast ON).
+- Bump versione in `installer.nsi` (0.1.11 → 0.1.12).
 
 ### 0.1.11 (fix 50s su Windows)
 - **Traduzione in-process nel worker** (`engine_worker.py`, `engine_patch.py`):
