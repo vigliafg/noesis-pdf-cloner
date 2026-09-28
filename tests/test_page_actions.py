@@ -74,7 +74,7 @@ class PageActionsFabTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -277,7 +277,7 @@ class PageActionsHandlersTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main

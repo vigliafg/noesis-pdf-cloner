@@ -100,13 +100,15 @@ DEFAULTS: dict = {
     "notify_sound": True,      # suono d'avviso a fine batch
     "prevent_sleep": True,     # impedisci lo standby durante la traduzione
     "llm_pool_workers": 4,     # richieste LLM in parallelo dentro una pagina
-    # Feature sperimentale "motore veloce": patch runtime del motore (default
-    # OFF, reversibile). Vedi .opencode/plan/velocita-traduzione.md.
-    "fast_engine": False,      # motore veloce (wrapper + patch runtime)
+    # Motore veloce: patch runtime + worker persistente. Default ON
+    # (preset "fast" = Bilanciato). Reversibile (kill-switch NOESIS_FAST_ENGINE).
+    "fast_engine": True,       # motore veloce (wrapper + patch runtime)
     "fast_flags": False,       # preset "traduzione rapida" (salta controlli)
-    "fast_worker": False,      # worker persistente (Fase 2, richiede fast_engine)
-    # Preset prestazioni (governa i campi sottostanti): normal | fast | fastest.
-    "performance_preset": "normal",
+    "fast_worker": True,       # worker persistente (Fase 2, richiede fast_engine)
+    # Preset prestazioni: normal | fast | fastest. Default: "fast" (Bilanciato).
+    "performance_preset": "fast",
+    # Migrazione una-tantum del vecchio default "normal" -> "fast".
+    "performance_preset_migrated": False,
     # Opzioni LLM avanzate (usate solo a fast_engine attivo).
     "llm_reasoning_effort": "",  # "" | minimal | low | medium | high
     "llm_json_mode": False,      # --openai-enable-json-mode
@@ -395,6 +397,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "⚙️ Engine geändert: {engine}",
         "es": "⚙️ Motor cambiado: {engine}",
     },
+    "toast.llm_active": {
+        "it": "🤖 Motore LLM · preset: {preset} · modello: {model}",
+        "en": "🤖 LLM engine · preset: {preset} · model: {model}",
+        "fr": "🤖 Moteur LLM · preset : {preset} · modèle : {model}",
+        "de": "🤖 LLM-Engine · Preset: {preset} · Modell: {model}",
+        "es": "🤖 Motor LLM · preset: {preset} · modelo: {model}",
+    },
     "status.extracting": {
         "it": "⏳ Estrazione in corso...", "en": "⏳ Extracting...",
         "fr": "⏳ Extraction en cours...", "de": "⏳ Extraktion läuft...",
@@ -570,6 +579,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Übersetzung läuft…\n{engine}",
         "es": "Traduciendo…\n{engine}",
     },
+    "clone.spinner_llm": {
+        "it": "Motore: {engine}\nProvider: {provider}\nPreset: {preset}\nModello: {model}",
+        "en": "Engine: {engine}\nProvider: {provider}\nPreset: {preset}\nModel: {model}",
+        "fr": "Moteur : {engine}\nFournisseur : {provider}\nPreset : {preset}\nModèle : {model}",
+        "de": "Engine: {engine}\nAnbieter: {provider}\nPreset: {preset}\nModell: {model}",
+        "es": "Motor: {engine}\nProveedor: {provider}\nPreset: {preset}\nModelo: {model}",
+    },
+    "runtime.llm_line": {
+        "it": "preset: {preset} · modello: {model} · provider: {provider}",
+        "en": "preset: {preset} · model: {model} · provider: {provider}",
+        "fr": "preset : {preset} · modèle : {model} · fournisseur : {provider}",
+        "de": "Preset: {preset} · Modell: {model} · Anbieter: {provider}",
+        "es": "preset: {preset} · modelo: {model} · proveedor: {provider}",
+    },
     "clone.translating": {
         "it": "Traduzione pagina {page}… ({engine})",
         "en": "Translating page {page}… ({engine})",
@@ -636,11 +659,53 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Usar Google/Bing",
     },
     "clone.pending_page": {
-        "it": "Premi ▶ Traduci nella barra in alto per tradurre questa pagina",
-        "en": "Press ▶ Translate in the top bar to translate this page",
-        "fr": "Appuyez sur ▶ Traduire dans la barre du haut pour traduire cette page",
-        "de": "▶ Übersetzen in der oberen Leiste drücken, um diese Seite zu übersetzen",
-        "es": "Pulsa ▶ Traducir en la barra superior para traducir esta página",
+        "it": "Premi ▶ Traduci nella barra in alto\nper tradurre questa pagina",
+        "en": "Press ▶ Translate in the top bar\nto translate this page",
+        "fr": "Appuyez sur ▶ Traduire dans la barre du haut\npour traduire cette page",
+        "de": "▶ Übersetzen in der oberen Leiste drücken,\num diese Seite zu übersetzen",
+        "es": "Pulsa ▶ Traducir en la barra superior\npara traducir esta página",
+    },
+    "clone.done_in": {
+        "it": "✅ Tradotta in {seconds} s",
+        "en": "✅ Translated in {seconds} s",
+        "fr": "✅ Traduite en {seconds} s",
+        "de": "✅ Übersetzt in {seconds} s",
+        "es": "✅ Traducida en {seconds} s",
+    },
+    "clone.cached.title": {
+        "it": "Pagina già tradotta",
+        "en": "Page already translated",
+        "fr": "Page déjà traduite",
+        "de": "Seite bereits übersetzt",
+        "es": "Página ya traducida",
+    },
+    "clone.cached.body": {
+        "it": "Questa pagina è già tradotta dal motore {engine}.\n\nVuoi cancellarla dalla cache e ritradurla, oppure aprirla col lettore di sistema?",
+        "en": "This page is already translated with {engine}.\n\nDelete it from cache and re-translate, or open it with the system viewer?",
+        "fr": "Cette page est déjà traduite avec {engine}.\n\nLa supprimer du cache et retraduire, ou l'ouvrir avec la visionneuse système ?",
+        "de": "Diese Seite ist bereits mit {engine} übersetzt.\n\nAus dem Cache löschen und neu übersetzen oder mit dem Systembetrachter öffnen?",
+        "es": "Esta página ya está traducida con {engine}.\n\n¿Eliminarla de la caché y retraducirla, o abrirla con el visor del sistema?",
+    },
+    "clone.cached.retranslate": {
+        "it": "Ritraduci (cancella cache)",
+        "en": "Re-translate (clear cache)",
+        "fr": "Retraduire (vider le cache)",
+        "de": "Neu übersetzen (Cache leeren)",
+        "es": "Retraducir (borrar caché)",
+    },
+    "clone.cached.view": {
+        "it": "Apri col lettore di sistema",
+        "en": "Open with system viewer",
+        "fr": "Ouvrir avec la visionneuse système",
+        "de": "Mit Systembetrachter öffnen",
+        "es": "Abrir con el visor del sistema",
+    },
+    "clone.cached.cancel": {
+        "it": "Annulla",
+        "en": "Cancel",
+        "fr": "Annuler",
+        "de": "Abbrechen",
+        "es": "Cancelar",
     },
     "clone.status_todo": {
         "it": "Da tradurre", "en": "Not translated", "fr": "À traduire",
@@ -1401,6 +1466,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Google/Bing sind kostenlos; LLM (OpenRouter) kostet pro Seite.",
         "es": "Google/Bing son gratuitos; LLM (OpenRouter) cuesta por página.",
     },
+    "export.wizard.engine.llm_info": {
+        "it": "🤖 Motore LLM · preset: {preset} · modello: {model}",
+        "en": "🤖 LLM engine · preset: {preset} · model: {model}",
+        "fr": "🤖 Moteur LLM · preset : {preset} · modèle : {model}",
+        "de": "🤖 LLM-Engine · Preset: {preset} · Modell: {model}",
+        "es": "🤖 Motor LLM · preset: {preset} · modelo: {model}",
+    },
     "export.wizard.est": {
         "it": "Da tradurre: {missing} di {total} · già in cache: {cached} · tempo stimato: ~{time}",
         "en": "To translate: {missing} of {total} · cached: {cached} · estimated time: ~{time}",
@@ -2121,32 +2193,32 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "Leistung", "es": "Rendimiento",
     },
     "settings.performance.preset.normal.label": {
-        "it": "Normale",
-        "en": "Normal",
-        "fr": "Normal",
-        "de": "Normal",
-        "es": "Normal",
+        "it": "Precisione massima",
+        "en": "Maximum precision",
+        "fr": "Précision maximale",
+        "de": "Maximale Präzision",
+        "es": "Máxima precisión",
     },
     "settings.performance.preset.normal.desc": {
-        "it": "Massima compatibilità: nessuna ottimizzazione. ~40 s/pagina.",
-        "en": "Maximum compatibility: no optimizations. ~40 s/page.",
-        "fr": "Compatibilité maximale : aucune optimisation. ~40 s/page.",
-        "de": "Maximale Kompatibilität: keine Optimierungen. ~40 s/Seite.",
-        "es": "Máxima compatibilidad: sin optimizaciones. ~40 s/página.",
+        "it": "Tutto disattivato (patch e worker off): massima compatibilità. ~40 s/pagina.",
+        "en": "Everything off (no patch/worker): maximum compatibility. ~40 s/page.",
+        "fr": "Tout désactivé (sans patch ni worker) : compatibilité maximale. ~40 s/page.",
+        "de": "Alles aus (kein Patch/Worker): maximale Kompatibilität. ~40 s/Seite.",
+        "es": "Todo desactivado (sin patch ni worker): máxima compatibilidad. ~40 s/página.",
     },
     "settings.performance.preset.fast.label": {
-        "it": "Veloce (consigliato)",
-        "en": "Fast (recommended)",
-        "fr": "Rapide (recommandé)",
-        "de": "Schnell (empfohlen)",
-        "es": "Rápido (recomendado)",
+        "it": "Bilanciato (consigliato)",
+        "en": "Balanced (recommended)",
+        "fr": "Équilibré (recommandé)",
+        "de": "Ausgewogen (empfohlen)",
+        "es": "Equilibrado (recomendado)",
     },
     "settings.performance.preset.fast.desc": {
-        "it": "Ottimizzazioni della pipeline (patch + worker). ~33 s/pagina.",
-        "en": "Pipeline optimizations (patch + worker). ~33 s/page.",
-        "fr": "Optimisations du pipeline (patch + worker). ~33 s/page.",
-        "de": "Pipeline-Optimierungen (Patch + Worker). ~33 s/Seite.",
-        "es": "Optimizaciones del pipeline (patch + worker). ~33 s/página.",
+        "it": "Patch + worker attivi (default). ~33 s/pagina.",
+        "en": "Patch + worker on (default). ~33 s/page.",
+        "fr": "Patch + worker actifs (défaut). ~33 s/page.",
+        "de": "Patch + Worker an (Standard). ~33 s/Seite.",
+        "es": "Patch + worker activos (predeterminado). ~33 s/página.",
     },
     "settings.performance.preset.fastest.label": {
         "it": "Massima velocità",
@@ -2156,11 +2228,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "es": "Máxima",
     },
     "settings.performance.preset.fastest.desc": {
-        "it": "gpt-oss su Groq: richiede la chiave OpenRouter e avvia il proxy locale. ~23 s/pagina.",
-        "en": "gpt-oss on Groq: needs the OpenRouter key and starts the local proxy. ~23 s/page.",
-        "fr": "gpt-oss sur Groq : nécessite la clé OpenRouter et démarre le proxy local. ~23 s/page.",
-        "de": "gpt-oss auf Groq: benötigt den OpenRouter-Schlüssel und startet den lokalen Proxy. ~23 s/Seite.",
-        "es": "gpt-oss en Groq: requiere la clave de OpenRouter e inicia el proxy local. ~23 s/página.",
+        "it": "gpt-oss (Groq) + proxy locale, reasoning minimale. ~23 s/pagina.",
+        "en": "gpt-oss (Groq) + local proxy, minimal reasoning. ~23 s/page.",
+        "fr": "gpt-oss (Groq) + proxy local, raisonnement minimal. ~23 s/page.",
+        "de": "gpt-oss (Groq) + lokaler Proxy, minimales Reasoning. ~23 s/Seite.",
+        "es": "gpt-oss (Groq) + proxy local, razonamiento mínimo. ~23 s/página.",
     },
     "settings.performance.preset.fastest.llm_only": {
         "it": "Disponibile solo con il motore LLM.",
@@ -2336,6 +2408,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fr": "gpt-6-luna — openai/gpt-6-luna",
         "de": "gpt-6-luna — openai/gpt-6-luna",
         "es": "gpt-6-luna — openai/gpt-6-luna",
+    },
+    "settings.llm.model.qwen3": {
+        "it": "qwen3-30B (economico) — qwen/qwen3-30b-a3b-instruct-2507",
+        "en": "qwen3-30B (cheap) — qwen/qwen3-30b-a3b-instruct-2507",
+        "fr": "qwen3-30B (économique) — qwen/qwen3-30b-a3b-instruct-2507",
+        "de": "qwen3-30B (günstig) — qwen/qwen3-30b-a3b-instruct-2507",
+        "es": "qwen3-30B (económico) — qwen/qwen3-30b-a3b-instruct-2507",
     },
     "settings.llm.model.default": {
         "it": "Default (variabile d'ambiente)",
@@ -2598,6 +2677,15 @@ def _validate_config(raw: dict, defaults: dict) -> dict:
         preset if preset in ("normal", "fast", "fastest")
         else defaults["performance_preset"]
     )
+    # Migrazione una-tantum: porta le config vecchie al preset "fast"
+    # (patch + worker attivi). Un "normal" scelto *dopo* la migrazione resta.
+    if not bool(out.get("performance_preset_migrated", False)):
+        if out["performance_preset"] == "normal":
+            out["performance_preset"] = "fast"
+        if out["performance_preset"] in ("fast", "fastest"):
+            out["fast_engine"] = True
+            out["fast_worker"] = True
+        out["performance_preset_migrated"] = True
     effort = str(raw.get("llm_reasoning_effort", "")).strip().lower()
     out["llm_reasoning_effort"] = (
         effort if effort in ("", "minimal", "low", "medium", "high")

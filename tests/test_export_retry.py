@@ -38,6 +38,9 @@ class RetryTests(unittest.TestCase):
         def status(self, page, engine):
             return self._status
 
+        def warmup(self):
+            pass
+
     def _thread(self, engine):
         import main
 

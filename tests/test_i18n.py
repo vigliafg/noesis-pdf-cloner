@@ -298,6 +298,28 @@ class ConfigV2Tests(unittest.TestCase):
         self.assertEqual(cfg["theme"], "dark")
         self.assertEqual(cfg["llm_reasoning_effort"], "")
 
+    def test_default_preset_is_fast(self):
+        self.assertEqual(i18n.DEFAULTS["performance_preset"], "fast")
+
+    def test_legacy_normal_preset_migrates_to_fast(self):
+        self._write({"performance_preset": "normal"})
+        cfg = i18n.load_config(self._path)
+        self.assertEqual(cfg["performance_preset"], "fast")
+        self.assertTrue(cfg["fast_engine"])
+        self.assertTrue(cfg["fast_worker"])
+        self.assertTrue(cfg["performance_preset_migrated"])
+
+    def test_normal_preset_after_migration_is_kept(self):
+        self._write({
+            "performance_preset": "normal",
+            "performance_preset_migrated": True,
+            "fast_engine": False,
+            "fast_worker": False,
+        })
+        cfg = i18n.load_config(self._path)
+        self.assertEqual(cfg["performance_preset"], "normal")
+        self.assertFalse(cfg["fast_engine"])
+
     def test_llm_pool_workers_is_clamped(self):
         self._write({"llm_pool_workers": 99})
         self.assertEqual(i18n.load_config(self._path)["llm_pool_workers"], 16)

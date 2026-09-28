@@ -48,7 +48,7 @@ class DialogWindowTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -94,7 +94,7 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -140,6 +140,8 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         ]
         self.assertIn("inception/mercury-2.5", models)
         self.assertIn("openai/gpt-oss-120b", models)
+        self.assertIn("qwen/qwen3-30b-a3b-instruct-2507", models)
+        self.assertIn("openai/gpt-6-luna", models)
         bases = [
             dlg._llm_base_combo.itemData(i)
             for i in range(dlg._llm_base_combo.count())
@@ -195,9 +197,9 @@ class SettingsDialogLayoutTests(unittest.TestCase):
                 self.assertTrue(v["llm_system_prompt"])
             else:
                 self.assertEqual(v["llm_system_prompt"], "")
-        # I campi dipendenti sono di sola lettura (governati dal preset).
-        self.assertFalse(dlg._fast_engine_check.isEnabled())
-        self.assertFalse(dlg._llm_model_combo.isEnabled())
+        # I campi dipendenti restano ABILITATI e pre-valorizzati ("default attivi").
+        self.assertTrue(dlg._fast_engine_check.isEnabled())
+        self.assertTrue(dlg._llm_model_combo.isEnabled())
         self.assertTrue(dlg._btn_proxy_test.isEnabled())
         dlg.close()
 
@@ -254,7 +256,7 @@ class MainWindowRefinementsTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main

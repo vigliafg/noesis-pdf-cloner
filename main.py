@@ -3647,6 +3647,7 @@ class LiquidOverlay(QWidget):
         super().__init__(parent)
         self._pixmap: QPixmap | None = None
         self._caption = ""
+        self._caption_box = None
         self._progress = 0.0
         self._target = 90.0
         self._duration = _EXPORT_EST_MS_PER_PAGE
@@ -3727,7 +3728,13 @@ class LiquidOverlay(QWidget):
             return
         self._btn_cancel.adjustSize()
         x = (self.width() - self._btn_cancel.width()) // 2
-        y = (self.height() + 56) // 2
+        box = self._caption_box
+        if box is not None:
+            # Attacca il pulsante al bordo inferiore del box del messaggio,
+            # così non copre l'ultima riga del testo.
+            y = box.bottom() + 10
+        else:
+            y = (self.height() + 56) // 2
         y = min(y, self.height() - self._btn_cancel.height() - 8)
         self._btn_cancel.move(max(0, x), max(0, y))
 
@@ -3791,11 +3798,15 @@ class LiquidOverlay(QWidget):
             )
             box.adjust(-12, -8, 12, 8)
             box.moveCenter(rect.center())
+            self._caption_box = QRect(box)
             painter.fillRect(
                 box, QColor.fromString(theme.color("liquid_caption_bg"))
             )
             painter.setPen(QColor.fromString(theme.color("liquid_text")))
             painter.drawText(box, flags, self._caption)
+            self._position_cancel()
+        else:
+            self._caption_box = None
 
 
 class _SheenButton(QPushButton):
@@ -4097,13 +4108,25 @@ class TranslatedPagePanel(QWidget):
         self._spinner = QLabel("", self)
         self._spinner.setStyleSheet("""
             QLabel {
-                background: rgba(20, 20, 20, 230); color: #fff;
-                border: 1px solid #666; border-radius: 12px;
-                padding: 16px 34px; font-size: 18px; font-weight: bold;
+                background: rgba(20, 20, 20, 220); color: #fff;
+                border: 1px solid #666; border-radius: 10px;
+                padding: 12px 22px; font-size: 14px; font-weight: bold;
             }
         """)
         self._spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spinner.hide()
+
+        # Toast temporaneo "tradotta in N s" (in alto al centro della pagina).
+        self._done_toast = QLabel("", self)
+        self._done_toast.setStyleSheet("""
+            QLabel {
+                background: rgba(20, 20, 20, 225); color: #fff;
+                border: 1px solid #666; border-radius: 10px;
+                padding: 8px 16px; font-size: 13px; font-weight: bold;
+            }
+        """)
+        self._done_toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._done_toast.hide()
 
         # Overlay "liquido" (progresso stimato) sopra la pagina in traduzione.
         self._liquid = LiquidOverlay(self)
@@ -4462,6 +4485,19 @@ class TranslatedPagePanel(QWidget):
         y = (self.height() - self._spinner.height()) // 2
         self._spinner.move(max(0, x), max(0, y))
 
+    def _position_done_toast(self):
+        self._done_toast.adjustSize()
+        x = (self.width() - self._done_toast.width()) // 2
+        self._done_toast.move(max(0, x), 16)
+
+    def flash_done(self, text: str, ms: int = 3000):
+        """Toast temporaneo in alto al centro (es. 'tradotta in N s')."""
+        self._done_toast.setText(text)
+        self._position_done_toast()
+        self._done_toast.show()
+        self._done_toast.raise_()
+        QTimer.singleShot(ms, self._done_toast.hide)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._reposition_collapse_btn()
@@ -4469,6 +4505,8 @@ class TranslatedPagePanel(QWidget):
             self._reposition_fab()
         if self._spinner.isVisible():
             self._position_spinner()
+        if self._done_toast.isVisible():
+            self._position_done_toast()
         if self._liquid.isVisible():
             self._liquid.setGeometry(self.scroll_area.geometry())
             self._liquid.raise_()
@@ -5467,7 +5505,9 @@ class SettingsDialog(QDialog):
         self._proxy_autostart_check.setChecked(preset["autostart"])
         self._llm_workers_spin.setValue(preset["pool"])
         self._llm_prompt_edit.setText(preset.get("prompt", ""))
-        self._set_preset_fields_enabled(False)
+        # I campi avanzati restano ABILITATI ("default attivi"): il preset
+        # propone i valori, l'utente può poi modificarli.
+        self._set_preset_fields_enabled(True)
 
     def _on_preset_toggled(self, code: str, checked: bool) -> None:
         if checked:
@@ -5555,6 +5595,10 @@ class SettingsDialog(QDialog):
         )
         self._llm_model_combo.addItem(
             T("settings.llm.model.gptoss"), "openai/gpt-oss-120b"
+        )
+        self._llm_model_combo.addItem(
+            T("settings.llm.model.qwen3"),
+            "qwen/qwen3-30b-a3b-instruct-2507",
         )
         self._llm_model_combo.addItem(
             T("settings.llm.model.luna"), "openai/gpt-6-luna"
@@ -5820,6 +5864,7 @@ class SettingsDialog(QDialog):
                 (code for code, radio in self._preset_radios.items() if radio.isChecked()),
                 "normal",
             ),
+            "performance_preset_migrated": True,
             "fast_engine": bool(self._fast_engine_check.isChecked()),
             "fast_flags": bool(self._fast_flags_check.isChecked()),
             "numeric_lists": bool(self._numeric_lists_check.isChecked()),
@@ -6001,7 +6046,7 @@ class ExportWizardDialog(QDialog):
         card_lay.setSpacing(14)
         self._thumb = QLabel()
         self._thumb.setObjectName("wizThumb")
-        self._thumb.setFixedSize(94, 124)
+        self._thumb.setFixedSize(260, 332)
         self._thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_lay.addWidget(self._thumb)
         self._file_info = QLabel("")
@@ -6029,9 +6074,15 @@ class ExportWizardDialog(QDialog):
                 size=f"{size:.1f}",
             )
         )
-        pix = self._render_source_thumb(self._current_page)
+        pix = self._render_source_thumb(self._current_page, 260)
         if pix is not None:
-            self._thumb.setPixmap(pix)
+            self._thumb.setPixmap(
+                pix.scaled(
+                    self._thumb.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
 
     def _ensure_preview_doc(self):
         """Apre (una volta) il PDF per le anteprime e lo tiene aperto."""
@@ -6358,6 +6409,12 @@ class ExportWizardDialog(QDialog):
         if not any(b.isChecked() for b in self._engine_buttons.values()):
             first = next(iter(self._engine_buttons.values()))
             first.setChecked(True)
+
+        # Scheda Motore: se il motore è LLM, mostra sempre preset + modello.
+        self._llm_info_lbl = QLabel("")
+        self._llm_info_lbl.setObjectName("wizHint")
+        self._llm_info_lbl.setWordWrap(True)
+        lay.addWidget(self._llm_info_lbl)
 
         self._est_lbl = QLabel("")
         self._est_lbl.setObjectName("wizEst")
@@ -6757,6 +6814,25 @@ class ExportWizardDialog(QDialog):
                     time=eta,
                 )
             )
+        if hasattr(self, "_llm_info_lbl"):
+            engine = next(
+                (c for c, b in self._engine_buttons.items() if b.isChecked()),
+                self._engine_name,
+            )
+            if engine == "llm":
+                preset = get_setting("performance_preset", "fast")
+                model = get_setting("llm_model", "") or T(
+                    "settings.llm.model.default"
+                )
+                self._llm_info_lbl.setText(
+                    T(
+                        "export.wizard.engine.llm_info",
+                        preset=T(f"settings.performance.preset.{preset}.label"),
+                        model=model,
+                    )
+                )
+            else:
+                self._llm_info_lbl.setText("")
         self._update_translate_option(missing)
         self._update_numbering_hints()
         self._update_next_enabled()
@@ -6975,6 +7051,7 @@ class ExportProgressDialog(QDialog):
         pdf_path=None,
         parent=None,
         range_label: str | None = None,
+        llm_info: str = "",
     ):
         super().__init__(parent)
         self.setWindowTitle(T("export.progress.title"))
@@ -7014,6 +7091,7 @@ class ExportProgressDialog(QDialog):
 
         self._ctx_lbl = QLabel(
             T("export.progress.engine_lang", engine=engine_label, lang=lang_label)
+            + (f"\n{llm_info}" if llm_info else "")
         )
         left.addWidget(self._ctx_lbl)
 
@@ -8744,7 +8822,11 @@ class MainWindow(QMainWindow):
         self._clone_engine.llm_system_prompt = str(
             get_setting("llm_system_prompt", "") or ""
         ).strip()
-        if self._clone_engine.fast_worker and self._clone_engine.fast_engine:
+        if (
+            self._clone_engine.fast_worker
+            and self._clone_engine.fast_engine
+            and hasattr(self._clone_engine, "warmup")
+        ):
             # Pre-avvia il worker persistente (in background): il costo di avvio
             # non ricade sulla prima pagina.
             self._clone_engine.warmup()
@@ -8927,6 +9009,32 @@ class MainWindow(QMainWindow):
     def _engine_display(self, engine: str) -> str:
         return T(f"engine.option.{engine}")
 
+    def _llm_runtime_parts(self) -> dict:
+        """Preset/modello/provider correnti (per toast, wizard, progress bar)."""
+        preset = get_setting("performance_preset", "fast")
+        model = get_setting("llm_model", "") or T("settings.llm.model.default")
+        provider = (
+            "Groq"
+            if model == "openai/gpt-oss-120b"
+            and bool(get_setting("llm_proxy_autostart", False))
+            else "OpenRouter"
+        )
+        return {
+            "preset": T(f"settings.performance.preset.{preset}.label"),
+            "model": model,
+            "provider": provider,
+        }
+
+    def _clone_progress_caption(self, engine: str) -> str:
+        """Caption della barra "ascendente": per l'LLM mostra preset, modello, provider."""
+        if engine != "llm":
+            return T("clone.spinner", engine=self._engine_display(engine))
+        return T(
+            "clone.spinner_llm",
+            engine=T(f"engine.short.{engine}"),
+            **self._llm_runtime_parts(),
+        )
+
     def _show_clone_for_page(self, page_num: int):
         """Mostra il clone in cache del motore selezionato, o il segnaposto.
 
@@ -8960,19 +9068,12 @@ class MainWindow(QMainWindow):
         engine = get_translation_engine()
 
         if self._clone_engine.is_cached(page, engine):
-            self._show_clone_for_page(page)
-            self.translated_panel.set_status(
-                T("clone.status_cached", page=page + 1)
-            )
-            self.status_bar.showMessage(
-                T(
-                    "clone.already_cached",
-                    page=page + 1,
-                    engine=self._engine_display(engine),
-                ),
-                6000,
-            )
-            return
+            if not self._confirm_page_cached(page, engine):
+                # L'utente non vuole ritradurre: mostra il clone già in cache.
+                self._show_clone_for_page(page)
+                return
+            # Ritraduci: elimina la cache della pagina per questo motore.
+            self._clone_engine.purge_page_cache(engine, page)
 
         if engine == "llm":
             if not self._ensure_llm_key(force=True):
@@ -9018,6 +9119,34 @@ class MainWindow(QMainWindow):
                 self._clone_engine.purge_page_cache(old, page)
 
         self._request_translation(page)
+
+    def _confirm_page_cached(self, page: int, engine: str) -> bool:
+        """Pagina già in cache: ritradurre (cancella cache) o aprire col lettore.
+
+        Ritorna True se l'utente vuole ritradurre (il chiamante elimina la
+        cache), False se vuole aprire/saltare.
+        """
+        path = self._clone_engine.translated_path_for(page, engine)
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(T("clone.cached.title"))
+        box.setText(T("clone.cached.body", engine=self._engine_display(engine)))
+        retranslate = box.addButton(
+            T("clone.cached.retranslate"), QMessageBox.ButtonRole.AcceptRole
+        )
+        view = box.addButton(
+            T("clone.cached.view"), QMessageBox.ButtonRole.ActionRole
+        )
+        box.addButton(
+            T("clone.cached.cancel"), QMessageBox.ButtonRole.RejectRole
+        )
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is view:
+            if path.is_file():
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+            return False
+        return clicked is retranslate
 
     def _confirm_purge(self, old_engines: list[str], new_engine: str, page: int) -> bool:
         """Chiede conferma prima di eliminare la pagina in cache di altri motori."""
@@ -9097,7 +9226,7 @@ class MainWindow(QMainWindow):
         self._retire_clone_thread()
         self.translated_panel.show_translating(
             self._orig_pixmap,
-            T("clone.spinner", engine=self._engine_display(engine)),
+            self._clone_progress_caption(engine),
         )
         self.status_bar.showMessage(
             T(
@@ -9190,6 +9319,11 @@ class MainWindow(QMainWindow):
         else:
             self.translated_panel.set_status(T("clone.status_done"))
             self.status_bar.showMessage(T("clone.done", page=page_num + 1))
+            started = self._clone_run_start.get(engine)
+            elapsed = int(round(time.time() - started)) if started else 0
+            self.translated_panel.flash_done(
+                T("clone.done_in", seconds=elapsed), 3000
+            )
             # Azioni pagina: il FAB compare a traduzione fresca completata.
             self.translated_panel.set_page_actions_next_enabled(
                 page_num < self._page_count - 1
@@ -9556,6 +9690,11 @@ class MainWindow(QMainWindow):
             pdf_path=self._pdf_path,
             parent=self,
             range_label=page_spec.format_pages_label(pages),
+            llm_info=(
+                T("runtime.llm_line", **self._llm_runtime_parts())
+                if engine_name == "llm"
+                else ""
+            ),
         )
         # Non modale: la finestra principale resta riducibile/utilizzabile.
         prog.setWindowModality(Qt.WindowModality.NonModal)
@@ -9705,6 +9844,17 @@ class MainWindow(QMainWindow):
             return
         set_translation_engine(engine)
         save_config()
+        if engine == "llm":
+            preset_code = get_setting("performance_preset", "fast")
+            model = get_setting("llm_model", "") or T("settings.llm.model.default")
+            self._show_toast(
+                T(
+                    "toast.llm_active",
+                    preset=T(f"settings.performance.preset.{preset_code}.label"),
+                    model=model,
+                ),
+                3500,
+            )
         if engine == "llm" and self._ensure_llm_key(force=True):
             # Verifica informativa (non blocca): segnala subito una chiave invalida.
             self._start_key_verify(None)

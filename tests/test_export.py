@@ -114,7 +114,7 @@ class ExportWizardDialogTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
 
         import main
@@ -493,7 +493,7 @@ class PreviewAndLiquidTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -777,7 +777,7 @@ class ExportProgressDialogTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -1040,7 +1040,7 @@ class ExportTranslationWaitTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -1210,7 +1210,7 @@ class OnDemandTranslationTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         cfg = Path(self._tmp.name) / "config.json"
         self._prev_lang = i18n.get_language()
-        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it", "fast_engine": False, "fast_worker": False})
         i18n.set_language("it")
         import main
         self.main = main
@@ -1228,6 +1228,9 @@ class OnDemandTranslationTests(unittest.TestCase):
             self.purged: list[str] = []
 
         def set_pdf2zh_bin(self, *args, **kwargs):
+            pass
+
+        def warmup(self):
             pass
 
         def is_cached(self, page, engine, *args, **kwargs):
@@ -1312,28 +1315,35 @@ class OnDemandTranslationTests(unittest.TestCase):
         self.assertIn(window._engine_display("google"), tip)
         self.assertIn("1", tip)  # pagina corrente 0-based → "1"
 
-    def test_cached_page_is_shown_without_translating(self):
+    def test_cached_page_dialog_can_skip(self):
         engine = self._Engine(cached=[0], engines=["google"])
         i18n.set_translation_engine("google")
         window = self._window(engine)
         calls: list = []
         window._request_translation = lambda page: calls.append(page)
+        # L'utente sceglie di non ritradurre (annulla / apri).
+        window._confirm_page_cached = lambda page, eng: False
         try:
             window._on_translate_requested()
-            message = window.status_bar.currentMessage()
         finally:
             window.close()
         self.assertEqual(calls, [])
         self.assertEqual(engine.purged, [])
-        # Feedback esplicito: pagina già in cache per quel motore.
-        self.assertEqual(
-            message,
-            i18n.T(
-                "clone.already_cached",
-                page=1,
-                engine=window._engine_display("google"),
-            ),
-        )
+
+    def test_cached_page_dialog_retranslate_purges_and_translates(self):
+        engine = self._Engine(cached=[0], engines=["google"])
+        i18n.set_translation_engine("google")
+        window = self._window(engine)
+        calls: list = []
+        window._request_translation = lambda page: calls.append(page)
+        # L'utente sceglie di ritradurre: la cache della pagina va eliminata.
+        window._confirm_page_cached = lambda page, eng: True
+        try:
+            window._on_translate_requested()
+        finally:
+            window.close()
+        self.assertEqual(calls, [0])
+        self.assertIn(("google", 0), engine.purged)
 
     def test_other_engine_purged_after_confirm_then_translates(self):
         engine = self._Engine(engines=["bing"])
