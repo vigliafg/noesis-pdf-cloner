@@ -367,6 +367,14 @@ nessun `.mono.pdf` (rc=0). Risolto con `shlex.join([python, gtranslate_cli.py])`
     indicatore della fonte attiva, verifica pre-volo non bloccante, errori del
     motore classificati con consigli. Classificazione allineata nel servizio
     (`app/engine.py`).
+15. **Corpo delle release desktop** (rinviato, cosmetico): `release.yml` pubblica
+    solo il link auto-generato *Full Changelog*; il service usa `RELEASE_NOTES.md`
+    come corpo (`body_path`), quindi descrive le novità. Da fare **alla prossima
+    release** (es. 0.2.1): aggiungere `RELEASE_NOTES.md` al repo desktop e
+    `body_path:` al job `release`, così le note compaiono da sole. Non è una
+    regressione — anche le release ≤ 0.1.12 avevano il corpo minimo — e gli asset
+    della 0.2.0 sono completi e verificati. Per la 0.2.0 già pubblicata si può
+    aggiornare il corpo a mano solo con `gh` autenticato: non necessario.
 
 ### Fatto il 23/09 (v0.1.5)
 
