@@ -11,11 +11,11 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.1.12** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.2.0** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
-- Test: **557 OK** (24 skip, regressioni su PDF reali non versionati).
+- Test: **558 OK** (24 skip, regressioni su PDF reali non versionati).
 
 ### Cosa NON è ancora fatto
 - Il motore **Docling** e gli strumenti a zone (dormienti) non sono reintegrati.
@@ -478,6 +478,23 @@ property animabile, menu con bordo 3D) e in `tests/test_theme.py` (token del
 rilievo). Suite: **482 OK** (24 skip).
 
 > Solo desktop: il FAB non ha controparte nel servizio, nessuna riverberazione.
+
+### Fatto il 27/10 (v0.2.0) — worker persistente, risposte non più "rubate"
+
+`engine_client.EngineWorkerClient.run()` è ora **serializzata** con un
+`_run_lock`. Il worker serve un job alla volta su un solo socket: senza
+serializzazione due thread in `recv` potevano consumare la risposta dell'altro
+(id diverso → scartata) e restare appesi fino a `page_timeout` (900 s). Il caso
+si presenta quando due traduzioni coesistono (preview + export, o concorrenza
+lato servizio).
+
+- **Nessun cambio** di protocollo, argv, ambiente, cancel, timeout, avvio/stop.
+  Con un solo chiamante il lock non è mai conteso: comportamento identico.
+- Nuovo test `test_concurrent_runs_do_not_steal_responses` (worker finto, 4
+  `run()` simultanee): falliva senza il fix, passa con il fix.
+- **Riverberato** in `noesis-pdf-cloner-service/app/engine_client.py` (file
+  identici): AGENTS.md, tabella di parità.
+- Verifica: **558 test OK** (24 skip) + 10 casi e2e reali da 10 pagine.
 
 ---
 

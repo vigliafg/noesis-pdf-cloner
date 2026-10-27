@@ -54,6 +54,8 @@ while True:
             sys.exit(0)
         argv = req.get("argv") or []
         mode = argv[0] if argv else "ok"
+        if mode == "slow":
+            time.sleep(0.15)
         if mode == "sleep":
             time.sleep(60)
         if mode == "die":
@@ -100,6 +102,35 @@ class WorkerClientTests(unittest.TestCase):
         first_pid = client._proc.pid
         client.run(["ok"], dict(os.environ))
         self.assertEqual(client._proc.pid, first_pid)
+
+    def test_concurrent_runs_do_not_steal_responses(self):
+        """Regressione: run() concorrenti non devono rubarsi le risposte.
+
+        Il worker serve un job alla volta su un solo socket: senza
+        serializzazione due thread in recv potevano consumare la risposta
+        dell'altro e restare appesi fino al timeout.
+        """
+        client = self._client()
+        results = []
+        errors = []
+        barrier = threading.Barrier(4)
+
+        def submit():
+            barrier.wait()
+            try:
+                results.append(client.run(["slow"], dict(os.environ), timeout=20))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=submit) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(40)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 4)
+        self.assertTrue(all(result.returncode == 0 for result in results))
 
     def test_cancel_raises_and_stops_worker(self):
         client = self._client()

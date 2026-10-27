@@ -109,6 +109,10 @@ class EngineWorkerClient:
         self._fingerprint: str = ""
         self._counter = 0
         self._lock = threading.Lock()
+        # `run` è serializzata: il worker serve un job alla volta su un solo
+        # socket. Senza, due thread in `recv` possono consumare la risposta
+        # dell'altro (id diverso → scartata) e restare appesi fino al timeout.
+        self._run_lock = threading.Lock()
 
     # ── ciclo di vita ───────────────────────────────────────────────────
 
@@ -221,7 +225,25 @@ class EngineWorkerClient:
         cancel_event: threading.Event | None = None,
         timeout: float = 900.0,
     ) -> subprocess.CompletedProcess:
-        """Invia un job e attende il risultato (o solleva)."""
+        """Invia un job e attende il risultato (o solleva).
+
+        Serializzata con ``_run_lock``: il worker elabora un job alla volta e
+        il protocollo usa un solo socket, quindi richieste concorrenti non
+        devono sovrapporsi (si ruberebbero le risposte).
+        """
+        with self._run_lock:
+            return self._run_serial(
+                argv, env, cancel_event=cancel_event, timeout=timeout
+            )
+
+    def _run_serial(
+        self,
+        argv: list[str],
+        env: dict,
+        *,
+        cancel_event: threading.Event | None = None,
+        timeout: float = 900.0,
+    ) -> subprocess.CompletedProcess:
         with self._lock:
             if self._sock is None or _env_fingerprint(env) != self._fingerprint:
                 self._stop_locked()
