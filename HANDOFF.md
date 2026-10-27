@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.2.0** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.2.1** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
