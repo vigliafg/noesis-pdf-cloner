@@ -1,26 +1,20 @@
-"""OCR delle pagine scansionate: Mistral OCR (OpenRouter) + livello testo.
+"""OCR delle pagine scansionate: Mistral OCR (OpenRouter) → Markdown.
 
-Una pagina **senza testo** non è traducibile da BabelDOC (fallisce con *"The
-document contains no paragraphs"*). Qui si ricostruisce il testo e lo si
-riporta sulla scansione, così il motore la tratta come una pagina nativa:
+Una pagina **senza testo** non è traducibile da BabelDOC. Invece di provare a
+ricostruire il layout (fragile su tabelle e figure), il percorso OCR produce
+un **documento Markdown**:
 
-1. la pagina (PDF di una pagina) viene inviata a **Mistral OCR** tramite il
-   plugin ``file-parser`` di OpenRouter, che restituisce il testo in Markdown;
-2. **Tesseract** (locale, offline) fornisce le posizioni: righe con bounding
-   box e corpo del testo. Il testo Mistral viene distribuito su quelle righe
-   (assegnazione per contenuto, non per ordine: Tesseract legge le colonne in
-   ordine intrecciato);
-3. si scrive un **livello testo invisibile** (``render_mode=3``) nelle aree
-   delle righe: la scansione originale resta e BabelDOC può tradurre. Con
-   ``--ocr-workaround`` il tradotto copre il testo originale con un fondo
-   bianco;
-4. se Tesseract non è disponibile o l'allineamento copre troppo poco testo si
-   ripiega su una **pagina nativa** ricostruita dal Markdown (nessuna
-   impaginazione, ma il contenuto è tradotto).
+1. la pagina viene inviata a **Mistral OCR** tramite il plugin ``file-parser``
+   di OpenRouter, che restituisce il Markdown e le immagini estratte;
+2. il Markdown (senza immagini) e le immagini vengono messi in cache: l'OCR si
+   paga una volta sola;
+3. il testo viene tradotto con ``text_translate`` (Google/Microsoft/LLM) e le
+   figure vengono aggiunte **in coda** con didascalia;
+4. il PDF di export è un "hardcopy" del Markdown completo (testo + figure),
+   su una o più pagine.
 
-Modulo **puro Python** (nessuna dipendenza da Qt), testabile senza rete né
-Tesseract: ``ocr_pdf_page`` accetta un ``post`` iniettabile e
-``build_text_layer`` accetta le righe già estratte.
+Modulo **puro Python** (nessuna dipendenza da Qt), testabile senza rete: il
+provider accetta un ``post`` iniettabile.
 
 Allineato a ``noesis-pdf-cloner-service/app/ocr_scans.py``.
 """
@@ -29,47 +23,40 @@ from __future__ import annotations
 
 import base64
 import contextlib
-import difflib
 import hashlib
 import json
 import logging
 import re
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+import text_translate
 
 log = logging.getLogger("ocr_scans")
 
-# Versione dello schema OCR: un cambiamento del livello testo (o del formato
-# della cache) invalida i PDF OCR già prodotti.
+# Versione dello schema OCR: un cambiamento del formato/cache invalida i
+# documenti OCR già prodotti.
 OCR_SCHEMA_VERSION = "1"
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 # Modello "di appoggio" per la richiesta: il testo arriva dalle annotazioni del
 # file-parser, non dalla risposta. Deve solo essere un modello testuale
-# economico e disponibile (il modello del preset LLM non serve qui).
+# economico e disponibile.
 DEFAULT_MODEL = "google/gemini-2.5-flash-lite"
 DEFAULT_ENGINE = "mistral-ocr"
 OCR_TIMEOUT = 180.0
+# Oltre questa dimensione la pagina viene ricompressa prima dell'invio.
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 # Prezzo Mistral OCR via OpenRouter ($2 / 1000 pagine): solo per la stima
 # mostrata nell'avviso. I token del modello di appoggio sono trascurabili.
 COST_PER_PAGE_USD = 0.002
-# Oltre questa dimensione la pagina viene ricompressa prima dell'invio.
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024
-# render_mode PDF per il testo invisibile (3 = né fill né stroke).
-_INVISIBLE = 3
-_TEXT_DPI = 300
 
-# App language code → Tesseract traineddata (stessi 14 lingua del bundle).
-_TESS_LANG_CODES = {
-    "en": "eng", "it": "ita", "fr": "fra", "de": "deu", "es": "spa",
-    "pt": "por", "nl": "nld", "pl": "pol", "ru": "rus", "zh": "chi_sim",
-    "ja": "jpn", "ko": "kor", "ar": "ara", "tr": "tur",
-}
-# Sorgente "auto": combinazione latina di base (CJK escluso: peggiora la
-# qualità, come nella UI del lettore).
-_AUTO_TESS_LANGS = "eng+ita+fra+deu+spa+por"
+_IMAGE_PLACEHOLDER_RE = re.compile(r"!\[[^\]]*\]\(\s*(img-[\w.-]+)\s*\)", re.I)
+_FIGURE_RE = re.compile(r"(?:Figure|Fig\.?)\s*(\d+[^\n]*)", re.I)
+_FILE_TAG_RE = re.compile(r"</?file[^>]*>")
+_IMAGE_MD_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 
 
 class OcrError(RuntimeError):
@@ -96,110 +83,23 @@ class OcrConfig:
         return f"ocr{OCR_SCHEMA_VERSION}-{hashlib.sha1(raw.encode()).hexdigest()[:6]}"
 
 
-@dataclass(frozen=True)
-class OcrLine:
-    """Riga riconosciuta da Tesseract: bbox, testo e corpo del carattere."""
+@dataclass
+class OcrImage:
+    """Immagine estratta dalla pagina (bytes + didascalia)."""
 
-    bbox: tuple[float, float, float, float]
-    text: str
-    size: float
-
-
-# ── testo / paragrafi ────────────────────────────────────────────────────────
-
-
-_WORD_RE = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
-_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
-_FILE_TAG_RE = re.compile(r"</?file[^>]*>")
+    filename: str
+    data: bytes = b""
+    mime: str = "image/png"
+    caption: str = ""
+    source_name: str = ""
 
 
-def tesseract_lang(lang_in: str | None) -> str:
-    """Mappa la lingua sorgente dell'app nel linguaggio Tesseract."""
-    code = (lang_in or "").strip().lower()
-    if not code or code == "auto":
-        return _AUTO_TESS_LANGS
-    return _TESS_LANG_CODES.get(code, "eng")
+@dataclass
+class OcrPage:
+    """Risultato dell'OCR di una pagina."""
 
-
-def _words(text: str) -> list[str]:
-    return _WORD_RE.findall((text or "").lower())
-
-
-def _tokenize(text: str) -> list[str]:
-    """Parole normalizzate (minuscole, senza punteggiatura) per l'allineamento."""
-    return [token for token in re.findall(r"[^\W_]+", (text or "").lower())]
-
-
-def plain_text(markdown: str) -> str:
-    """Markdown → testo semplice (per la pagina nativa di fallback)."""
-    text = _FILE_TAG_RE.sub(" ", markdown or "")
-    text = _IMAGE_RE.sub(" ", text)
-    # Tabelle Markdown: le celle diventano parole separate.
-    text = re.sub(r"^\s*\|?[\s:|-]+\|[\s:|-]*$", "", text, flags=re.MULTILINE)
-    text = text.replace("|", " ")
-    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
-    text = re.sub(r"(\*\*|__|\*|_|`)", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)  # link
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"[ \t]+", " ", text)
-    return text.strip()
-
-
-def _word_index(tokens: list[str]) -> dict[str, list[int]]:
-    index: dict[str, list[int]] = {}
-    for position, token in enumerate(tokens):
-        index.setdefault(token, []).append(position)
-    return index
-
-
-def _match_line(
-    line_text: str,
-    tokens: list[str],
-    index: dict[str, list[int]],
-    min_score: float = 0.6,
-) -> str | None:
-    """Testo Mistral corrispondente a una riga Tesseract (o ``None``).
-
-    L'ordine di lettura di Tesseract non è affidabile (colonne intrecciate) e
-    quello di Mistral è a paragrafi: si cerca quindi, per **contenuto**, la
-    finestra di parole Mistral più simile alla riga. Le parole rare fanno da
-    indice, così la ricerca resta veloce anche su pagine dense.
-    """
-    words = _tokenize(line_text)
-    if len(words) < 3:
-        return None
-    length = len(words)
-    starts: set[int] = set()
-    # Ancore ai bordi: la prima e l'ultima parola della riga devono coincidere
-    # con gli estremi della finestra (evita finestre spostate di un token).
-    for word, offset in ((words[0], 0), (words[-1], -(length - 1))):
-        for position in index.get(word, ())[:50]:
-            starts.add(position + offset)
-    # Fallback: parole rare della riga (bordi OCR errati).
-    for word in sorted(set(words), key=lambda w: len(index.get(w, ())))[:2]:
-        starts.update(index.get(word, ()))
-    starts = {start for start in starts if start >= 0}
-    if not starts:
-        return None
-    best_score = 0.0
-    best_span: tuple[int, int] | None = None
-    for start in starts:
-        for size in (length, length - 1, length + 1):
-            window = tokens[start:start + size]
-            if len(window) != size:
-                continue
-            score = difflib.SequenceMatcher(
-                None, words, window, autojunk=False
-            ).ratio()
-            if window[0] == words[0]:
-                score += 0.05
-            if window[-1] == words[-1]:
-                score += 0.05
-            if score > best_score:
-                best_score, best_span = score, (start, start + size)
-    if best_span is None or best_score < min_score:
-        return None
-    return " ".join(tokens[best_span[0]:best_span[1]])
+    markdown: str
+    images: list[OcrImage] = field(default_factory=list)
 
 
 # ── provider OCR ────────────────────────────────────────────────────────────
@@ -225,14 +125,8 @@ def _classify_http(status: int, body: str) -> str:
     return "ocr_failed"
 
 
-def _annotations_text(payload: dict) -> str:
-    """Testo OCR dalle annotazioni del file-parser (successo **o** errore).
-
-    OpenRouter restituisce il file analizzato in ``message.annotations``; se
-    l'inferenza fallisce (es. 429 del provider) le stesse annotazioni arrivano
-    in ``error.metadata.file_annotations``. In entrambi i casi il testo OCR è
-    già stato prodotto (e pagato), quindi lo si riusa.
-    """
+def _annotations(payload: dict) -> list:
+    """Annotazioni del file-parser (successo **o** errore)."""
     choices = payload.get("choices") or []
     annotations = []
     if choices:
@@ -241,20 +135,44 @@ def _annotations_text(payload: dict) -> str:
     if not annotations:
         metadata = ((payload.get("error") or {}).get("metadata") or {})
         annotations = metadata.get("file_annotations") or []
-    for annotation in annotations:
-        file_info = annotation.get("file") or {}
-        content = file_info.get("content")
-        if isinstance(content, str):
-            return content
+    return annotations
+
+
+def _content_parts(payload: dict) -> list:
+    """Parti (testo/immagini) del file analizzato, nell'ordine restituito."""
+    for annotation in _annotations(payload):
+        content = (annotation.get("file") or {}).get("content")
         if isinstance(content, list):
-            text = "".join(
-                part.get("text", "")
-                for part in content
-                if isinstance(part, dict) and part.get("type") == "text"
-            )
-            if text.strip():
-                return text
-    return ""
+            return content
+        if isinstance(content, str):
+            return [{"type": "text", "text": content}]
+    return []
+
+
+def _annotations_text(payload: dict) -> str:
+    """Testo OCR concatenato (compatibilità con i test/versioni precedenti)."""
+    return "".join(
+        part.get("text", "")
+        for part in _content_parts(payload)
+        if isinstance(part, dict) and part.get("type") == "text"
+    )
+
+
+def _data_url_bytes(url: str) -> tuple[bytes, str, str]:
+    """``(bytes, mime, estensione)`` da una data URL base64."""
+    match = re.match(r"data:([^;,]+)?(;base64)?,(.*)", url or "", re.S)
+    if not match:
+        return b"", "image/png", ".png"
+    mime = match.group(1) or "image/png"
+    raw = match.group(3)
+    data = base64.b64decode(raw) if match.group(2) else raw.encode("utf-8")
+    ext = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/webp": ".webp",
+        "image/png": ".png",
+    }.get(mime, ".png")
+    return data, mime, ext
 
 
 def _post_json(
@@ -273,7 +191,9 @@ def _post_json(
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, json.loads(response.read().decode("utf-8", "replace"))
+            return response.status, json.loads(
+                response.read().decode("utf-8", "replace")
+            )
     except urllib.error.HTTPError as exc:
         with contextlib.suppress(Exception):
             return exc.code, json.loads(exc.read().decode("utf-8", "replace"))
@@ -299,7 +219,7 @@ def _upload_bytes(page_pdf: Path) -> bytes:
     new.insert_image(new.rect, stream=image)
     shrunk = out.tobytes(garbage=4, deflate=True)
     out.close()
-    log.info("pagina OCR ricompressa per l'invio: %d → %d byte", len(data), len(shrunk))
+    log.info("pagina OCR ricompressa: %d → %d byte", len(data), len(shrunk))
     return shrunk
 
 
@@ -308,13 +228,10 @@ def ocr_pdf_page(
     config: OcrConfig,
     *,
     timeout: float = OCR_TIMEOUT,
-    post=_post_json,
+    post=None,
 ) -> str:
-    """Testo Markdown della pagina via Mistral OCR (OpenRouter).
-
-    Solleva :class:`OcrError` con codice stabile. La chiave API non finisce
-    mai in un file o in un log.
-    """
+    """Testo Markdown della pagina via Mistral OCR (OpenRouter)."""
+    post = post or _post_json
     if not (config.api_key or "").strip():
         raise OcrError("missing_key", "OPENROUTER_API_KEY non impostata")
     data = _upload_bytes(Path(page_pdf))
@@ -323,8 +240,6 @@ def ocr_pdf_page(
         "messages": [{
             "role": "user",
             "content": [
-                # Il contenuto della risposta non serve: si leggono le
-                # annotazioni con il testo analizzato dal file-parser.
                 {"type": "text", "text": "Reply with the single word: ok"},
                 {"type": "file", "file": {
                     "filename": "page.pdf",
@@ -343,217 +258,371 @@ def ocr_pdf_page(
         detail = ""
         with contextlib.suppress(Exception):
             detail = str((response.get("error") or {}).get("message") or "")
-        if not detail:
-            detail = f"HTTP {status}"
-        raise OcrError(_classify_http(status, detail), detail)
+        raise OcrError(
+            _classify_http(status, detail or f"HTTP {status}"),
+            detail or f"HTTP {status}",
+        )
     return text
 
 
-# ── livello testo / pagina nativa ───────────────────────────────────────────
+# ── pagina OCR: Markdown + immagini ─────────────────────────────────────────
 
 
-def tesseract_lines(
-    page, language: str = "eng", dpi: int = _TEXT_DPI
-) -> list[OcrLine]:
-    """Righe di testo (bbox + corpo) riconosciute da Tesseract sulla pagina."""
-    textpage = page.get_textpage_ocr(dpi=dpi, full=True, language=language)
-    data = page.get_text("dict", textpage=textpage)
-    lines: list[OcrLine] = []
-    for block in data.get("blocks", []):
-        if block.get("type") != 0:
-            continue
-        for line in block.get("lines", []):
-            spans = line.get("spans") or []
-            text = " ".join(s.get("text", "") for s in spans).strip()
-            if not text:
-                continue
-            size = max((s.get("size") or 0.0) for s in spans) or 10.0
-            lines.append(OcrLine(tuple(line["bbox"]), text, float(size)))
-    return lines
+def _caption_for(text: str, start: int, end: int, index: int, label: str) -> str:
+    """Didascalia vicina al placeholder, o ``Figura N — pagina X``."""
+    window = text[max(0, start - 500): end + 300]
+    matches = [m.group(0).strip(" .:—-") for m in _FIGURE_RE.finditer(window)]
+    if matches:
+        caption = matches[0]
+        if caption:
+            return caption
+    return f"Figura {index} — pagina {label}" if label else f"Figura {index}"
 
 
-def _overlap_ratio(
-    a: tuple[float, float, float, float],
-    b: tuple[float, float, float, float],
-) -> float:
-    """Frazione dell'area di ``a`` coperta da ``b`` (0..1)."""
-    width = min(a[2], b[2]) - max(a[0], b[0])
-    height = min(a[3], b[3]) - max(a[1], b[1])
-    if width <= 0 or height <= 0:
-        return 0.0
-    area = max(0.0, (a[2] - a[0]) * (a[3] - a[1]))
-    return (width * height) / area if area else 0.0
+def _strip_markdown_images(markdown: str) -> str:
+    text = _IMAGE_MD_RE.sub(" ", markdown or "")
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _dedupe_lines(lines: list[OcrLine]) -> list[OcrLine]:
-    """Toglie le righe ridondanti (Tesseract a volte produce box sovrapposti)."""
-    kept: list[OcrLine] = []
-    for line in sorted(lines, key=lambda item: len(item.text), reverse=True):
-        if any(_overlap_ratio(line.bbox, other.bbox) > 0.35 for other in kept):
-            continue
-        kept.append(line)
-    return sorted(kept, key=lambda item: (item.bbox[1], item.bbox[0]))
-
-
-def _draw_line(page, rect, text: str, size: float, font) -> bool:
-    """Scrive ``text`` (invisibile) in **una sola riga** dentro ``rect``.
-
-    Mai andare a capo: un testo che sborda sotto la riga finirebbe nella riga
-    successiva e BabelDOC creerebbe paragrafi sovrapposti. Se il testo è più
-    largo del box si riduce il corpo (il testo è invisibile: conta la posizione,
-    non la leggibilità).
-    """
-    size = max(3.0, float(size))
-    width = max(1.0, rect.width)
-    while size > 3.0 and font.text_length(text, fontsize=size) > width:
-        size *= 0.9
-    baseline = rect.y0 + min(rect.height, size * 1.0)
-    page.insert_text(
-        (rect.x0, baseline), text, fontsize=size, fontname="helv",
-        color=(0, 0, 0), render_mode=_INVISIBLE,
-    )
-    return True
-
-
-def build_text_layer(
-    src_pdf: str | Path,
-    markdown: str,
-    dst_pdf: str | Path,
-    *,
-    language: str = "eng",
-    lines: list[OcrLine] | None = None,
-) -> float:
-    """Scrive la scansione + livello testo invisibile. Ritorna la copertura.
-
-    Ogni riga di Tesseract riceve, se il contenuto è riconoscibile, il testo
-    **Mistral** corrispondente; altrimenti resta il testo Tesseract (la
-    geometria è comunque corretta: BabelDOC riordina per posizione). La
-    copertura è la frazione di parole aggiornate con il testo Mistral.
-    """
-    import pymupdf  # noqa: PLC0415
-
-    tokens = _tokenize(plain_text(markdown))
-    index = _word_index(tokens)
-    with pymupdf.open(str(src_pdf)) as doc:
-        page = doc[0]
-        try:
-            detected = lines if lines is not None else tesseract_lines(page, language)
-        except Exception as exc:  # noqa: BLE001 — Tesseract assente/rotto
-            raise OcrError("ocr_tesseract", str(exc)) from exc
-        if not detected:
-            raise OcrError("ocr_tesseract", "nessuna riga riconosciuta")
-        detected = _dedupe_lines(detected)
-        font = pymupdf.Font("helv")
-        replaced = 0
-        total = 0
-        for line in detected:
-            words = len(_words(line.text))
-            if not words:
-                continue
-            total += words
-            text = _match_line(line.text, tokens, index) if tokens else None
-            if text is None:
-                text = line.text
-            else:
-                replaced += words
-            x0, y0, x1, y1 = line.bbox
-            rect = pymupdf.Rect(x0, y0, x1, y1)
-            _draw_line(page, rect, text, line.size, font)
-        coverage = replaced / total if total else 0.0
-        dst = Path(dst_pdf)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if doc.is_pdf:
-            doc.save(str(dst), garbage=4, deflate=True)
-        else:
-            doc.convert_to_pdf()
-            doc.save(str(dst), garbage=4, deflate=True)
-    return coverage
-
-
-def _text_fits(text: str, width: float, height: float, size: float, font) -> bool:
-    lines = 0
-    for paragraph in text.split("\n"):
-        current = ""
-        for word in paragraph.split():
-            trial = f"{current} {word}".strip()
-            if font.text_length(trial, fontsize=size) <= width:
-                current = trial
-            else:
-                lines += 1
-                current = word
-        lines += 1
-    return lines * size * 1.25 <= height
-
-
-def build_native_page(
-    src_pdf: str | Path, markdown: str, dst_pdf: str | Path
-) -> None:
-    """Pagina nativa di fallback: solo testo (nessuna scansione)."""
-    import pymupdf  # noqa: PLC0415
-
-    text = plain_text(markdown)
-    with pymupdf.open(str(src_pdf)) as src:
-        rect = src[0].rect
-    out = pymupdf.open()
-    page = out.new_page(width=rect.width, height=rect.height)
-    margin = 36.0
-    box = pymupdf.Rect(margin, margin, rect.width - margin, rect.height - margin)
-    font = pymupdf.Font("helv")
-    size = 10.0
-    while size > 4.0 and not _text_fits(text, box.width, box.height, size, font):
-        size -= 0.5
-    page.insert_textbox(
-        box, text, fontsize=size, fontname="helv", color=(0, 0, 0)
-    )
-    dst = Path(dst_pdf)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    out.save(str(dst), garbage=4, deflate=True)
-    out.close()
-
-
-def build_ocr_page(
-    src_pdf: str | Path,
-    dst_pdf: str | Path,
+def ocr_page(
+    page_pdf: str | Path,
     config: OcrConfig,
     *,
-    lang_in: str = "auto",
+    page_label: str = "",
     timeout: float = OCR_TIMEOUT,
-    post=_post_json,
-    markdown_path: str | Path | None = None,
-) -> str:
-    """OCR + livello testo. Ritorna ``"layout"`` o ``"native"``.
-
-    ``"layout"`` = scansione con livello testo (impaginazione conservata);
-    ``"native"`` = pagina di testo ricostruita (fallback).
-
-    Se ``markdown_path`` esiste il testo OCR viene riusato (nessuna nuova
-    chiamata a pagamento): utile per rigenerare il livello dopo un aggiornamento
-    del codice. Altrimenti il Markdown viene salvato lì per gli usi successivi.
-    """
-    md_file = Path(markdown_path) if markdown_path else None
-    markdown = ""
-    if md_file is not None and md_file.is_file():
-        markdown = md_file.read_text(encoding="utf-8")
-    if not markdown.strip():
-        markdown = ocr_pdf_page(src_pdf, config, timeout=timeout, post=post)
-        if md_file is not None:
-            md_file.parent.mkdir(parents=True, exist_ok=True)
-            md_file.write_text(markdown, encoding="utf-8")
-    if not markdown.strip():
-        raise OcrError("ocr_empty", "OCR senza testo")
-    language = tesseract_lang(lang_in)
-    try:
-        coverage = build_text_layer(
-            src_pdf, markdown, dst_pdf, language=language
-        )
-    except OcrError as exc:
-        if exc.code != "ocr_tesseract":
-            raise
-        log.warning("Tesseract non disponibile (%s): pagina nativa", exc.detail)
-        build_native_page(src_pdf, markdown, dst_pdf)
-        return "native"
-    log.info(
-        "livello testo OCR: %.0f%% delle parole aggiornate con Mistral",
-        coverage * 100,
+    post=None,
+) -> OcrPage:
+    """OCR completo della pagina: Markdown (senza immagini) + figure."""
+    post = post or _post_json
+    if not (config.api_key or "").strip():
+        raise OcrError("missing_key", "OPENROUTER_API_KEY non impostata")
+    data = _upload_bytes(Path(page_pdf))
+    payload = {
+        "model": config.model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Reply with the single word: ok"},
+                {"type": "file", "file": {
+                    "filename": "page.pdf",
+                    "file_data": "data:application/pdf;base64,"
+                    + base64.b64encode(data).decode("ascii"),
+                }},
+            ],
+        }],
+        "plugins": [{"id": "file-parser", "pdf": {"engine": config.engine}}],
+        "max_tokens": 4,
+    }
+    url = config.base_url.rstrip("/") + "/chat/completions"
+    status, response = post(url, payload, config.api_key, timeout)
+    parts = _content_parts(response)
+    text = "".join(
+        part.get("text", "")
+        for part in parts
+        if isinstance(part, dict) and part.get("type") == "text"
     )
-    return "layout"
+    if not text.strip():
+        detail = ""
+        with contextlib.suppress(Exception):
+            detail = str((response.get("error") or {}).get("message") or "")
+        raise OcrError(
+            _classify_http(status, detail or f"HTTP {status}"),
+            detail or f"HTTP {status}",
+        )
+
+    # Immagini: le parti ``image_url`` del file-parser, in ordine.
+    raw_images = [
+        part["image_url"]["url"]
+        for part in parts
+        if isinstance(part, dict)
+        and part.get("type") == "image_url"
+        and isinstance(part.get("image_url"), dict)
+    ]
+    decoded: list[tuple[bytes, str, str]] = []
+    for url_data in raw_images:
+        with contextlib.suppress(Exception):
+            decoded.append(_data_url_bytes(url_data))
+
+    # Didascalie vicino ai placeholder, poi rimozione dal corpo.
+    images: list[OcrImage] = []
+    placeholders = list(_IMAGE_PLACEHOLDER_RE.finditer(text))
+    used: set[int] = set()
+    for position, match in enumerate(placeholders):
+        index = position
+        name_match = re.search(r"(\d+)", match.group(1) or "")
+        if name_match:
+            candidate = int(name_match.group(1))
+            if 0 <= candidate < len(decoded):
+                index = candidate
+        if index in used:
+            index = next((i for i in range(len(decoded)) if i not in used), index)
+        used.add(index)
+        caption = _caption_for(text, match.start(), match.end(), position + 1, page_label)
+        if index < len(decoded):
+            data_bytes, mime, ext = decoded[index]
+            images.append(OcrImage(
+                filename=f"img_{index}{ext}", data=data_bytes, mime=mime,
+                caption=caption, source_name=match.group(1),
+            ))
+        else:
+            images.append(OcrImage(
+                filename=f"img_{position}.png", caption=caption,
+                source_name=match.group(1),
+            ))
+    # Immagini senza placeholder: in coda, con didascalia generica.
+    for index, (data_bytes, mime, ext) in enumerate(decoded):
+        if index not in used:
+            images.append(OcrImage(
+                filename=f"img_{index}{ext}", data=data_bytes, mime=mime,
+                caption=_caption_for(text, len(text), len(text), len(images) + 1, page_label),
+            ))
+
+    body = _strip_markdown_images(
+        _FILE_TAG_RE.sub(" ", text)
+    )
+    return OcrPage(markdown=body, images=images)
+
+
+def write_ocr_page(
+    page: OcrPage, markdown_path: str | Path, assets_dir: str | Path
+) -> None:
+    """Salva il Markdown e le immagini in cache (metadati didascalie inclusi)."""
+    md_path = Path(markdown_path)
+    assets = Path(assets_dir)
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    assets.mkdir(parents=True, exist_ok=True)
+    md_path.write_text(page.markdown, encoding="utf-8")
+    meta = []
+    for image in page.images:
+        if image.data:
+            (assets / image.filename).write_bytes(image.data)
+        meta.append({
+            "filename": image.filename,
+            "caption": image.caption,
+            "mime": image.mime,
+            "source_name": image.source_name,
+        })
+    (md_path.with_suffix(".json")).write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def read_ocr_page(
+    markdown_path: str | Path, assets_dir: str | Path
+) -> tuple[str, list[OcrImage]]:
+    """Rilegge il Markdown e i metadati delle immagini dalla cache."""
+    md_path = Path(markdown_path)
+    markdown = md_path.read_text(encoding="utf-8")
+    assets = Path(assets_dir)
+    images: list[OcrImage] = []
+    meta_path = md_path.with_suffix(".json")
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        meta = []
+    for item in meta:
+        name = str(item.get("filename") or "")
+        path = assets / name
+        mime = str(item.get("mime") or "image/png")
+        data = b""
+        with contextlib.suppress(OSError):
+            data = path.read_bytes()
+        images.append(OcrImage(
+            filename=name, data=data, mime=mime,
+            caption=str(item.get("caption") or ""),
+            source_name=str(item.get("source_name") or ""),
+        ))
+    return markdown, images
+
+
+def translate_markdown(
+    markdown: str,
+    source: str,
+    target: str,
+    engine: str,
+    *,
+    llm: dict | None = None,
+) -> str:
+    """Traduce il Markdown con il motore scelto (google/bing/llm)."""
+    engine = (engine or "google").strip().lower()
+    if engine == "bing":
+        engine = "microsoft"
+    if engine not in ("google", "microsoft", "llm"):
+        engine = "google"
+    return text_translate.translate_text(
+        markdown, source=source, target=target, engine=engine, llm=llm
+    )
+
+
+def inline_figure_images(markdown: str, images: list[OcrImage]) -> str:
+    """Sostituisce i riferimenti ``assets/<file>`` con data URL base64."""
+    out = markdown
+    for image in images:
+        if not image.data:
+            continue
+        data_url = f"data:{image.mime or 'image/png'};base64," + base64.b64encode(
+            image.data
+        ).decode("ascii")
+        out = out.replace(f"assets/{image.filename}", data_url)
+    return out
+
+
+def append_figures(
+    markdown: str,
+    images: list[OcrImage],
+    *,
+    base64_images: bool = False,
+    assets_dir: str | Path | None = None,
+    page_label: str = "",
+) -> str:
+    """Aggiunge le figure in coda, con didascalia (path o base64)."""
+    if not images:
+        return markdown
+    lines = [markdown.rstrip(), "", "---", "", "## Figure", ""]
+    for index, image in enumerate(images, 1):
+        caption = image.caption or (
+            f"Figura {index} — pagina {page_label}" if page_label else f"Figura {index}"
+        )
+        if base64_images and image.data:
+            src = f"data:{image.mime or 'image/png'};base64," + base64.b64encode(
+                image.data
+            ).decode("ascii")
+        else:
+            src = f"assets/{image.filename}"
+        lines.append(f"![{caption}]({src})")
+        lines.append("")
+        lines.append(f"*{caption}*")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# ── PDF hardcopy del Markdown ───────────────────────────────────────────────
+
+
+def _plain_lines(markdown: str) -> list[tuple[str, int]]:
+    """Righe del Markdown → ``(testo, livello)`` (0 corpo, 1..3 titoli, -1 tabella)."""
+    out: list[tuple[str, int]] = []
+    for raw in (markdown or "").splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            out.append(("", 0))
+            continue
+        if line.strip().startswith("|"):
+            if re.fullmatch(r"\s*\|?[\s:|-]+\|?\s*", line):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            out.append(("   ".join(c for c in cells if c), -1))
+            continue
+        heading = re.match(r"^(#{1,6})\s*(.*)$", line)
+        if heading:
+            out.append((heading.group(2).strip(), min(3, len(heading.group(1)))))
+            continue
+        if re.match(r"^\s*[-*+]\s+", line):
+            out.append(("• " + re.sub(r"^\s*[-*+]\s+", "", line), 0))
+            continue
+        text = re.sub(r"(\*\*|__|\*|_|`)", "", line)
+        text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+        out.append((text, 0))
+    return out
+
+
+def build_pdf_from_markdown(
+    markdown: str,
+    images: list[OcrImage],
+    dst: str | Path,
+    *,
+    width: float = 612.0,
+    height: float = 792.0,
+    page_label: str = "",
+) -> int:
+    """PDF testuale dal Markdown tradotto + figure in coda. Ritorna le pagine."""
+    import pymupdf  # noqa: PLC0415
+
+    margin = 42.0
+    body_size = 9.5
+    line_gap = 1.25
+    font = pymupdf.Font("helv")
+    out = pymupdf.open()
+    page = out.new_page(width=width, height=height)
+    y = margin
+    usable = width - 2 * margin
+
+    def new_page() -> None:
+        nonlocal page, y
+        page = out.new_page(width=width, height=height)
+        y = margin
+
+    def wrap(text: str, size: float) -> list[str]:
+        words = text.split()
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            trial = f"{current} {word}".strip()
+            if not current or font.text_length(trial, fontsize=size) <= usable:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines or [""]
+
+    for text, level in _plain_lines(markdown):
+        if not text:
+            y += body_size * 0.7
+            continue
+        if level > 0:
+            size = {1: 15.0, 2: 13.0, 3: 11.5}.get(level, 11.0)
+            fontname = "hebo"
+        elif level < 0:
+            size = 8.5
+            fontname = "helv"
+        else:
+            size = body_size
+            fontname = "helv"
+        for line in wrap(text, size):
+            if y + size * line_gap > height - margin:
+                new_page()
+            page.insert_text(
+                (margin, y + size), line, fontsize=size, fontname=fontname,
+                color=(0, 0, 0),
+            )
+            y += size * line_gap
+        y += size * 0.35
+
+    # Figure in coda, con didascalia.
+    for index, image in enumerate(images, 1):
+        if not image.data:
+            continue
+        caption = image.caption or (
+            f"Figura {index} — pagina {page_label}" if page_label else f"Figura {index}"
+        )
+        with contextlib.suppress(Exception):
+            pix = pymupdf.Pixmap(image.data)
+            max_w = usable
+            max_h = height * 0.42
+            scale = min(max_w / pix.width, max_h / pix.height, 1.0)
+            w, h = pix.width * scale, pix.height * scale
+            if y + h + 24 > height - margin:
+                new_page()
+            rect = pymupdf.Rect(
+                margin + (usable - w) / 2, y, margin + (usable + w) / 2, y + h
+            )
+            page.insert_image(rect, stream=image.data)
+            y += h + 12
+            for line in wrap(caption, 8.0):
+                if y + 10 > height - margin:
+                    new_page()
+                page.insert_text(
+                    (margin, y + 8), line, fontsize=8.0, fontname="helv",
+                    color=(0.25, 0.25, 0.25),
+                )
+                y += 10
+            y += 10
+
+    dst_path = Path(dst)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    out.save(str(dst_path), garbage=4, deflate=True)
+    pages = len(out)
+    out.close()
+    return pages

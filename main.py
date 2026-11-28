@@ -108,6 +108,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QTextEdit,
+    QTextBrowser,
     QToolBar,
     QToolButton,
     QMenu,
@@ -1704,7 +1705,7 @@ _ENGINE_ERROR_KEYS = {
     "ocr_network": "clone.err.network",
     "ocr_empty": "ocr.err.empty",
     "ocr_failed": "ocr.err.failed",
-    "ocr_tesseract": "ocr.err.tesseract",
+    "ocr_translate": "ocr.err.translate",
 }
 
 
@@ -2502,6 +2503,7 @@ class CloneTranslateThread(QThread):
     done = pyqtSignal(int, int, str, str)   # generation, page, engine, pdf path
     error = pyqtSignal(int, int, str, str)  # generation, page, engine, message
     cancelled = pyqtSignal(int, int, str)   # generation, page, engine
+    phase = pyqtSignal(int, str)            # generation, "ocr" | "translating"
 
     # Attesa di un worker concorrente sulla stessa pagina (es. la traduzione
     # rimasta attiva dopo un cambio pagina): ~10 minuti a passi di 0,5 s.
@@ -2542,6 +2544,7 @@ class CloneTranslateThread(QThread):
         """
         path = self._engine.translate_page(
             self._page, self._engine_name, self._cancel_event,
+            **self._on_phase_kwargs(),
             **self._ocr_kwargs(),
         )
         for _ in range(self._WAIT_SLICES):
@@ -2554,9 +2557,26 @@ class CloneTranslateThread(QThread):
             time.sleep(self._WAIT_SLICE)
             path = self._engine.translate_page(
                 self._page, self._engine_name, self._cancel_event,
+                **self._on_phase_kwargs(),
                 **self._ocr_kwargs(),
             )
         return path
+
+    def _emit_phase(self, phase: str) -> None:
+        """Inoltra la fase del motore (OCR/traduzione) alla UI."""
+        self.phase.emit(self._generation, phase)
+
+    def _on_phase_kwargs(self) -> dict:
+        """Passa ``on_phase`` solo se il motore lo supporta (doppi di test)."""
+        import inspect  # noqa: PLC0415
+
+        try:
+            params = inspect.signature(self._engine.translate_page).parameters
+            if "on_phase" in params:
+                return {"on_phase": self._emit_phase}
+        except (TypeError, ValueError):
+            pass
+        return {}
 
     def _ocr_kwargs(self) -> dict:
         """Passa ``allow_ocr`` solo se c'è una decisione esplicita.
@@ -4131,10 +4151,25 @@ class TranslatedPagePanel(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.view)
 
+        # Viewer markdown per le pagine OCR (senza impaginazione).
+        self._md_view = QTextBrowser()
+        self._md_view.setOpenExternalLinks(True)
+        self._md_view.setReadOnly(True)
+        self._md_view.setStyleSheet(
+            "QTextBrowser { background: #ffffff; color: #1a1a1a;"
+            " border: none; padding: 12px; }"
+        )
+        self._md_source: str = ""
+        self._md_assets = None
+        self._md_font_px: int = 13
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self.scroll_area)
+        self._stack.addWidget(self._md_view)
+
         layout.addWidget(self._bar)
         layout.addWidget(self._engine_banner)
         layout.addWidget(self._key_banner)
-        layout.addWidget(self.scroll_area)
+        layout.addWidget(self._stack)
 
         # ── Spinner overlay (child, positioned manually) ──────────────
         self._spinner = QLabel("", self)
@@ -4147,6 +4182,30 @@ class TranslatedPagePanel(QWidget):
         """)
         self._spinner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spinner.hide()
+
+        # Overlay "scansione" per la fase OCR (animazione diversa dalla
+        # traduzione): una linea che scorre sulla pagina originale.
+        self._scan_overlay = QWidget(self)
+        self._scan_overlay.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        self._scan_line = QFrame(self._scan_overlay)
+        self._scan_line.setStyleSheet(
+            "QFrame { background: rgba(74, 144, 217, 200);"
+            " border: 1px solid rgba(160, 210, 255, 230); }"
+        )
+        self._scan_line.setFixedHeight(4)
+        self._scan_label = QLabel("", self._scan_overlay)
+        self._scan_label.setStyleSheet(
+            "QLabel { background: rgba(20, 40, 70, 225); color: #cfe4ff;"
+            " border: 1px solid #4a90d9; border-radius: 8px;"
+            " padding: 6px 14px; font-size: 13px; font-weight: bold; }"
+        )
+        self._scan_anim = QPropertyAnimation(self._scan_line, b"pos", self)
+        self._scan_anim.setDuration(1500)
+        self._scan_anim.setLoopCount(-1)
+        self._scan_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._scan_overlay.hide()
 
         # Toast temporaneo "tradotta in N s" (in alto al centro della pagina).
         self._done_toast = QLabel("", self)
@@ -4457,7 +4516,16 @@ class TranslatedPagePanel(QWidget):
         self._key_banner.setVisible(bool(missing))
         self._reposition_collapse_btn()
 
+    def _show_pdf_view(self):
+        self.hide_scan()
+        self._stack.setCurrentWidget(self.scroll_area)
+
+    def hide_scan(self):
+        self._scan_anim.stop()
+        self._scan_overlay.hide()
+
     def show_page(self, pixmap: QPixmap | None):
+        self._show_pdf_view()
         self.hide_spinner()
         self._liquid.stop()
         self.view.show_page(pixmap)
@@ -4465,20 +4533,73 @@ class TranslatedPagePanel(QWidget):
 
     def show_pending(self, pixmap: QPixmap | None, hint: str):
         """Originale + invito a lanciare la traduzione (nessun processo attivo)."""
+        self._show_pdf_view()
         self._liquid.stop()
         self.view.show_page(pixmap)
         self._lbl_status.setText(T("clone.status_todo"))
         self.show_spinner(hint)
+
+    def show_ocr(self, pixmap: QPixmap | None, caption: str):
+        """Fase OCR: pagina originale + linea di scansione animata."""
+        self.hide_page_actions()
+        self.hide_spinner()
+        self._liquid.stop()
+        self._show_pdf_view()
+        self.view.show_page(pixmap)
+        self._lbl_status.setText(T("clone.status_ocr"))
+        self._scan_label.setText(caption)
+        self._scan_label.adjustSize()
+        self._scan_overlay.setGeometry(self.scroll_area.geometry())
+        width = max(1, self._scan_overlay.width())
+        self._scan_line.setFixedWidth(width)
+        self._scan_anim.setStartValue(QPoint(0, 0))
+        self._scan_anim.setEndValue(
+            QPoint(0, max(0, self._scan_overlay.height() - 4))
+        )
+        self._scan_label.move(
+            max(0, (width - self._scan_label.width()) // 2), 12
+        )
+        self._scan_overlay.show()
+        self._scan_overlay.raise_()
+        self._scan_anim.start()
+        self._collapse_btn.raise_()
 
     def show_translating(self, pixmap: QPixmap | None, caption: str,
                          cancelable: bool = True):
         """Mostra l'overlay liquido durante la traduzione della pagina."""
         self.hide_page_actions()
         self.hide_spinner()
+        self._show_pdf_view()
         self.view.show_page(None)
         self._lbl_status.setText(T("clone.status_running"))
         self._liquid.setGeometry(self.scroll_area.geometry())
         self._liquid.start(pixmap, caption, cancelable=cancelable)
+
+    def _render_markdown(self):
+        if not self._md_source:
+            return
+        html = _md_lib.markdown(self._md_source, extensions=_MD_EXTENSIONS)
+        html = html.replace('src="assets/', 'src="')
+        css = TextPanel._CSS_TEMPLATE.replace("{size}", str(self._md_font_px))
+        self._md_view.setSearchPaths(
+            [str(self._md_assets)] if self._md_assets else []
+        )
+        self._md_view.setHtml(css + html)
+        self._md_view.document().setDefaultFont(
+            QFont("Segoe UI", self._md_font_px)
+        )
+
+    def show_markdown(self, markdown: str, assets_dir) -> None:
+        """Mostra il Markdown tradotto (pagine OCR, senza impaginazione)."""
+        self.hide_page_actions()
+        self.hide_spinner()
+        self.hide_scan()
+        self._liquid.stop()
+        self._md_source = markdown
+        self._md_assets = assets_dir
+        self._render_markdown()
+        self._stack.setCurrentWidget(self._md_view)
+        self._lbl_status.setText(T("clone.status_markdown"))
 
     def finish_translating(self, ok: bool = True):
         self._liquid.finish(ok)
@@ -4487,6 +4608,7 @@ class TranslatedPagePanel(QWidget):
         self._liquid.stop()
 
     def show_message(self, text: str):
+        self._show_pdf_view()
         self._liquid.stop()
         self.hide_spinner()
         self.view.show_message(text)
@@ -4494,6 +4616,11 @@ class TranslatedPagePanel(QWidget):
     def set_view_zoom(self, zoom: float):
         self._view_zoom = zoom
         self.view.set_view_zoom(zoom)
+        px = max(10, min(26, int(round(16 * zoom / 3.0))))
+        if px != self._md_font_px:
+            self._md_font_px = px
+            if self._stack.currentWidget() is self._md_view:
+                self._render_markdown()
 
     def show_spinner(self, text: str):
         self._spinner.setText(text)
@@ -9380,6 +9507,7 @@ class MainWindow(QMainWindow):
         thread.done.connect(self._on_clone_done)
         thread.error.connect(self._on_clone_error)
         thread.cancelled.connect(self._on_clone_cancelled)
+        thread.phase.connect(self._on_clone_phase)
         self._clone_thread = thread
         thread.start()
         self._update_working_badge()
@@ -9441,6 +9569,24 @@ class MainWindow(QMainWindow):
         if t in self._retired_clone_threads:
             self._retired_clone_threads.remove(t)
         self._update_working_badge()
+
+    def _on_clone_phase(self, generation: int, phase: str):
+        """Cambia l'animazione del previewer (OCR vs traduzione)."""
+        if generation != self._clone_generation:
+            return
+        thread = self._clone_thread
+        if thread is None or thread.page() != self._current_page:
+            return
+        engine = get_translation_engine()
+        if phase == "ocr":
+            self.translated_panel.show_ocr(
+                self._orig_pixmap,
+                T("clone.spinner_ocr", engine=self._engine_display(engine)),
+            )
+        elif phase == "translating":
+            self.translated_panel.show_translating(
+                self._orig_pixmap, self._clone_progress_caption(engine)
+            )
 
     def _on_clone_done(self, generation: int, page_num: int, engine: str, path: str):
         if generation != self._clone_generation:
@@ -9629,6 +9775,17 @@ class MainWindow(QMainWindow):
         engine = get_translation_engine()
         if not self._clone_engine.is_cached(page_num, engine):
             return
+        md_path = getattr(self._clone_engine, "markdown_path", None)
+        md = md_path(page_num, engine) if md_path else None
+        if md is not None:
+            try:
+                markdown = md.read_text(encoding="utf-8")
+                self.translated_panel.show_markdown(
+                    markdown, self._clone_engine.ocr_assets_dir(page_num)
+                )
+                return
+            except OSError:
+                pass
         pix = self._render_translated_pdf(page_num, engine)
         if pix is None:
             self.translated_panel.show_message(T("clone.render_error"))

@@ -48,6 +48,7 @@ from pathlib import Path
 from pagelabels import build_page_labels
 
 import ocr_scans
+import text_translate
 
 log = logging.getLogger("clone_engine")
 
@@ -693,13 +694,23 @@ class CloneEngine:
     def split_path(self, page: int) -> Path:
         return self.split_root / self._doc_key / f"page_{page:06d}.pdf"
 
-    def ocr_split_path(self, page: int) -> Path:
-        """Pagina con livello testo OCR (accanto allo split originale)."""
+    def ocr_markdown_path(self, page: int) -> Path:
+        """Markdown OCR della pagina (fonte, senza immagini)."""
         return (
             self.split_root
             / self._doc_key
             / self._ocr_tag()
-            / f"page_{page:06d}.pdf"
+            / f"page_{page:06d}.md"
+        )
+
+    def ocr_assets_dir(self, page: int) -> Path:
+        """Cartella delle immagini estratte da Mistral per la pagina."""
+        return (
+            self.split_root
+            / self._doc_key
+            / self._ocr_tag()
+            / "assets"
+            / f"page_{page:06d}"
         )
 
     def _base_translated_dir(
@@ -769,11 +780,11 @@ class CloneEngine:
         interrogare una coppia linguistica diversa da quella corrente
         (es. anteprima export) senza mutare l'engine.
 
-        Preferenza: livello OCR (se la pagina è stata OCRata) → traduzione
-        nativa → fallback "originale" (pagina senza testo) → percorso nativo
+        Preferenza: OCR (se la pagina ha un Markdown OCR) → traduzione nativa →
+        fallback "originale" (pagina senza testo) → percorso nativo
         (destinazione di scrittura, se non esiste ancora nulla).
         """
-        if self.ocr_split_path(page).is_file():
+        if self.ocr_markdown_path(page).is_file():
             return self._ocr_translated_path_for(page, engine, lang_in, lang_out)
         native = self._native_translated_path_for(page, engine, lang_in, lang_out)
         if native.is_file():
@@ -782,6 +793,23 @@ class CloneEngine:
         if empty.is_file():
             return empty
         return native
+
+    def translated_markdown_path(
+        self,
+        page: int,
+        engine: str,
+        lang_in: str | None = None,
+        lang_out: str | None = None,
+    ) -> Path:
+        """Markdown tradotto della pagina OCR (accanto al PDF hardcopy)."""
+        return self._ocr_translated_path_for(
+            page, engine, lang_in, lang_out
+        ).with_suffix(".md")
+
+    def markdown_path(self, page: int, engine: str) -> Path | None:
+        """Markdown tradotto esistente (per il viewer), o ``None``."""
+        path = self.translated_markdown_path(page, engine)
+        return path if path.is_file() else None
 
     def translated_path(
         self,
@@ -840,8 +868,12 @@ class CloneEngine:
         base = self._engine_cache_dir(engine)
         if not base.is_dir():
             return []
-        name = f"page_{page:06d}.pdf"
-        return [p for p in base.rglob(name) if p.is_file()]
+        stem = f"page_{page:06d}."
+        return [
+            p for p in base.rglob(f"page_{page:06d}.*")
+            if p.is_file() and p.name.startswith(stem)
+            and p.suffix in (".pdf", ".md")
+        ]
 
     def cached_engines_for_page(self, page: int) -> list[str]:
         """Motori che hanno **questa pagina** in cache per il documento.
@@ -880,6 +912,23 @@ class CloneEngine:
             self._status.pop(key, None)
         return files, size
 
+    def _markdown_for_export(
+        self, page: int, engine: str,
+        lang_in: str | None = None, lang_out: str | None = None,
+    ) -> str | None:
+        """Markdown tradotto con immagini in base64, o ``None``."""
+        md_path = self.translated_markdown_path(page, engine, lang_in, lang_out)
+        if not md_path.is_file():
+            return None
+        try:
+            text = md_path.read_text(encoding="utf-8")
+            _, images = ocr_scans.read_ocr_page(
+                self.ocr_markdown_path(page), self.ocr_assets_dir(page)
+            )
+            return ocr_scans.inline_figure_images(text, images)
+        except OSError:
+            return None
+
     def export_pdf(
         self,
         pages,
@@ -912,6 +961,17 @@ class CloneEngine:
             tmp = dest.with_suffix(dest.suffix + ".tmp")
             out.save(str(tmp), garbage=4, deflate=True)
             os.replace(tmp, dest)  # salvataggio atomico dell'export
+        # Companion Markdown accanto al PDF merged (solo pagine OCR).
+        sections = []
+        for page in pages:
+            markdown = self._markdown_for_export(page, engine, lang_in, lang_out)
+            if markdown:
+                sections.append(f"# Pagina {page + 1}\n\n{markdown}")
+        if sections:
+            md_dest = dest.with_suffix(".md")
+            md_dest.write_text(
+                "\n\n---\n\n".join(sections), encoding="utf-8"
+            )
         return merged
 
     def export_zip(
@@ -942,6 +1002,11 @@ class CloneEngine:
                     continue
                 archive.write(src, arcname=f"{prefix}_p{page + 1:04d}.pdf")
                 written += 1
+                markdown = self._markdown_for_export(
+                    page, engine, lang_in, lang_out
+                )
+                if markdown:
+                    archive.writestr(f"{prefix}_p{page + 1:04d}.md", markdown)
         if written == 0:
             with contextlib.suppress(OSError):
                 tmp.unlink()
@@ -975,6 +1040,11 @@ class CloneEngine:
                 continue
             shutil.copy2(src, dest_dir / f"{prefix}_p{page + 1:04d}.pdf")
             written += 1
+            markdown = self._markdown_for_export(page, engine, lang_in, lang_out)
+            if markdown:
+                (dest_dir / f"{prefix}_p{page + 1:04d}.md").write_text(
+                    markdown, encoding="utf-8"
+                )
         if written == 0:
             raise ValueError("nessuna pagina tradotta da esportare")
         return written
@@ -1348,7 +1418,7 @@ class CloneEngine:
 
             with pymupdf.open(str(self._src_pdf)) as doc:
                 for page in pages:
-                    if self.ocr_split_path(page).is_file():
+                    if self.ocr_markdown_path(page).is_file():
                         continue
                     try:
                         if not doc[page].get_text().strip():
@@ -1363,35 +1433,103 @@ class CloneEngine:
         """Decisione OCR per questa chiamata (override) o dalla policy."""
         return self.ocr_enabled if allow_ocr is None else bool(allow_ocr)
 
-    def _build_ocr_layer(
+    def _page_label(self, page: int) -> str:
+        """Etichetta visuale della pagina (fallback: numero fisico)."""
+        try:
+            return self.page_labels(self._src_pdf)[page]
+        except Exception:  # noqa: BLE001 — PDF senza etichette/errore
+            return str(page + 1)
+
+    def _ensure_ocr_markdown(
         self,
         page: int,
         split_path: Path,
         cancel_event: threading.Event | None = None,
-    ) -> str:
-        """Crea (una volta) la pagina con livello testo OCR. Ritorna il metodo."""
+    ) -> Path:
+        """Crea (una volta) il Markdown OCR della pagina. Nessun nuovo costo."""
+        md_path = self.ocr_markdown_path(page)
+        if md_path.is_file():
+            return md_path
         if self.ocr_config is None:
             raise ocr_scans.OcrError("missing_key", "OCR non configurato")
-        dst = self.ocr_split_path(page)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dst.with_name(
-            f"{dst.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-        )
         log.info("pagina %d: OCR Mistral via OpenRouter...", page)
-        try:
-            method = ocr_scans.build_ocr_page(
-                split_path, tmp, self.ocr_config, lang_in=self.lang_in,
-                markdown_path=dst.with_suffix(".md"),
-            )
-            if cancel_event is not None and cancel_event.is_set():
-                raise TranslationCancelled("traduzione annullata")
-            os.replace(tmp, str(dst))  # scrittura atomica in cache
-        except Exception:
-            with contextlib.suppress(OSError):
-                tmp.unlink()
-            raise
-        log.info("pagina %d: livello OCR pronto (%s)", page, method)
-        return method
+        page_data = ocr_scans.ocr_page(
+            split_path, self.ocr_config, page_label=self._page_label(page)
+        )
+        if cancel_event is not None and cancel_event.is_set():
+            raise TranslationCancelled("traduzione annullata")
+        ocr_scans.write_ocr_page(page_data, md_path, self.ocr_assets_dir(page))
+        log.info(
+            "pagina %d: Markdown OCR pronto (%d immagini)",
+            page, len(page_data.images),
+        )
+        return md_path
+
+    def _ocr_llm_options(self, engine: str) -> dict | None:
+        """Opzioni per il traduttore LLM (solo motore ``llm``)."""
+        if normalize_engine(engine) != "llm":
+            return None
+        return {
+            "model": self.llm_model,
+            "base_url": self.llm_base_url,
+            "api_key": os.environ.get("OPENROUTER_API_KEY", ""),
+            "system_prompt": self.llm_system_prompt,
+            "timeout": self.llm_timeout,
+        }
+
+    def _translate_ocr_page(
+        self,
+        page: int,
+        engine: str,
+        split_path: Path,
+        on_phase=None,
+    ) -> Path:
+        """Traduce il Markdown OCR e scrive Markdown + PDF hardcopy."""
+        body, images = ocr_scans.read_ocr_page(
+            self.ocr_markdown_path(page), self.ocr_assets_dir(page)
+        )
+        llm = self._ocr_llm_options(engine)
+        translated = ocr_scans.translate_markdown(
+            body, self.lang_in, self.lang_out, engine, llm=llm
+        )
+        # Didascalie delle figure: stessa traduzione del corpo.
+        captions = [image.caption for image in images]
+        if captions:
+            try:
+                joined = ocr_scans.translate_markdown(
+                    "\n\n".join(captions), self.lang_in, self.lang_out,
+                    engine, llm=llm,
+                )
+                parts = joined.split("\n\n")
+                if len(parts) == len(captions):
+                    for image, caption in zip(images, parts):
+                        image.caption = caption.strip()
+            except Exception:  # noqa: BLE001 — didascalie non bloccanti
+                log.warning("traduzione didascalie fallita pagina %d", page)
+        label = self._page_label(page)
+        md_out = self.translated_markdown_path(page, engine)
+        md_out.parent.mkdir(parents=True, exist_ok=True)
+        md_out.write_text(
+            ocr_scans.append_figures(
+                translated, images,
+                assets_dir=self.ocr_assets_dir(page),
+                page_label=label,
+            ),
+            encoding="utf-8",
+        )
+        import pymupdf  # noqa: PLC0415
+        with pymupdf.open(str(split_path)) as doc:
+            rect = doc[0].rect
+        out = self.translated_path(page, engine)
+        pages = ocr_scans.build_pdf_from_markdown(
+            translated, images, out,
+            width=rect.width, height=rect.height, page_label=label,
+        )
+        log.info(
+            "pagina %d: Markdown tradotto (%s), hardcopy %d pagina/e",
+            page, engine, pages,
+        )
+        return out
 
     def translate_page(
         self,
@@ -1399,6 +1537,7 @@ class CloneEngine:
         engine: str,
         cancel_event: threading.Event | None = None,
         allow_ocr: bool | None = None,
+        on_phase=None,
     ) -> Path | None:
         """Traduce la pagina se serve e ritorna il path del PDF tradotto.
 
@@ -1406,15 +1545,14 @@ class CloneEngine:
         subprocess è avviato in un *process group* e viene terminato, così
         l'annullamento non attende la fine della pagina (come nel servizio).
 
-        Su una pagina **scansionata** con ``allow_ocr`` attivo (o policy
-        ``ocr_enabled``) viene prima creato il livello testo OCR: il tradotto
-        conserva la scansione. Se il livello esiste già in cache viene usato
-        senza chiamare di nuovo il provider (nessun costo).
+        Per una pagina **scansionata** con ``allow_ocr`` attivo (o policy
+        ``ocr_enabled``): OCR Mistral → Markdown → traduzione del Markdown →
+        PDF hardcopy (senza layout). ``on_phase`` riceve ``"ocr"`` e
+        ``"translating"`` per le due animazioni del previewer.
         """
         engine = normalize_engine(engine)
         if engine not in ENGINES:
             engine = "google"
-        out = self.translated_path(page, engine)
         key = self._key(page, engine)
         if cancel_event is not None and cancel_event.is_set():
             self._status[key] = "cancelled"
@@ -1431,43 +1569,35 @@ class CloneEngine:
         scanned = not page_has_text(sp)
 
         with self._lock_for(key):
-            ocr_layer = self.ocr_split_path(page)
-            ocr_pending = scanned and not ocr_layer.is_file() and self._ocr_allowed(
-                allow_ocr
+            ocr_md = self.ocr_markdown_path(page)
+            ocr_pending = (
+                scanned and not ocr_md.is_file() and self._ocr_allowed(allow_ocr)
             )
+            out = self.translated_path(page, engine)
             if out.is_file() and not ocr_pending:
                 self._status[key] = "done"
                 return out
-            if self._status.get(key) == "running":
+            if self._status.get(key) in ("running", "ocr"):
                 return None  # un altro worker ci sta già lavorando
 
             if self._src_pdf is None:
                 self._status[key] = "error:nessun documento aperto"
                 return None
 
-            if engine == "llm" and not os.environ.get("OPENROUTER_API_KEY"):
-                self._status[key] = "error:missing_key"
-                return None
-
-            pdf2zh = self.pdf2zh_bin()
-            if pdf2zh is None:
-                self._status[key] = "error:pdf2zh_next non trovato (installa il motore)"
-                return None
-
             if scanned:
-                if ocr_layer.is_file():
-                    # Livello già prodotto (anche in una sessione precedente):
-                    # si traduce quello, senza nuovo costo OCR.
-                    sp = ocr_layer
-                    out = self.translated_path(page, engine)
-                elif not ocr_pending:
-                    # Nessun testo e OCR non richiesto: il clone è l'originale.
-                    # (BabelDOC fallirebbe con "no paragraphs".)
-                    return self._use_original_page(page, engine, sp, key)
-                else:
+                if not ocr_md.is_file():
+                    if not ocr_pending:
+                        # Nessun testo e OCR non richiesto: il clone è
+                        # l'originale (non si invoca BabelDOC).
+                        return self._use_original_page(page, engine, sp, key)
+                    if self.ocr_config is None:
+                        self._status[key] = "error:ocr_missing_key"
+                        return None
                     self._status[key] = "ocr"
+                    if on_phase is not None:
+                        on_phase("ocr")
                     try:
-                        self._build_ocr_layer(page, sp, cancel_event)
+                        self._ensure_ocr_markdown(page, sp, cancel_event)
                     except TranslationCancelled:
                         self._status[key] = "cancelled"
                         return None
@@ -1486,10 +1616,43 @@ class CloneEngine:
                         log.exception("OCR pagina %d fallito", page)
                         self._status[key] = "error:ocr_failed"
                         return None
-                    # Il path cambia: ora la cache è quella del livello OCR.
-                    sp = self.ocr_split_path(page)
                     out = self.translated_path(page, engine)
-        ocr_layer_used = sp == self.ocr_split_path(page)
+
+                md_out = self.translated_markdown_path(page, engine)
+                if not (out.is_file() and md_out.is_file()):
+                    self._status[key] = "running"
+                    if on_phase is not None:
+                        on_phase("translating")
+                    try:
+                        self._translate_ocr_page(page, engine, sp, on_phase=on_phase)
+                    except TranslationCancelled:
+                        self._status[key] = "cancelled"
+                        return None
+                    except text_translate.TranslationError as exc:
+                        log.warning(
+                            "traduzione Markdown fallita pagina %d: %s", page, exc
+                        )
+                        self._status[key] = "error:ocr_translate"
+                        return None
+                    except Exception:  # noqa: BLE001 — riportato in UI
+                        log.exception(
+                            "traduzione Markdown fallita pagina %d", page
+                        )
+                        self._status[key] = "error:ocr_translate"
+                        return None
+                    out = self.translated_path(page, engine)
+                self._status[key] = "done"
+                return out
+
+            # ── pagina nativa: percorso pdf2zh invariato ─────────────────
+            if engine == "llm" and not os.environ.get("OPENROUTER_API_KEY"):
+                self._status[key] = "error:missing_key"
+                return None
+
+            pdf2zh = self.pdf2zh_bin()
+            if pdf2zh is None:
+                self._status[key] = "error:pdf2zh_next non trovato (installa il motore)"
+                return None
 
         t_flags, t_name = self._translator_flags(engine)
         self._status[key] = "running"
@@ -1499,13 +1662,6 @@ class CloneEngine:
             out_dir.mkdir(parents=True, exist_ok=True)
             prefix = self._engine_launch_prefix(pdf2zh)
             flags = t_flags + self._quality_flags(sp)
-            if ocr_layer_used:
-                # Pagina con livello testo invisibile sopra la scansione:
-                # niente rilevamento "scanned" e fondo bianco sotto il tradotto
-                # (altrimenti il testo inglese resta visibile sotto).
-                for flag in ("--ocr-workaround", "--skip-scanned-detection"):
-                    if flag not in flags:
-                        flags.append(flag)
             argv = [
                 str(sp),
                 "--lang-in", self.lang_in,

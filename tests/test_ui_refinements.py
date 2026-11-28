@@ -448,3 +448,66 @@ class MainWindowRefinementsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(_HAS_QT, "PyQt6 non disponibile")
+class MarkdownPreviewTests(unittest.TestCase):
+    """Previewer: modalità markdown (OCR) e animazione di scansione."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        cfg = Path(self._tmp.name) / "config.json"
+        self._prev_lang = i18n.get_language()
+        i18n.init_config(cfg, defaults={**i18n.DEFAULTS, "lang": "it"})
+        i18n.set_language("it")
+        import main
+        self.main = main
+
+    def tearDown(self):
+        i18n.set_language(self._prev_lang)
+        self._tmp.cleanup()
+
+    def test_markdown_mode_and_back_to_pdf(self):
+        panel = self.main.TranslatedPagePanel()
+        panel.resize(600, 800)
+        panel.show_markdown("# Titolo\n\nTesto tradotto.", None)
+        self.assertIs(panel._stack.currentWidget(), panel._md_view)
+        self.assertIn("Titolo", panel._md_view.toPlainText())
+        panel.show_page(None)
+        self.assertIs(panel._stack.currentWidget(), panel.scroll_area)
+
+    def test_ocr_and_translation_animations_are_distinct(self):
+        from PyQt6.QtGui import QPixmap
+
+        panel = self.main.TranslatedPagePanel()
+        panel.resize(600, 800)
+        panel.show()
+        panel.show_ocr(QPixmap(), "OCR in corso")
+        self.assertTrue(panel._scan_overlay.isVisible())
+        self.assertTrue(panel._scan_anim.state().value in (1, 2))
+        panel.show_translating(QPixmap(), "Traduzione")
+        self.assertFalse(panel._scan_overlay.isVisible())
+        panel.close()
+
+    def test_ocr_phase_signal_connected(self):
+        from PyQt6.QtCore import QObject, pyqtSignal
+
+        class _PhaseEngine:
+            def translate_page(self, *args, on_phase=None, **kwargs):
+                if on_phase:
+                    on_phase("ocr")
+                    on_phase("translating")
+                return None
+
+            def status(self, *args, **kwargs):
+                return "cancelled"
+
+        thread = self.main.CloneTranslateThread(_PhaseEngine(), 0, "google", 1)
+        seen = []
+        thread.phase.connect(lambda gen, phase: seen.append(phase))
+        thread.run()
+        self.assertEqual(seen, ["ocr", "translating"])

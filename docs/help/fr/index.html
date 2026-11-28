@@ -218,6 +218,15 @@
 
       <!-- ═══════════════ MOTORI ═══════════════ -->
 
+      <h3>Pages numérisées (OCR)</h3>
+      <p>Si une page n'a pas de texte extractible (numérisation), l'application le
+      détecte et demande s'il faut utiliser <strong>Mistral OCR</strong> via
+      OpenRouter (environ 0,002 $ par page, facturés sur votre compte). Si vous
+      acceptez, la page est reconnue et affichée en <strong>Markdown</strong>
+      traduit dans le panneau de droite, sans mise en page. L'export produit un
+      PDF texte et un fichier Markdown avec les images à la fin. Le choix est
+      mémorisé dans Réglages → Performances.</p>
+
       <h3 id="page-actions">Actions sur la page traduite</h3>
       <p>Quand la traduction d'une page se termine, un bouton flottant
       <strong>✓ Actions de la page</strong> apparaît en <strong>bas à droite</strong>
@@ -443,7 +452,7 @@
         <li><strong>Normal</strong> — compatibilité maximale, aucune optimisation
           (~40 s/page).</li>
         <li><strong>Rapide</strong> — optimisations du pipeline (patch + worker),
-          Mercury sur OpenRouter (~33 s).</li>
+          gpt-oss-120b sur OpenRouter.</li>
         <li><strong>Maximum</strong> — gpt-oss sur Groq avec proxy local,
           raisonnement minimal et prompt système (~20-23 s).</li>
       </ul>

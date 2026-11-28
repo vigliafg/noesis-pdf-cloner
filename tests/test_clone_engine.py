@@ -1393,7 +1393,7 @@ class EngineEnvTests(unittest.TestCase):
 
 
 class OcrPipelineTests(unittest.TestCase):
-    """OCR delle scansioni: livello testo, cache separata, flag del motore."""
+    """OCR delle scansioni: Markdown → PDF hardcopy, cache e fasi."""
 
     def setUp(self):
         import pymupdf
@@ -1419,63 +1419,68 @@ class OcrPipelineTests(unittest.TestCase):
         import shutil
 
         shutil.copyfile(self.src, split)
+        pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 2, 2), 0)
+        pix.clear_with(180)
+        self.image = ocr_scans.OcrImage(
+            filename="img_0.png", data=pix.tobytes("png"),
+            mime="image/png", caption="Figura 1",
+        )
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _fake_layer(self, src, dst, config, **kwargs):
-        """Simula il livello OCR: pagina con testo (e lo stesso nome file)."""
-        import pymupdf
+    def _fake_ocr(self, *args, **kwargs):
+        return self.ocr_scans.OcrPage(
+            markdown="Hello scanned page\n\nSecond paragraph.",
+            images=[self.image],
+        )
 
-        doc = pymupdf.open()
-        page = doc.new_page()
-        page.insert_text((72, 72), "Hello scanned page")
-        Path(dst).parent.mkdir(parents=True, exist_ok=True)
-        doc.save(str(dst))
-        doc.close()
-        return "layout"
+    def _fake_translate(self, text, source, target, engine, llm=None):
+        return text.upper()
 
-    @staticmethod
-    def _fake_run(cmd, env, cancel_event=None):
-        import subprocess
-
-        import pymupdf
-
-        out_dir = Path(cmd[cmd.index("--output") + 1])
-        doc = pymupdf.open()
-        doc.new_page().insert_text((72, 72), "Ciao pagina")
-        doc.save(str(out_dir / "page.mono.pdf"))
-        doc.close()
-        return subprocess.CompletedProcess(cmd, 0, "", "")
-
-    def test_scanned_page_with_ocr_keeps_layout_and_flags(self):
+    def test_scanned_page_markdown_pipeline(self):
+        phases = []
         with mock.patch.object(
-            self.ocr_scans, "build_ocr_page", side_effect=self._fake_layer
-        ) as build, mock.patch.object(
-            self.engine, "_run_engine", side_effect=self._fake_run
+            self.ocr_scans, "ocr_page", side_effect=self._fake_ocr
+        ) as ocr, mock.patch.object(
+            self.ocr_scans, "translate_markdown", side_effect=self._fake_translate
+        ) as tr, mock.patch.object(
+            self.engine, "_run_engine"
         ) as run:
-            out = self.engine.translate_page(0, "bing", allow_ocr=True)
+            out = self.engine.translate_page(
+                0, "bing", allow_ocr=True, on_phase=phases.append
+            )
 
-        build.assert_called_once()
+        ocr.assert_called_once()
+        self.assertTrue(tr.called)
+        run.assert_not_called()  # niente pdf2zh/BabelDOC sulla scansione
         self.assertIsNotNone(out)
         self.assertTrue(out.is_file())
-        # Cache separata dal fallback "originale".
         self.assertIn(self.engine._ocr_tag(), str(out))
-        argv = run.call_args.args[0]
-        self.assertIn("--ocr-workaround", argv)
-        self.assertIn("--skip-scanned-detection", argv)
+        md = self.engine.markdown_path(0, "bing")
+        self.assertIsNotNone(md)
+        self.assertIn("## Figure", md.read_text(encoding="utf-8"))
+        self.assertIn("assets/img_0.png", md.read_text(encoding="utf-8"))
+        import pymupdf
+
+        with pymupdf.open(str(out)) as doc:
+            text = "".join(page.get_text() for page in doc)
+            images = sum(len(page.get_images()) for page in doc)
+        self.assertIn("HELLO SCANNED PAGE", text)
+        self.assertGreaterEqual(images, 1)
+        self.assertEqual(phases[:2], ["ocr", "translating"])
         self.assertEqual(self.engine.status(0, "bing"), "done")
 
     def test_declined_ocr_stores_the_original(self):
         split = self.engine.split_path(0)
         with mock.patch.object(
-            self.ocr_scans, "build_ocr_page"
-        ) as build, mock.patch.object(
+            self.ocr_scans, "ocr_page"
+        ) as ocr, mock.patch.object(
             self.engine, "_run_engine"
         ) as run:
             out = self.engine.translate_page(0, "bing", allow_ocr=False)
 
-        build.assert_not_called()
+        ocr.assert_not_called()
         run.assert_not_called()
         self.assertIsNotNone(out)
         self.assertEqual(out.read_bytes(), split.read_bytes())
@@ -1485,36 +1490,62 @@ class OcrPipelineTests(unittest.TestCase):
     def test_ocr_error_is_reported_with_code(self):
         with mock.patch.object(
             self.ocr_scans,
-            "build_ocr_page",
+            "ocr_page",
             side_effect=self.ocr_scans.OcrError("no_credits", "credito finito"),
         ):
             out = self.engine.translate_page(0, "bing", allow_ocr=True)
         self.assertIsNone(out)
         self.assertEqual(self.engine.status(0, "bing"), "error:ocr_no_credits")
 
-    def test_existing_layer_is_reused_without_new_ocr(self):
-        layer = self.engine.ocr_split_path(0)
-        self._fake_layer(None, layer, None)
+    def test_existing_markdown_is_reused_without_new_ocr(self):
+        page = self.ocr_scans.OcrPage(markdown="Cached text", images=[self.image])
+        self.ocr_scans.write_ocr_page(
+            page, self.engine.ocr_markdown_path(0), self.engine.ocr_assets_dir(0)
+        )
         self.assertFalse(self.engine.page_needs_ocr(0))
         self.assertIn(
             self.engine._ocr_tag(),
             str(self.engine.translated_path_for(0, "bing")),
         )
         with mock.patch.object(
-            self.ocr_scans, "build_ocr_page"
-        ) as build, mock.patch.object(
-            self.engine, "_run_engine", side_effect=self._fake_run
+            self.ocr_scans, "ocr_page"
+        ) as ocr, mock.patch.object(
+            self.ocr_scans, "translate_markdown", side_effect=self._fake_translate
         ):
-            out = self.engine.translate_page(0, "bing", allow_ocr=False)
-        build.assert_not_called()
+            out = self.engine.translate_page(0, "bing", allow_ocr=True)
+        ocr.assert_not_called()
         self.assertIsNotNone(out)
         self.assertIn(self.engine._ocr_tag(), str(out))
 
     def test_scanned_pages_lists_textless_pages(self):
         self.assertEqual(self.engine.scanned_pages([0]), [0])
-        layer = self.engine.ocr_split_path(0)
-        self._fake_layer(None, layer, None)
+        page = self.ocr_scans.OcrPage(markdown="Cached", images=[])
+        self.ocr_scans.write_ocr_page(
+            page, self.engine.ocr_markdown_path(0), self.engine.ocr_assets_dir(0)
+        )
         self.assertEqual(self.engine.scanned_pages([0]), [])
+
+    def test_export_writes_markdown_with_base64_images(self):
+        with mock.patch.object(
+            self.ocr_scans, "ocr_page", side_effect=self._fake_ocr
+        ), mock.patch.object(
+            self.ocr_scans, "translate_markdown", side_effect=self._fake_translate
+        ):
+            self.engine.translate_page(0, "bing", allow_ocr=True)
+        dest = Path(self._tmp.name) / "out.pdf"
+        self.engine.export_pdf([0], "bing", dest)
+        md = dest.with_suffix(".md")
+        self.assertTrue(md.is_file())
+        text = md.read_text(encoding="utf-8")
+        self.assertIn("data:image/png;base64,", text)
+        self.assertIn("figura 1", text.lower())
+        zip_dest = Path(self._tmp.name) / "out.zip"
+        self.engine.export_zip([0], "bing", zip_dest)
+        import zipfile
+
+        with zipfile.ZipFile(zip_dest) as archive:
+            names = archive.namelist()
+        self.assertIn("page_p0001.md", names)
 
 
 class LlmModelTests(unittest.TestCase):

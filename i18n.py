@@ -751,6 +751,24 @@ _STRINGS: dict[str, dict[str, str]] = {
         "it": "Pronto", "en": "Ready", "fr": "Prêt", "de": "Fertig",
         "es": "Listo",
     },
+    "clone.status_ocr": {
+        "it": "OCR in corso…", "en": "OCR running…",
+        "fr": "OCR en cours…", "de": "OCR läuft…", "es": "OCR en curso…",
+    },
+    "clone.status_markdown": {
+        "it": "OCR · testo senza impaginazione",
+        "en": "OCR · text without layout",
+        "fr": "OCR · texte sans mise en page",
+        "de": "OCR · Text ohne Layout",
+        "es": "OCR · texto sin maquetación",
+    },
+    "clone.spinner_ocr": {
+        "it": "OCR in corso con {engine}…",
+        "en": "OCR running with {engine}…",
+        "fr": "OCR en cours avec {engine}…",
+        "de": "OCR läuft mit {engine}…",
+        "es": "OCR en curso con {engine}…",
+    },
     "clone.status_empty": {
         "it": "Nessun testo da tradurre", "en": "Nothing to translate",
         "fr": "Aucun texte à traduire", "de": "Kein Text zu übersetzen",
@@ -2451,12 +2469,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "de": "OCR fehlgeschlagen: die Seite wurde nicht übersetzt.",
         "es": "Fallo del OCR: la página no se tradujo.",
     },
-    "ocr.err.tesseract": {
-        "it": "OCR locale (Tesseract) non disponibile: impossibile ricostruire la pagina.",
-        "en": "Local OCR (Tesseract) unavailable: the page cannot be rebuilt.",
-        "fr": "OCR local (Tesseract) indisponible : impossible de reconstruire la page.",
-        "de": "Lokale OCR (Tesseract) nicht verfügbar: Seite kann nicht rekonstruiert werden.",
-        "es": "OCR local (Tesseract) no disponible: no se puede reconstruir la página.",
+    "ocr.err.translate": {
+        "it": "Traduzione del testo OCR non riuscita: la pagina non è stata tradotta.",
+        "en": "OCR text translation failed: the page was not translated.",
+        "fr": "Échec de la traduction du texte OCR : la page n'a pas été traduite.",
+        "de": "Übersetzung des OCR-Textes fehlgeschlagen: Seite nicht übersetzt.",
+        "es": "Fallo al traducir el texto OCR: la página no se tradujo.",
     },
     "settings.llm.model": {
         "it": "LLM: modello",

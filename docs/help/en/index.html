@@ -209,6 +209,14 @@
 
       <!-- ═══════════════ MOTORI ═══════════════ -->
 
+      <h3>Scanned pages (OCR)</h3>
+      <p>If a page has no extractable text (a scan), the app detects it and asks
+      whether to use <strong>Mistral OCR</strong> via OpenRouter (about $0.002
+      per page, charged to your account). If you accept, the page is recognised
+      and shown as translated <strong>Markdown</strong> in the right panel,
+      without layout. Export produces a text PDF and a Markdown file with the
+      images at the end. The choice is remembered in Settings → Performance.</p>
+
       <h3 id="page-actions">Actions on the translated page</h3>
       <p>When a page finishes translating, a floating <strong>✓ Page actions</strong>
       button appears at the <strong>bottom right</strong> of the right panel. It does
@@ -429,7 +437,7 @@
         <li><strong>Normal</strong> — maximum compatibility, no optimizations
           (~40 s/page).</li>
         <li><strong>Fast</strong> — pipeline optimizations (patch + worker),
-          Mercury on OpenRouter (~33 s).</li>
+          gpt-oss-120b on OpenRouter.</li>
         <li><strong>Fastest</strong> — gpt-oss on Groq with a local proxy,
           minimal reasoning and a system prompt (~20-23 s).</li>
       </ul>

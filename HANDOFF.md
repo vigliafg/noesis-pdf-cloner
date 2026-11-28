@@ -11,7 +11,7 @@ zoom, TOC, i18n, Impostazioni), il cui scopo è cambiato: non più esportazione 
 markdown, ma **clonazione della pagina tradotta** tramite **pdf2zh_next v2 (BabelDOC)**.
 
 - Repository **pubblico**: `git@github.com:vigliafg/noesis-pdf-cloner.git` (remote **SSH**, branch `main`).
-- Ultima release: **v0.2.1** (Windows x64 + macOS x64/arm64 + Linux AppImage).
+- Ultima release: **v0.2.2** (Windows x64 + macOS x64/arm64 + Linux AppImage).
 - Sito del progetto su GitHub Pages (build da workflow): landing a
   <https://vigliafg.github.io/noesis-pdf-cloner/> e guida multilingue a
   <https://vigliafg.github.io/noesis-pdf-cloner/help/>.
@@ -854,95 +854,80 @@ al riavvio · nessun processo orfano alla chiusura.
 
 ## 13. OCR delle scansioni (Mistral via OpenRouter) — 28/11
 
-Le pagine **senza text layer** (scansioni, copertine) non sono traducibili da
-BabelDOC: il motore esce con *"The document contains no paragraphs"*. Prima di
-questa feature la pagina veniva copiata in cache come originale (stato
-`empty`), con il worker persistente anche in errore (vedi §6). Ora, se
-l'utente acconsente, la pagina viene **ricostruita** e tradotta mantenendo
-scansione e figure.
+Le pagine **senza text layer** non sono traducibili da BabelDOC. Dopo la prova
+del livello testo invisibile (che falliva sulle tabelle anche con testo e
+posizioni **perfette**), il percorso è stato semplificato: la pagina
+scansionata diventa un **documento Markdown**, senza tentare di conservare
+l'impaginazione.
 
 ### Flusso
 
 1. `CloneEngine.scanned_pages()` rileva le pagine senza testo (legge il PDF
    sorgente, niente split).
-2. Avviso UI (`ocr.dialog.*`): costo stimato (`$0,002/pagina` + token) e
-   privacy (la pagina va a OpenRouter/Mistral). Checkbox **Non chiedere più**
-   → `ocr_mode` = `auto` (usa) oppure `off` (originale). Politica in
-   **Impostazioni → Prestazioni → Scansioni: OCR Mistral** (`ask`/`auto`/`off`,
-   default `ask`).
-3. `ocr_scans.ocr_pdf_page()` invia il PDF di pagina a OpenRouter
-   (`/chat/completions`, plugin `file-parser` con engine `mistral-ocr`,
-   modello di appoggio `google/gemini-2.5-flash-lite`, `max_tokens=4`). Il
-   testo OCR si legge dalle **annotazioni** (`message.annotations`), non dalla
-   risposta del modello; se l'inferenza fallisce (es. 429) le stesse
-   annotazioni arrivano in `error.metadata.file_annotations` e vengono riusate
-   (il parsing è già stato pagato).
-4. **Tesseract** (locale, offline) dà le righe con bounding box; ogni riga
-   riceve il testo Mistral corrispondente (match per contenuto con
-   `difflib`, indice delle parole rare: l'ordine di lettura di Tesseract è
-   inaffidabile su due colonne). Righe non riconosciute mantengono il testo
-   Tesseract. Le righe duplicate/sovrapposte vengono scartate.
-5. Si scrive un **livello testo invisibile** (`render_mode=3`) dentro le
-   scansioni; il PDF risultante è il nuovo "split OCR".
-6. `pdf2zh_next` traduce la pagina con `--ocr-workaround` (fondo bianco sotto
-   il tradotto) e `--skip-scanned-detection`; il `.mono.pdf` conserva la
-   scansione e le figure.
+2. Avviso UI (`ocr.dialog.*`): costo stimato (`$0,002/pagina`) e privacy.
+   Checkbox **Non chiedere più** → `ocr_mode` = `auto`/`off`; politica in
+   **Impostazioni → Prestazioni → Scansioni: OCR Mistral** (default `ask`).
+3. `ocr_scans.ocr_page()` invia la pagina a OpenRouter (`file-parser` +
+   `mistral-ocr`) e restituisce **Markdown + immagini** estratte. Il testo si
+   legge dalle annotazioni (`message.annotations`); con un errore del modello
+   (es. 429) le stesse annotazioni arrivano in
+   `error.metadata.file_annotations` e vengono riusate (parsing già pagato).
+   Cache: `split/<doc>/ocr1-<hash provider>/page_000123.md` + `assets/`.
+4. `text_translate.translate_text()` traduce il Markdown con il motore scelto:
+   `google` → catena Google; `bing` → Microsoft Edge free; `llm` →
+   OpenRouter. Tabelle cella per cella, immagini/URL protetti.
+5. Output: Markdown tradotto (`translated/.../page_000123.md`, figure in coda
+   con didascalia) + **PDF hardcopy** del Markdown (`page_000123.pdf`, testo e
+   figure, anche su più pagine). Nessun `pdf2zh`/BabelDOC sulla scansione.
+6. Previewer: per le pagine con `.md` il pannello destro diventa un **viewer
+   Markdown** (tabella/immagini renderizzate, badge "OCR · testo senza
+   impaginazione"). Due animazioni distinte: **scanline** per l'OCR e overlay
+   liquido per la traduzione (`translate_page(..., on_phase=...)`).
 
-Se Tesseract non è disponibile (o non riconosce righe) si ripiega su una
-**pagina nativa** ricostruita dal Markdown OCR: contenuto tradotto, ma senza
-impaginazione/scansione. Tesseract è incluso nelle release (tessdata_fast, 14
-lingue, come il reader) da `release.yml`; su Linux sorgente serve
-`tesseract-ocr`.
+### Export
+
+- PDF merged/ZIP/cartella: le pagine OCR vengono incluse come **hardcopy**
+  del Markdown (testo + figure).
+- Markdown automatico accanto all'export: `.md` per pagina in ZIP/cartella,
+  un companion `.md` accanto al PDF merged (pagine OCR, sezioni per pagina).
+  Le immagini sono **base64 in coda** con didascalia.
+- Le pagine native restano clone con layout; il markdown non viene generato
+  per loro.
 
 ### Cache e costi
 
-- Livello OCR: `split/<doc>/ocr1-<hash provider modello>/page_000123.pdf`
-  (il provider/modello fa parte del tag: cambiarlo non riusa livelli vecchi).
-- Tradotto da OCR: `translated/<doc>/<engine>/<lang>/cs1-…-ocr1-…/page_….pdf`.
-- Fallback "originale": `…/cs1-…-empty/page_….pdf` (separato dal tradotto: una
-  pagina scansionata già "cestinata" come originale viene riprocessata quando
-  l'OCR è attivo).
-- L'OCR di una pagina si paga **una volta**: se il livello esiste si usa senza
-  nuova chiamata, anche se l'utente ha scelto "tieni l'originale" in un secondo
-  momento. `purge_page_cache` elimina il tradotto, non il livello OCR.
-- Stima: $2/1000 pagine (OpenRouter); nelle prove una pagina densa è costata
-  ~$0,0022 (OCR + 1 token del modello).
+- OCR pagato una volta; "ritradurre" riusa il Markdown (nessun nuovo costo).
+  Il tag provider/modello fa parte del percorso: cambiarlo invalida la cache.
+- Fallback "originale" per OCR rifiutato: `…-empty/`.
+- Stima: $2/1000 pagine; prova reale ~$0,0022/pagina.
+- Codici errore: `ocr_missing_key`, `ocr_invalid_key`, `ocr_no_credits`,
+  `ocr_rate_limited`, `ocr_network`, `ocr_empty`, `ocr_failed`,
+  `ocr_translate`.
 
-### Errori e stato
+### Test (10 pagine corpus1, scansioni 150 dpi)
 
-Codici stabili nel `status`: `ocr_missing_key`, `ocr_invalid_key`,
-`ocr_no_credits`, `ocr_rate_limited`, `ocr_network`, `ocr_empty`,
-`ocr_failed`, `ocr_tesseract` (mappati in `_ENGINE_ERROR_KEYS`, i18n a 5
-lingue). Il thread di traduzione considera `running` **e** `ocr` come "in
-corso" (attesa invece di errore).
+- OCR recall 93,3–100% / precision 97,1–99,7% rispetto al testo nativo.
+- Tabelle: 7–18 righe Markdown preservate e tradotte (pag. 2: 18 righe).
+- Figure: 1–3 per pagina, in coda con didascalia; PDF 1–3 pagine.
+- 8–11 s per pagina (OCR + traduzione + PDF), contro 30–70 s del clone
+  BabelDOC. Nessuna sovrapposizione (non c'è layout da conservare).
+- File: `tests/test_ocr_scans.py`, `OcrPipelineTests`,
+  `MarkdownPreviewTests`.
 
-### Test e limiti
+### Limiti noti
 
-- `tests/test_ocr_scans.py` (17 test: parsing annotazioni, matching righe,
-  livello testo, pagina nativa, fallback, errori).
-- `tests/test_clone_engine.py::OcrPipelineTests` (cache separata, flag,
-  declino, riuso del livello, errore).
-- `tests/test_ui_refinements.py` (impostazione + costo; decisione senza
-  chiave).
-- Verifica reale: pagina 201 di `ha22.pdf` rasterizzata a 150 dpi → OCR
-  Mistral (95,6% di parole corrette sul testo nativo) → livello testo →
-  `.mono.pdf` italiano con scansione e figura conservate.
-- Limiti noti: Mistral salta header/verticali (restano in inglese nella
-  scansione); su box Tesseract imprecisi qualche riga può sovrapporsi;
-  l'allineamento è euristico (soglia 0,6); `ocr_mode=auto` spende senza
-  chiedere. Il modello di appoggio OCR è `ocr_scans.DEFAULT_MODEL`
-  (override: `NOESIS_OCR_MODEL`).
+- Niente scansione/figure nel PDF come "pagina originale": il PDF è testo.
+- Mistral salta header/testo verticale; qualche formula resta in LaTeX
+  (`$\alpha$`).
+- Didascalie: quella trovata nel testo, altrimenti "Figura N — pagina X";
+  con più immagini della stessa figura la didascalia si ripete.
+- Tesseract non serve più a questo percorso: rimosso dalle release.
 
 ### Allineamento col servizio
 
-**Da fare** (scelta esplicita: prima il desktop). Lì servirà
-`app/ocr_scans.py` identico + hook in `app/engine.py` (`scanned_pages`, tag di
-cache, flag `--ocr-workaround`), una scelta OCR per job (API/CLI) e
-l'inclusione di Tesseract nel container/installer. Il resto del motore resta
-allineato.
-
-
----
+Da fare in questa release: `app/text_translate.py` + `app/ocr_scans.py`
+(gli stessi moduli), hook in `app/engine.py` (Markdown + PDF hardcopy),
+opzione per job e test.
 
 ## 14. Modello LLM di default: gpt-oss-120b — 28/11
 
@@ -973,3 +958,17 @@ Modifiche:
 Nota: la calibrazione dell'overhead di stima costo (13.3) resta quella fatta
 con Mercury; con gpt-oss i prezzi cambiano, quindi la stima del servizio va
 ricontrollata sul campo.
+
+### 0.2.2 (28/11) — OCR scansioni in Markdown
+
+- Percorso OCR: Mistral (OpenRouter) → Markdown tradotto + figure in coda;
+  PDF hardcopy del Markdown. Niente livello testo/BabelDOC sulle scansioni
+  (eliminati i problemi di tabelle/overlap).
+- Previewer: viewer Markdown per le pagine OCR, animazione scanline per l'OCR
+  e overlay liquido per la traduzione.
+- Export: PDF merged/ZIP/cartella + `.md` automatico (immagini base64 in coda,
+  companion accanto al merged).
+- Default LLM `openai/gpt-oss-120b`; id Mercury ritirati ignorati.
+- Tesseract rimosso dal bundle (non più usato).
+- Test: 10 pagine corpus1 (OCR recall 93–100%, tabelle/immagini ok),
+  suite desktop 581 OK.

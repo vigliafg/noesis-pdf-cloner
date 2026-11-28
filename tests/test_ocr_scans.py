@@ -1,15 +1,17 @@
-"""Test del modulo OCR delle scansioni (``ocr_scans``).
+"""Test del percorso OCR → Markdown (``ocr_scans``).
 
-Nessuna rete e nessun Tesseract: il provider è iniettato e le righe OCR
-passano direttamente a ``build_text_layer``.
+Nessuna rete: il provider usa un ``post`` iniettato e i traduttori sono
+sostituiti. Le immagini sono un PNG 1×1 valido.
 """
 
+import base64
 import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -19,88 +21,26 @@ import pymupdf  # noqa: E402
 
 import ocr_scans  # noqa: E402
 
+_PIX = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 2, 2), 0)
+_PIX.clear_with(200)
+_PNG = _PIX.tobytes("png")
+_DATA_URL = "data:image/png;base64," + base64.b64encode(_PNG).decode()
 
-def _blank_pdf(path: Path, text_lines: list[str] | None = None) -> Path:
+
+def _blank_pdf(path: Path) -> Path:
     doc = pymupdf.open()
-    page = doc.new_page(width=400, height=400)
-    for index, line in enumerate(text_lines or []):
-        page.insert_text((40, 60 + index * 20), line, fontsize=10)
+    doc.new_page(width=400, height=400)
     doc.save(str(path))
     doc.close()
     return path
 
 
-def _lines() -> list[ocr_scans.OcrLine]:
-    return [
-        ocr_scans.OcrLine((40.0, 45.0, 360.0, 60.0), "the quick brwn fox", 11.0),
-        ocr_scans.OcrLine((40.0, 65.0, 360.0, 80.0), "jumps over the lazy dog", 11.0),
-    ]
-
-
-class TextCleanupTests(unittest.TestCase):
-    def test_plain_text_strips_markdown_and_images(self):
-        md = (
-            "<file name=\"page.pdf\">\n## Titolo\n\n**grassetto** e "
-            "![img](img-0.jpeg)\n\n| a | b |\n| - | - |\n| 1 | 2 |\n"
-        )
-        text = ocr_scans.plain_text(md)
-        self.assertIn("Titolo", text)
-        self.assertIn("grassetto", text)
-        self.assertNotIn("#", text)
-        self.assertNotIn("**", text)
-        self.assertNotIn("img-0", text)
-        self.assertNotIn("file name", text)
-        self.assertNotIn("|", text)
-
-    def test_tesseract_lang(self):
-        self.assertEqual(ocr_scans.tesseract_lang("it"), "ita")
-        self.assertEqual(ocr_scans.tesseract_lang("en"), "eng")
-        self.assertIn("eng", ocr_scans.tesseract_lang("auto"))
-        self.assertEqual(ocr_scans.tesseract_lang("xx"), "eng")
-
-
-class MatchLineTests(unittest.TestCase):
-    def test_line_with_ocr_typo_is_replaced_from_mistral(self):
-        mistral = "The quick brown fox jumps over the lazy dog."
-        tokens = ocr_scans._tokenize(mistral)
-        index = ocr_scans._word_index(tokens)
-        match = ocr_scans._match_line("the quick brwn fox", tokens, index)
-        self.assertEqual(match, "the quick brown fox")
-
-    def test_garbage_line_is_not_replaced(self):
-        tokens = ocr_scans._tokenize("The quick brown fox jumps over the lazy dog.")
-        index = ocr_scans._word_index(tokens)
-        self.assertIsNone(
-            ocr_scans._match_line("zzz qqq xxx", tokens, index)
-        )
-
-    def test_short_line_is_ignored(self):
-        tokens = ocr_scans._tokenize("hello world")
-        self.assertIsNone(ocr_scans._match_line("hello", tokens, {} ))
-
-
-class AnnotationsTests(unittest.TestCase):
-    def test_success_annotation(self):
-        payload = {"choices": [{"message": {"annotations": [{
-            "type": "file",
-            "file": {"content": [
-                {"type": "text", "text": "<file name=\"page.pdf\">"},
-                {"type": "text", "text": "Ciao mondo"},
-            ]},
-        }]}}]}
-        self.assertEqual(ocr_scans._annotations_text(payload), "<file name=\"page.pdf\">Ciao mondo")
-
-    def test_error_annotation_is_reused(self):
-        """Il testo OCR arriva anche quando il modello fallisce (429)."""
-        payload = {"error": {"metadata": {"file_annotations": [{
-            "type": "file", "file": {"content": [
-                {"type": "text", "text": "Testo riconosciuto"},
-            ]},
-        }]}}}
-        self.assertEqual(ocr_scans._annotations_text(payload), "Testo riconosciuto")
-
-    def test_missing_annotations(self):
-        self.assertEqual(ocr_scans._annotations_text({"choices": []}), "")
+def _payload(text: str, images: int = 0) -> tuple[int, dict]:
+    parts = [{"type": "text", "text": text}]
+    parts += [{"type": "image_url", "image_url": {"url": _DATA_URL}} for _ in range(images)]
+    return 200, {"choices": [{"message": {"annotations": [{
+        "type": "file", "file": {"content": parts},
+    }]}}]}
 
 
 class ProviderTests(unittest.TestCase):
@@ -112,24 +52,13 @@ class ProviderTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_ocr_pdf_page_reads_annotations(self):
-        calls = {}
-
-        def fake_post(url, payload, key, timeout):
-            calls["url"] = url
-            calls["payload"] = payload
-            return 200, {"choices": [{"message": {"annotations": [{
-                "file": {"content": [
-                    {"type": "text", "text": "Testo OCR"},
-                ]},
-            }]}}]}
-
-        config = ocr_scans.OcrConfig("segreto")
-        text = ocr_scans.ocr_pdf_page(self.pdf, config, post=fake_post)
+        with mock.patch.object(
+            ocr_scans, "_post_json", return_value=_payload("Testo OCR")
+        ):
+            text = ocr_scans.ocr_pdf_page(
+                self.pdf, ocr_scans.OcrConfig("k")
+            )
         self.assertEqual(text, "Testo OCR")
-        self.assertIn("/chat/completions", calls["url"])
-        self.assertEqual(calls["payload"]["plugins"][0]["pdf"]["engine"], "mistral-ocr")
-        body = json.dumps(calls["payload"])
-        self.assertNotIn("segreto", body)  # la chiave va solo nell'header
 
     def test_missing_key(self):
         with self.assertRaises(ocr_scans.OcrError) as ctx:
@@ -137,84 +66,126 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "missing_key")
 
     def test_http_error_without_annotations(self):
-        def fake_post(url, payload, key, timeout):
-            return 402, {"error": {"message": "Payment required"}}
-
-        with self.assertRaises(ocr_scans.OcrError) as ctx:
-            ocr_scans.ocr_pdf_page(self.pdf, ocr_scans.OcrConfig("k"), post=fake_post)
+        with mock.patch.object(
+            ocr_scans,
+            "_post_json",
+            return_value=(402, {"error": {"message": "Payment required"}}),
+        ):
+            with self.assertRaises(ocr_scans.OcrError) as ctx:
+                ocr_scans.ocr_pdf_page(
+                    self.pdf, ocr_scans.OcrConfig("k")
+                )
         self.assertEqual(ctx.exception.code, "no_credits")
 
     def test_rate_limit_with_annotations_is_success(self):
-        """Con 429 il testo OCR c'è comunque: si usa, senza errore."""
-        def fake_post(url, payload, key, timeout):
-            return 429, {"error": {"metadata": {"file_annotations": [{
-                "file": {"content": [{"type": "text", "text": "Testo"}]},
-            }]}}}
+        def fake_post(*args, **kwargs):
+            return _payload("Testo")
 
-        text = ocr_scans.ocr_pdf_page(
-            self.pdf, ocr_scans.OcrConfig("k"), post=fake_post
-        )
+        with mock.patch.object(ocr_scans, "_post_json", side_effect=fake_post):
+            text = ocr_scans.ocr_pdf_page(
+                self.pdf, ocr_scans.OcrConfig("k")
+            )
         self.assertEqual(text, "Testo")
 
     def test_config_tag_is_stable_and_versioned(self):
         tag = ocr_scans.OcrConfig("k").tag()
         self.assertTrue(tag.startswith(f"ocr{ocr_scans.OCR_SCHEMA_VERSION}-"))
         self.assertEqual(tag, ocr_scans.OcrConfig("altro").tag())
-        other = ocr_scans.OcrConfig("k", model="altro/modello").tag()
-        self.assertNotEqual(tag, other)
+        self.assertNotEqual(tag, ocr_scans.OcrConfig("k", model="altro/modello").tag())
 
 
-class LayerTests(unittest.TestCase):
+class PageOcrTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.src = _blank_pdf(Path(self._tmp.name) / "scan.pdf")
-        self.dst = Path(self._tmp.name) / "layer.pdf"
+        self.pdf = _blank_pdf(Path(self._tmp.name) / "page.pdf")
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def test_text_layer_uses_mistral_text(self):
-        markdown = "the quick brown fox\n\njumps over the lazy dog"
-        coverage = ocr_scans.build_text_layer(
-            self.src, markdown, self.dst, lines=_lines()
+    def test_text_images_caption_and_body(self):
+        text = (
+            "<file name=\"page.pdf\">\n# Title\n\nSee "
+            "![img-0.jpeg](img-0.jpeg)\n\nFigure 3 A useful figure\n"
         )
-        self.assertGreaterEqual(coverage, 0.9)
-        with pymupdf.open(str(self.dst)) as doc:
-            text = doc[0].get_text()
-        self.assertIn("brown fox", text)
-        self.assertIn("lazy dog", text)
-
-    def test_dedupe_lines(self):
-        duplicated = _lines() + [
-            ocr_scans.OcrLine((42.0, 46.0, 358.0, 59.0), "dup", 11.0)
-        ]
-        self.assertEqual(len(ocr_scans._dedupe_lines(duplicated)), 2)
-
-    def test_native_page_contains_text(self):
-        markdown = "## Titolo\n\nUn paragrafo di prova."
-        ocr_scans.build_native_page(self.src, markdown, self.dst)
-        with pymupdf.open(str(self.dst)) as doc:
-            text = doc[0].get_text()
-        self.assertIn("Titolo", text)
-        self.assertIn("paragrafo", text)
-
-    def test_build_ocr_page_falls_back_to_native(self):
-        import ocr_scans as module
-        from unittest import mock
-
         with mock.patch.object(
-            module, "ocr_pdf_page", return_value="Testo OCR riconosciuto"
-        ), mock.patch.object(
-            module,
-            "build_text_layer",
-            side_effect=module.OcrError("ocr_tesseract", "assente"),
+            ocr_scans, "_post_json", return_value=_payload(text, images=1)
         ):
-            method = ocr_scans.build_ocr_page(
-                self.src, self.dst, ocr_scans.OcrConfig("k")
+            page = ocr_scans.ocr_page(
+                self.pdf, ocr_scans.OcrConfig("k"), page_label="12"
             )
-        self.assertEqual(method, "native")
-        with pymupdf.open(str(self.dst)) as doc:
-            self.assertIn("Testo OCR riconosciuto", doc[0].get_text())
+        self.assertNotIn("![", page.markdown)
+        self.assertNotIn("file name", page.markdown)
+        self.assertIn("# Title", page.markdown)
+        self.assertEqual(len(page.images), 1)
+        self.assertEqual(page.images[0].filename, "img_0.png")
+        self.assertIn("Figure 3", page.images[0].caption)
+        self.assertEqual(page.images[0].data, _PNG)
+
+    def test_image_without_placeholder_goes_to_tail(self):
+        with mock.patch.object(
+            ocr_scans, "_post_json", return_value=_payload("Solo testo", images=1)
+        ):
+            page = ocr_scans.ocr_page(
+                self.pdf, ocr_scans.OcrConfig("k"), page_label="7"
+            )
+        self.assertEqual(len(page.images), 1)
+        self.assertIn("pagina 7", page.images[0].caption.lower())
+
+    def test_write_and_read_roundtrip(self):
+        page = ocr_scans.OcrPage(
+            markdown="# Titolo\n\nTesto",
+            images=[ocr_scans.OcrImage(
+                filename="img_0.png", data=_PNG, caption="Figura 1",
+                source_name="img-0.jpeg",
+            )],
+        )
+        md = Path(self._tmp.name) / "page.md"
+        assets = Path(self._tmp.name) / "assets"
+        ocr_scans.write_ocr_page(page, md, assets)
+        body, images = ocr_scans.read_ocr_page(md, assets)
+        self.assertEqual(body, "# Titolo\n\nTesto")
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0].data, _PNG)
+        self.assertEqual(images[0].caption, "Figura 1")
+
+    def test_append_figures_and_base64(self):
+        md = "# Titolo\n\nTesto"
+        images = [ocr_scans.OcrImage(
+            filename="img_0.png", data=_PNG, caption="Figura 1 — pagina 2"
+        )]
+        out = ocr_scans.append_figures(md, images)
+        self.assertIn("## Figure", out)
+        self.assertIn("assets/img_0.png", out)
+        self.assertIn("*Figura 1 — pagina 2*", out)
+        inlined = ocr_scans.inline_figure_images(out, images)
+        self.assertIn("data:image/png;base64,", inlined)
+        self.assertNotIn("assets/img_0.png", inlined)
+
+    def test_pdf_from_markdown_multi_page_with_figure(self):
+        text = ("# Titolo\n\n" + ("Parola " * 1200)).strip()
+        images = [ocr_scans.OcrImage(
+            filename="img_0.png", data=_PNG, caption="Figura 1 — pagina 2"
+        )]
+        dst = Path(self._tmp.name) / "hardcopy.pdf"
+        pages = ocr_scans.build_pdf_from_markdown(
+            text, images, dst, width=400, height=400, page_label="2"
+        )
+        self.assertGreaterEqual(pages, 2)
+        with pymupdf.open(str(dst)) as doc:
+            all_text = "".join(p.get_text() for p in doc)
+            images_found = sum(len(p.get_images()) for p in doc)
+        self.assertIn("Titolo", all_text)
+        self.assertIn("Figura 1", all_text)
+        self.assertGreaterEqual(images_found, 1)
+
+    def test_translate_markdown_maps_bing_to_microsoft(self):
+        with mock.patch.object(
+            ocr_scans.text_translate, "translate_text", return_value="X"
+        ) as tr:
+            self.assertEqual(
+                ocr_scans.translate_markdown("A", "en", "it", "bing"), "X"
+            )
+        self.assertEqual(tr.call_args.kwargs["engine"], "microsoft")
 
 
 if __name__ == "__main__":
