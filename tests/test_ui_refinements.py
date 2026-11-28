@@ -132,13 +132,21 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         chime.assert_called_once_with(True)
         dlg.close()
 
+    def test_ocr_setting_is_offered_and_saved(self):
+        dlg = self.main.SettingsDialog()
+        self.assertEqual(dlg._ocr_combo.count(), 3)
+        self.assertEqual(dlg.values()["ocr_mode"], "ask")
+        dlg._select_combo_data(dlg._ocr_combo, "auto")
+        self.assertEqual(dlg.values()["ocr_mode"], "auto")
+        dlg.close()
+
     def test_llm_model_and_base_are_combos_with_presets(self):
         dlg = self.main.SettingsDialog()
         models = [
             dlg._llm_model_combo.itemData(i)
             for i in range(dlg._llm_model_combo.count())
         ]
-        self.assertIn("inception/mercury-2.5", models)
+        self.assertNotIn("inception/mercury-2.5", models)  # ritirato dal provider
         self.assertIn("openai/gpt-oss-120b", models)
         self.assertIn("qwen/qwen3-30b-a3b-instruct-2507", models)
         self.assertIn("openai/gpt-6-luna", models)
@@ -167,11 +175,11 @@ class SettingsDialogLayoutTests(unittest.TestCase):
         dlg._engine_combo.setCurrentIndex(dlg._engine_combo.findData("llm"))
         cases = {
             "normal": dict(
-                fast=False, worker=False, model="inception/mercury-2.5",
+                fast=False, worker=False, model="openai/gpt-oss-120b",
                 proxy=False, pool=4, reasoning="", base="",
             ),
             "fast": dict(
-                fast=True, worker=True, model="inception/mercury-2.5",
+                fast=True, worker=True, model="openai/gpt-oss-120b",
                 proxy=False, pool=4, reasoning="", base="",
             ),
             "fastest": dict(
@@ -266,6 +274,16 @@ class MainWindowRefinementsTests(unittest.TestCase):
         self.window.close()
         i18n.set_language(self._prev_lang)
         self._tmp.cleanup()
+
+    def test_ocr_mode_defaults_and_cost(self):
+        i18n.set_setting("ocr_mode", "ask")
+        self.assertEqual(self.window._ocr_mode(), "ask")
+        self.assertEqual(self.window._ocr_cost(1), "$0.002")
+        self.assertEqual(self.window._ocr_cost(100), "$0.20")
+        self.assertFalse(self.window._ocr_decision([]))
+        # Senza chiave OpenRouter non si propone l'OCR (nessun dialog).
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": ""}):
+            self.assertFalse(self.window._ocr_decision([0]))
 
     def test_start_and_end_long_job(self):
         self.window._sleep_inhibitor = mock.MagicMock()

@@ -287,6 +287,20 @@ motore copia l'originale in cache e lo marca ``empty``; la UI mostra la nota
 vero (messaggio "il motore non ha tradotto la pagina: …"), così un guasto della
 catena non viene mascherato. Allineato al servizio.
 
+**Scansioni con il worker persistente (v0.2.1, 28/11).** Con il motore veloce
+(worker persistente) la pagina senza testo veniva comunque inviata al motore:
+``engine_worker`` chiama ``do_translate_file_async(ignore_error=False)``, che
+propaga l'errore BabelDOC *"The document contains no paragraphs"*, e il worker
+risponde ``rc=1``. ``translate_page`` vedeva l'exit code e segnalava **errore**
+(con la coda del traceback Python in UI) dopo 15 s–3 min per pagina — mentre il
+percorso a subprocess (CLI con ``ignore_error=True``) ripiegava sull'originale.
+Ora la decisione avviene **prima** di invocare il motore: se la pagina non ha
+testo estraibile l'originale va in cache con stato ``empty``, senza subprocess,
+worker, rete o attesa (desktop e servizio). Resta invariato il caso "pagina con
+testo ma nessun output" → errore vero. Test:
+``tests/test_clone_engine.py`` (pipeline + worker) e ``tests/test_engine.py``
+nel servizio.
+
 **Catena Google su Windows (v0.1.2).** Sintomo: *"pdf2zh_next non ha prodotto il
 file mono"* — google falliva, bing no. Causa: `--clitranslator-command` è una
 stringa che BabelDOC rilegge con `shlex.split`, che sui **percorsi Windows**
@@ -835,3 +849,127 @@ Lettura:
 Normal (Mercury/google/bing) · Veloce (Mercury) · Massima (proxy autostart +
 "Prova provider" → Groq) · liste numerate (pag. 401) · persistenza impostazioni
 al riavvio · nessun processo orfano alla chiusura.
+
+---
+
+## 13. OCR delle scansioni (Mistral via OpenRouter) — 28/11
+
+Le pagine **senza text layer** (scansioni, copertine) non sono traducibili da
+BabelDOC: il motore esce con *"The document contains no paragraphs"*. Prima di
+questa feature la pagina veniva copiata in cache come originale (stato
+`empty`), con il worker persistente anche in errore (vedi §6). Ora, se
+l'utente acconsente, la pagina viene **ricostruita** e tradotta mantenendo
+scansione e figure.
+
+### Flusso
+
+1. `CloneEngine.scanned_pages()` rileva le pagine senza testo (legge il PDF
+   sorgente, niente split).
+2. Avviso UI (`ocr.dialog.*`): costo stimato (`$0,002/pagina` + token) e
+   privacy (la pagina va a OpenRouter/Mistral). Checkbox **Non chiedere più**
+   → `ocr_mode` = `auto` (usa) oppure `off` (originale). Politica in
+   **Impostazioni → Prestazioni → Scansioni: OCR Mistral** (`ask`/`auto`/`off`,
+   default `ask`).
+3. `ocr_scans.ocr_pdf_page()` invia il PDF di pagina a OpenRouter
+   (`/chat/completions`, plugin `file-parser` con engine `mistral-ocr`,
+   modello di appoggio `google/gemini-2.5-flash-lite`, `max_tokens=4`). Il
+   testo OCR si legge dalle **annotazioni** (`message.annotations`), non dalla
+   risposta del modello; se l'inferenza fallisce (es. 429) le stesse
+   annotazioni arrivano in `error.metadata.file_annotations` e vengono riusate
+   (il parsing è già stato pagato).
+4. **Tesseract** (locale, offline) dà le righe con bounding box; ogni riga
+   riceve il testo Mistral corrispondente (match per contenuto con
+   `difflib`, indice delle parole rare: l'ordine di lettura di Tesseract è
+   inaffidabile su due colonne). Righe non riconosciute mantengono il testo
+   Tesseract. Le righe duplicate/sovrapposte vengono scartate.
+5. Si scrive un **livello testo invisibile** (`render_mode=3`) dentro le
+   scansioni; il PDF risultante è il nuovo "split OCR".
+6. `pdf2zh_next` traduce la pagina con `--ocr-workaround` (fondo bianco sotto
+   il tradotto) e `--skip-scanned-detection`; il `.mono.pdf` conserva la
+   scansione e le figure.
+
+Se Tesseract non è disponibile (o non riconosce righe) si ripiega su una
+**pagina nativa** ricostruita dal Markdown OCR: contenuto tradotto, ma senza
+impaginazione/scansione. Tesseract è incluso nelle release (tessdata_fast, 14
+lingue, come il reader) da `release.yml`; su Linux sorgente serve
+`tesseract-ocr`.
+
+### Cache e costi
+
+- Livello OCR: `split/<doc>/ocr1-<hash provider modello>/page_000123.pdf`
+  (il provider/modello fa parte del tag: cambiarlo non riusa livelli vecchi).
+- Tradotto da OCR: `translated/<doc>/<engine>/<lang>/cs1-…-ocr1-…/page_….pdf`.
+- Fallback "originale": `…/cs1-…-empty/page_….pdf` (separato dal tradotto: una
+  pagina scansionata già "cestinata" come originale viene riprocessata quando
+  l'OCR è attivo).
+- L'OCR di una pagina si paga **una volta**: se il livello esiste si usa senza
+  nuova chiamata, anche se l'utente ha scelto "tieni l'originale" in un secondo
+  momento. `purge_page_cache` elimina il tradotto, non il livello OCR.
+- Stima: $2/1000 pagine (OpenRouter); nelle prove una pagina densa è costata
+  ~$0,0022 (OCR + 1 token del modello).
+
+### Errori e stato
+
+Codici stabili nel `status`: `ocr_missing_key`, `ocr_invalid_key`,
+`ocr_no_credits`, `ocr_rate_limited`, `ocr_network`, `ocr_empty`,
+`ocr_failed`, `ocr_tesseract` (mappati in `_ENGINE_ERROR_KEYS`, i18n a 5
+lingue). Il thread di traduzione considera `running` **e** `ocr` come "in
+corso" (attesa invece di errore).
+
+### Test e limiti
+
+- `tests/test_ocr_scans.py` (17 test: parsing annotazioni, matching righe,
+  livello testo, pagina nativa, fallback, errori).
+- `tests/test_clone_engine.py::OcrPipelineTests` (cache separata, flag,
+  declino, riuso del livello, errore).
+- `tests/test_ui_refinements.py` (impostazione + costo; decisione senza
+  chiave).
+- Verifica reale: pagina 201 di `ha22.pdf` rasterizzata a 150 dpi → OCR
+  Mistral (95,6% di parole corrette sul testo nativo) → livello testo →
+  `.mono.pdf` italiano con scansione e figura conservate.
+- Limiti noti: Mistral salta header/verticali (restano in inglese nella
+  scansione); su box Tesseract imprecisi qualche riga può sovrapporsi;
+  l'allineamento è euristico (soglia 0,6); `ocr_mode=auto` spende senza
+  chiedere. Il modello di appoggio OCR è `ocr_scans.DEFAULT_MODEL`
+  (override: `NOESIS_OCR_MODEL`).
+
+### Allineamento col servizio
+
+**Da fare** (scelta esplicita: prima il desktop). Lì servirà
+`app/ocr_scans.py` identico + hook in `app/engine.py` (`scanned_pages`, tag di
+cache, flag `--ocr-workaround`), una scelta OCR per job (API/CLI) e
+l'inclusione di Tesseract nel container/installer. Il resto del motore resta
+allineato.
+
+
+---
+
+## 14. Modello LLM di default: gpt-oss-120b — 28/11
+
+**Mercury è stato ritirato da OpenRouter l'8/11/2026**: tutti gli id
+`inception/mercury*` (incluso `mercury-3`) hanno **0 endpoint** e non compaiono
+più nel catalogo (404 sul dettaglio). Inception chiude anche l'API diretta il
+28/12/2026. Il vecchio default `inception/mercury-2.5` rendeva quindi il motore
+`llm` inutilizzabile (404).
+
+Modifiche:
+
+- `clone_engine.DEFAULT_MODEL = "openai/gpt-oss-120b"` (OpenRouter, $0,05 /
+  $0,25 per 1M token, 131K contesto — verificati il 28/11).
+- `gtranslate_cli.py`: fallback del traduttore LLM della catena gratuita
+  aggiornato.
+- Preset desktop: `normal` e `fast` ora usano gpt-oss-120b (il preset
+  `fastest` lo usava già, via proxy Groq).
+- `clone_engine.normalize_llm_model()`: i vecchi id `inception/mercury*`
+  salvati in `config.json` o in `PDF_LLM_MODEL` vengono **ignorati** e si torna
+  al default (nessun errore, nessuna migrazione manuale).
+- Impostazioni → LLM: rimosso Mercury dal menu; etichetta del default ora
+  "Default (gpt-oss-120b o variabile)".
+- Allineato il servizio: `PRESETS`/`llm_model` di default, `PDF_LLM_MODEL`
+  (default e scelte), `app/engine.py` e `app/gtranslate_cli.py`; anche la stima
+  di costo LLM usa i prezzi di gpt-oss ($0,05/$0,25).
+- Test: desktop **586 OK** (24 skip); servizio verde.
+
+Nota: la calibrazione dell'overhead di stima costo (13.3) resta quella fatta
+con Mercury; con gpt-oss i prezzi cambiano, quindi la stima del servizio va
+ricontrollata sul campo.

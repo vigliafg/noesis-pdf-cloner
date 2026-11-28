@@ -66,6 +66,7 @@ from i18n import (
     init_config, save_config,
 )
 import pages as page_spec
+import ocr_scans
 
 _MD_EXTENSIONS = ["tables", "fenced_code", "codehilite"]
 
@@ -1693,6 +1694,17 @@ _ENGINE_ERROR_KEYS = {
     "rate_limited": "clone.err.rate_limited",
     "model_not_found": "clone.err.model_not_found",
     "network": "clone.err.network",
+    # OCR delle scansioni (Mistral via OpenRouter).
+    "ocr_missing_key": "ocr.no_key",
+    "ocr_invalid_key": "clone.invalid_key",
+    "ocr_forbidden": "clone.err.forbidden",
+    "ocr_no_credits": "clone.err.no_credits",
+    "ocr_rate_limited": "clone.err.rate_limited",
+    "ocr_model_not_found": "clone.err.model_not_found",
+    "ocr_network": "clone.err.network",
+    "ocr_empty": "ocr.err.empty",
+    "ocr_failed": "ocr.err.failed",
+    "ocr_tesseract": "ocr.err.tesseract",
 }
 
 
@@ -2498,13 +2510,14 @@ class CloneTranslateThread(QThread):
 
     def __init__(
         self, engine: clone_engine.CloneEngine, page: int, engine_name: str,
-        generation: int,
+        generation: int, allow_ocr: bool | None = None,
     ):
         super().__init__()
         self._engine = engine
         self._page = page
         self._engine_name = engine_name
         self._generation = generation
+        self._allow_ocr = allow_ocr
         self._cancel_event = threading.Event()
 
     def cancel(self):
@@ -2528,18 +2541,30 @@ class CloneTranslateThread(QThread):
         il worker finisca e la cache compaia (come fa l'export).
         """
         path = self._engine.translate_page(
-            self._page, self._engine_name, self._cancel_event
+            self._page, self._engine_name, self._cancel_event,
+            **self._ocr_kwargs(),
         )
         for _ in range(self._WAIT_SLICES):
             if path is not None or self._cancel_event.is_set():
                 return path
-            if self._engine.status(self._page, self._engine_name) != "running":
+            if self._engine.status(self._page, self._engine_name) not in (
+                "running", "ocr",
+            ):
                 return path
             time.sleep(self._WAIT_SLICE)
             path = self._engine.translate_page(
-                self._page, self._engine_name, self._cancel_event
+                self._page, self._engine_name, self._cancel_event,
+                **self._ocr_kwargs(),
             )
         return path
+
+    def _ocr_kwargs(self) -> dict:
+        """Passa ``allow_ocr`` solo se c'è una decisione esplicita.
+
+        Mantiene compatibile il firmato storico di ``translate_page`` con i
+        doppi di test e con i chiamanti che non gestiscono l'OCR.
+        """
+        return {} if self._allow_ocr is None else {"allow_ocr": self._allow_ocr}
 
     def run(self):
         try:
@@ -2585,11 +2610,13 @@ class CloneExportThread(QThread):
         engine: clone_engine.CloneEngine,
         pages: list[int],
         engine_name: str,
+        allow_ocr: bool | None = None,
     ):
         super().__init__()
         self._engine = engine
         self._pages = list(pages)
         self._engine_name = engine_name
+        self._allow_ocr = allow_ocr
         self._cancelled = False
         self._cancel_event = threading.Event()
 
@@ -2599,6 +2626,10 @@ class CloneExportThread(QThread):
 
     def is_cancelled(self) -> bool:
         return self._cancelled
+
+    def _ocr_kwargs(self) -> dict:
+        """Passa ``allow_ocr`` solo con una decisione esplicita (test doubles)."""
+        return {} if self._allow_ocr is None else {"allow_ocr": self._allow_ocr}
 
     def _translate_one(self, page: int) -> tuple[Path | None, str]:
         """Traduce una pagina, attendendo un eventuale worker concorrente.
@@ -2614,12 +2645,13 @@ class CloneExportThread(QThread):
         for attempt in range(3):
             for _ in range(600):  # ~5 minuti al massimo
                 path = self._engine.translate_page(
-                    page, self._engine_name, self._cancel_event
+                    page, self._engine_name, self._cancel_event,
+                    **self._ocr_kwargs(),
                 )
                 if path is not None or self._cancelled:
                     return path, ""
                 status = self._engine.status(page, self._engine_name)
-                if status == "running":
+                if status in ("running", "ocr"):
                     time.sleep(0.5)
                     continue
                 if status.startswith("error:"):
@@ -5294,6 +5326,14 @@ class SettingsDialog(QDialog):
         self._fast_worker_check = QCheckBox(T("settings.performance.fast_worker"))
         self._fast_worker_check.setToolTip(T("settings.performance.fast_worker.tip"))
         perf_form.addRow(self._fast_worker_check)
+        # OCR delle pagine scansionate (Mistral OCR via OpenRouter, a pagamento).
+        self._lbl_ocr = QLabel(T("settings.performance.ocr"))
+        self._ocr_combo = QComboBox()
+        self._ocr_combo.addItem(T("settings.performance.ocr.ask"), "ask")
+        self._ocr_combo.addItem(T("settings.performance.ocr.auto"), "auto")
+        self._ocr_combo.addItem(T("settings.performance.ocr.off"), "off")
+        self._ocr_combo.setToolTip(T("settings.performance.ocr.tip"))
+        perf_form.addRow(self._lbl_ocr, self._ocr_combo)
         self._lbl_reasoning = QLabel(T("settings.performance.reasoning_effort"))
         self._reasoning_combo = QComboBox()
         for value in ("", "minimal", "low", "medium", "high"):
@@ -5456,12 +5496,12 @@ class SettingsDialog(QDialog):
     _PRESETS = {
         "normal": {
             "fast": False, "flags": False, "worker": False,
-            "model": "inception/mercury-2.5", "base": "", "reasoning": "",
+            "model": "openai/gpt-oss-120b", "base": "", "reasoning": "",
             "json": False, "autostart": False, "pool": 4, "prompt": "",
         },
         "fast": {
             "fast": True, "flags": False, "worker": True,
-            "model": "inception/mercury-2.5", "base": "", "reasoning": "",
+            "model": "openai/gpt-oss-120b", "base": "", "reasoning": "",
             "json": False, "autostart": False, "pool": 4, "prompt": "",
         },
         "fastest": {
@@ -5589,10 +5629,10 @@ class SettingsDialog(QDialog):
             if model_value is not None
             else self._llm_model_combo.currentData()
         )
+        # Un modello ritirato (Mercury) salvato in config non deve restare
+        # selezionato: si torna al default.
+        model = clone_engine.normalize_llm_model(model)
         self._llm_model_combo.clear()
-        self._llm_model_combo.addItem(
-            T("settings.llm.model.mercury"), "inception/mercury-2.5"
-        )
         self._llm_model_combo.addItem(
             T("settings.llm.model.gptoss"), "openai/gpt-oss-120b"
         )
@@ -5675,7 +5715,9 @@ class SettingsDialog(QDialog):
 
         # Modello/base salvati: assicura che siano nelle combo (anche custom),
         # così il preset non li perde se differiscono dai suoi default.
-        saved_model = str(cfg.get("llm_model", "") or "").strip()
+        saved_model = clone_engine.normalize_llm_model(
+            cfg.get("llm_model", "")
+        )
         saved_base = str(cfg.get("llm_base_url", "") or "").strip()
         self._populate_llm_combos(saved_model, self._base_combo_value(saved_base))
 
@@ -5697,6 +5739,9 @@ class SettingsDialog(QDialog):
         self._fast_engine_check.setChecked(bool(cfg.get("fast_engine", False)))
         self._fast_flags_check.setChecked(bool(cfg.get("fast_flags", False)))
         self._fast_worker_check.setChecked(bool(cfg.get("fast_worker", False)))
+        self._select_combo_data(
+            self._ocr_combo, str(cfg.get("ocr_mode", "ask") or "ask")
+        )
         self._llm_workers_spin.setValue(int(cfg.get("llm_pool_workers", 4) or 4))
         self._select_combo_data(
             self._reasoning_combo, str(cfg.get("llm_reasoning_effort", "") or "")
@@ -5869,6 +5914,7 @@ class SettingsDialog(QDialog):
             "fast_flags": bool(self._fast_flags_check.isChecked()),
             "numeric_lists": bool(self._numeric_lists_check.isChecked()),
             "fast_worker": bool(self._fast_worker_check.isChecked()),
+            "ocr_mode": self._ocr_combo.currentData() or "ask",
             "llm_reasoning_effort": self._reasoning_combo.currentData() or "",
             "llm_json_mode": bool(self._json_mode_check.isChecked()),
             "llm_model": self._llm_model_combo.currentData() or "",
@@ -8569,6 +8615,7 @@ class MainWindow(QMainWindow):
                     "performance_preset", "numeric_lists",
                     "fast_engine", "fast_flags",
                     "llm_reasoning_effort", "llm_json_mode", "fast_worker",
+                    "ocr_mode",
                     "llm_model", "llm_base_url",
                     "llm_proxy_autostart", "llm_proxy_port", "llm_system_prompt"):
             if key in values:
@@ -8801,9 +8848,14 @@ class MainWindow(QMainWindow):
         )
         self._clone_engine.llm_json_mode = bool(get_setting("llm_json_mode", False))
         # Modello / base URL: setting esplicito, altrimenti env o default.
-        model = str(get_setting("llm_model", "") or "").strip()
-        self._clone_engine.llm_model = model or os.environ.get(
-            "PDF_LLM_MODEL", clone_engine.DEFAULT_MODEL
+        # I modelli ritirati (Mercury) vengono ignorati anche se salvati in
+        # config o nella variabile d'ambiente.
+        model = clone_engine.normalize_llm_model(get_setting("llm_model", ""))
+        env_model = clone_engine.normalize_llm_model(
+            os.environ.get("PDF_LLM_MODEL")
+        )
+        self._clone_engine.llm_model = (
+            model or env_model or clone_engine.DEFAULT_MODEL
         )
         base = str(get_setting("llm_base_url", "") or "").strip()
         self._clone_engine.llm_base_url = base or os.environ.get(
@@ -8819,6 +8871,19 @@ class MainWindow(QMainWindow):
             self._ensure_proxy_async(port)
         self._clone_engine.fast_worker = bool(get_setting("fast_worker", False))
         self._clone_engine.numeric_lists = bool(get_setting("numeric_lists", False))
+        # OCR delle scansioni: configurazione pronta se la chiave OpenRouter
+        # esiste; la singola traduzione decide se usarlo (allow_ocr).
+        ocr_key = (os.environ.get(keystore.ENV_VAR) or "").strip()
+        self._clone_engine.ocr_config = (
+            ocr_scans.OcrConfig(
+                api_key=ocr_key,
+                model=os.environ.get("NOESIS_OCR_MODEL")
+                or ocr_scans.DEFAULT_MODEL,
+            )
+            if ocr_key
+            else None
+        )
+        self._clone_engine.ocr_enabled = self._ocr_mode() == "auto"
         self._clone_engine.llm_system_prompt = str(
             get_setting("llm_system_prompt", "") or ""
         ).strip()
@@ -9118,7 +9183,15 @@ class MainWindow(QMainWindow):
             for old in others:
                 self._clone_engine.purge_page_cache(old, page)
 
-        self._request_translation(page)
+        needs_ocr = getattr(self._clone_engine, "page_needs_ocr", None)
+        scans = [page] if (needs_ocr and needs_ocr(page)) else []
+        if scans:
+            allow_ocr = self._ocr_decision(scans)
+            if allow_ocr is None:  # annullato dall'utente
+                return
+            self._request_translation(page, allow_ocr=allow_ocr)
+        else:
+            self._request_translation(page)
 
     def _confirm_page_cached(self, page: int, engine: str) -> bool:
         """Pagina già in cache: ritradurre (cancella cache) o aprire col lettore.
@@ -9176,7 +9249,71 @@ class MainWindow(QMainWindow):
         box.exec()
         return box.clickedButton() is confirm
 
-    def _request_translation(self, page_num: int):
+    # ── OCR delle scansioni (Mistral OCR via OpenRouter) ──────────────────
+
+    def _ocr_mode(self) -> str:
+        """Politica OCR dalle Impostazioni: ``ask`` | ``auto`` | ``off``."""
+        mode = str(get_setting("ocr_mode", "ask") or "ask")
+        return mode if mode in ("ask", "auto", "off") else "ask"
+
+    @staticmethod
+    def _ocr_key_available() -> bool:
+        return bool((os.environ.get(keystore.ENV_VAR) or "").strip())
+
+    @staticmethod
+    def _ocr_cost(pages: int) -> str:
+        cost = max(1, int(pages)) * ocr_scans.COST_PER_PAGE_USD
+        return f"${cost:.3f}" if cost < 0.1 else f"${cost:.2f}"
+
+    def _ask_ocr(self, pages: int) -> bool | None:
+        """Avviso OCR a pagamento: ``True`` usa OCR, ``False`` originale, ``None`` annulla."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(T("ocr.dialog.title"))
+        box.setText(T("ocr.dialog.body", pages=pages, cost=self._ocr_cost(pages)))
+        box.setInformativeText(T("ocr.dialog.privacy"))
+        use = box.addButton(
+            T("ocr.dialog.use"), QMessageBox.ButtonRole.AcceptRole
+        )
+        original = box.addButton(
+            T("ocr.dialog.original"), QMessageBox.ButtonRole.DestructiveRole
+        )
+        box.addButton(T("ocr.dialog.cancel"), QMessageBox.ButtonRole.RejectRole)
+        dont_ask = QCheckBox(T("ocr.dialog.dont_ask"))
+        box.setCheckBox(dont_ask)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is use:
+            if dont_ask.isChecked():
+                set_setting("ocr_mode", "auto")
+                save_config()
+            return True
+        if clicked is original:
+            if dont_ask.isChecked():
+                set_setting("ocr_mode", "off")
+                save_config()
+            return False
+        return None
+
+    def _ocr_decision(self, scans: list[int]) -> bool | None:
+        """Decisione OCR per le pagine indicate (``None`` = annulla).
+
+        Rispetta la politica delle Impostazioni; senza chiave OpenRouter non
+        propone nulla e ripiega sull'originale con un avviso.
+        """
+        if not scans:
+            return False
+        mode = self._ocr_mode()
+        if mode == "off":
+            return False
+        if not self._ocr_key_available():
+            self.status_bar.showMessage(T("ocr.no_key"), 7000)
+            return False
+        if mode == "auto":
+            return True
+        return self._ask_ocr(len(scans))
+
+    def _request_translation(self, page_num: int, allow_ocr: bool | None = None):
         """Show the cached clone of ``page_num`` or start a background job."""
         if not self._pdf_path:
             return
@@ -9237,7 +9374,8 @@ class MainWindow(QMainWindow):
         )
 
         thread = CloneTranslateThread(
-            self._clone_engine, page_num, engine, self._clone_generation
+            self._clone_engine, page_num, engine, self._clone_generation,
+            allow_ocr=allow_ocr,
         )
         thread.done.connect(self._on_clone_done)
         thread.error.connect(self._on_clone_error)
@@ -9565,6 +9703,16 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(T("clone.no_engine"), 6000)
             return
 
+        # Pagine scansionate senza livello OCR: anche se hanno in cache il
+        # fallback "originale" vanno riprocessate (OCR) quando richiesto.
+        scans_fn = getattr(self._clone_engine, "scanned_pages", None)
+        scans = scans_fn(pages) if (want_translate and scans_fn) else []
+        if scans:
+            missing = list(dict.fromkeys([*missing, *scans]))
+        allow_ocr = self._ocr_decision(scans) if scans else None
+        if scans and allow_ocr is None:  # annullato dall'utente
+            return
+
         # Destinazione scelta nello step "Output" del wizard, quindi già nota
         # PRIMA della traduzione: l'attesa termina con il file già scritto.
         # Engine dedicato con motore/lingua scelti: non disturba l'engine
@@ -9592,6 +9740,8 @@ class MainWindow(QMainWindow):
             export_engine.fast_worker = self._clone_engine.fast_worker
             export_engine.numeric_lists = self._clone_engine.numeric_lists
             export_engine.llm_system_prompt = self._clone_engine.llm_system_prompt
+            export_engine.ocr_config = self._clone_engine.ocr_config
+            export_engine.ocr_enabled = self._clone_engine.ocr_enabled
             # Pre-avvia il worker dedicato in background: la prima pagina non
             # paga l'avvio (import + warmup) e usa subito le patch runtime.
             export_engine.warmup()
@@ -9607,6 +9757,7 @@ class MainWindow(QMainWindow):
             len(cached),
             dest,
             fmt,
+            allow_ocr=allow_ocr,
         )
         if export_engine is not self._clone_engine:
             # L'engine dedicato all'export non serve più: chiude l'eventuale
@@ -9668,6 +9819,7 @@ class MainWindow(QMainWindow):
         cached_count: int,
         dest: str,
         fmt: str = "merged",
+        allow_ocr: bool | None = None,
     ) -> tuple[bool, int, int]:
         """Translate (optionally), merge and save, with a progress window.
 
@@ -9704,7 +9856,7 @@ class MainWindow(QMainWindow):
         try:
             return self._run_export_body(
                 prog, engine, pages, missing, translate, engine_name,
-                source, target, dest, fmt,
+                source, target, dest, fmt, allow_ocr=allow_ocr,
             )
         finally:
             self._end_long_job()
@@ -9721,11 +9873,14 @@ class MainWindow(QMainWindow):
         target: str,
         dest: str,
         fmt: str,
+        allow_ocr: bool | None = None,
     ) -> tuple[bool, int, int]:
         """Corpo dell'export, separato per garantire il rilascio dello standby."""
         state = {"cancelled": False, "failed": {}}
         if translate and missing:
-            thread = CloneExportThread(engine, missing, engine_name)
+            thread = CloneExportThread(
+                engine, missing, engine_name, allow_ocr=allow_ocr
+            )
 
             def _on_page_error(page: int, reason: str):
                 state["failed"][page] = _friendly_reason(reason)

@@ -426,6 +426,22 @@ class FastEngineTests(unittest.TestCase):
             self.engine.translate_page(1, "google")
         self.assertIn("--output", captured["argv"])
 
+    def test_textless_page_never_reaches_the_worker(self):
+        """Scansione: nessun job al worker (che riporterebbe exit 1)."""
+        subprocess_mod, worker_file = self._persistent_engine()
+        worker = mock.Mock()
+        with mock.patch.object(
+            clone_engine, "_engine_worker_path", return_value=worker_file
+        ), mock.patch.object(
+            clone_engine, "page_has_text", return_value=False
+        ), mock.patch.object(
+            self.engine, "_run_via_worker", worker
+        ):
+            out = self.engine.translate_page(1, "bing")
+        worker.assert_not_called()
+        self.assertIsNotNone(out)
+        self.assertEqual(self.engine.status(1, "bing"), "empty")
+
     def test_persistent_falls_back_to_subprocess(self):
         import subprocess
 
@@ -728,12 +744,18 @@ class PipelineTests(unittest.TestCase):
             run.assert_not_called()
         self.assertTrue(again.is_file())
 
-    def test_no_mono_without_text_falls_back_to_original(self):
-        """Pagina senza testo: BabelDOC esce 0 senza mono → originale."""
-        self.fake.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n")
-        self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
-        with mock.patch.object(clone_engine, "page_has_text", return_value=False):
+    def test_textless_page_uses_original_without_engine(self):
+        """Pagina senza testo (scansione): originale in cache, motore mai avviato.
+
+        Su una scansione BabelDOC fallisce ("The document contains no
+        paragraphs") e il worker persistente lo riporta come exit 1: inviare la
+        pagina produrrebbe un errore in UI dopo minuti di attesa.
+        """
+        with mock.patch.object(
+            clone_engine, "page_has_text", return_value=False
+        ), mock.patch.object(self.engine, "_run_engine") as run_engine:
             out = self.engine.translate_page(1, "google")
+        run_engine.assert_not_called()
         self.assertIsNotNone(out)
         self.assertTrue(out.is_file())
         self.assertEqual(
@@ -1349,7 +1371,7 @@ class EngineEnvTests(unittest.TestCase):
             tmp_path = Path(tmp)
             src = tmp_path / "book.pdf"
             doc = pymupdf.open()
-            doc.new_page()
+            doc.new_page().insert_text((72, 72), "Hello")
             doc.save(src)
             doc.close()
             fake = tmp_path / "pdf2zh_next"
@@ -1365,12 +1387,158 @@ class EngineEnvTests(unittest.TestCase):
                 captured.update(env)
                 return subprocess.CompletedProcess(cmd, 0, "", "")
 
-            with mock.patch.object(engine, "_run_engine", fake_run), \
-                 mock.patch.object(
-                     clone_engine, "page_has_text", return_value=False
-                 ):
+            with mock.patch.object(engine, "_run_engine", fake_run):
                 engine.translate_page(0, "google")
             self.assertEqual(captured.get("PYTHONIOENCODING"), "utf-8")
+
+
+class OcrPipelineTests(unittest.TestCase):
+    """OCR delle scansioni: livello testo, cache separata, flag del motore."""
+
+    def setUp(self):
+        import pymupdf
+
+        import ocr_scans
+
+        self.ocr_scans = ocr_scans
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        self.src = tmp / "scan.pdf"
+        doc = pymupdf.open()
+        doc.new_page()  # nessun testo (scansione)
+        doc.save(self.src)
+        doc.close()
+        fake = tmp / "pdf2zh_next"
+        fake.write_text("#!/bin/sh\n")
+        self.engine = clone_engine.CloneEngine(tmp / "cache", pdf2zh_bin=fake)
+        self.engine.set_document(self.src)
+        self.engine.lang_in, self.engine.lang_out = "en", "it"
+        self.engine.ocr_config = ocr_scans.OcrConfig("chiave")
+        split = self.engine.split_path(0)
+        split.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+
+        shutil.copyfile(self.src, split)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _fake_layer(self, src, dst, config, **kwargs):
+        """Simula il livello OCR: pagina con testo (e lo stesso nome file)."""
+        import pymupdf
+
+        doc = pymupdf.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Hello scanned page")
+        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+        doc.save(str(dst))
+        doc.close()
+        return "layout"
+
+    @staticmethod
+    def _fake_run(cmd, env, cancel_event=None):
+        import subprocess
+
+        import pymupdf
+
+        out_dir = Path(cmd[cmd.index("--output") + 1])
+        doc = pymupdf.open()
+        doc.new_page().insert_text((72, 72), "Ciao pagina")
+        doc.save(str(out_dir / "page.mono.pdf"))
+        doc.close()
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    def test_scanned_page_with_ocr_keeps_layout_and_flags(self):
+        with mock.patch.object(
+            self.ocr_scans, "build_ocr_page", side_effect=self._fake_layer
+        ) as build, mock.patch.object(
+            self.engine, "_run_engine", side_effect=self._fake_run
+        ) as run:
+            out = self.engine.translate_page(0, "bing", allow_ocr=True)
+
+        build.assert_called_once()
+        self.assertIsNotNone(out)
+        self.assertTrue(out.is_file())
+        # Cache separata dal fallback "originale".
+        self.assertIn(self.engine._ocr_tag(), str(out))
+        argv = run.call_args.args[0]
+        self.assertIn("--ocr-workaround", argv)
+        self.assertIn("--skip-scanned-detection", argv)
+        self.assertEqual(self.engine.status(0, "bing"), "done")
+
+    def test_declined_ocr_stores_the_original(self):
+        split = self.engine.split_path(0)
+        with mock.patch.object(
+            self.ocr_scans, "build_ocr_page"
+        ) as build, mock.patch.object(
+            self.engine, "_run_engine"
+        ) as run:
+            out = self.engine.translate_page(0, "bing", allow_ocr=False)
+
+        build.assert_not_called()
+        run.assert_not_called()
+        self.assertIsNotNone(out)
+        self.assertEqual(out.read_bytes(), split.read_bytes())
+        self.assertTrue(out.parent.name.endswith("-empty"))
+        self.assertEqual(self.engine.status(0, "bing"), "empty")
+
+    def test_ocr_error_is_reported_with_code(self):
+        with mock.patch.object(
+            self.ocr_scans,
+            "build_ocr_page",
+            side_effect=self.ocr_scans.OcrError("no_credits", "credito finito"),
+        ):
+            out = self.engine.translate_page(0, "bing", allow_ocr=True)
+        self.assertIsNone(out)
+        self.assertEqual(self.engine.status(0, "bing"), "error:ocr_no_credits")
+
+    def test_existing_layer_is_reused_without_new_ocr(self):
+        layer = self.engine.ocr_split_path(0)
+        self._fake_layer(None, layer, None)
+        self.assertFalse(self.engine.page_needs_ocr(0))
+        self.assertIn(
+            self.engine._ocr_tag(),
+            str(self.engine.translated_path_for(0, "bing")),
+        )
+        with mock.patch.object(
+            self.ocr_scans, "build_ocr_page"
+        ) as build, mock.patch.object(
+            self.engine, "_run_engine", side_effect=self._fake_run
+        ):
+            out = self.engine.translate_page(0, "bing", allow_ocr=False)
+        build.assert_not_called()
+        self.assertIsNotNone(out)
+        self.assertIn(self.engine._ocr_tag(), str(out))
+
+    def test_scanned_pages_lists_textless_pages(self):
+        self.assertEqual(self.engine.scanned_pages([0]), [0])
+        layer = self.engine.ocr_split_path(0)
+        self._fake_layer(None, layer, None)
+        self.assertEqual(self.engine.scanned_pages([0]), [])
+
+
+class LlmModelTests(unittest.TestCase):
+    """Modello LLM di default e migrazione dei modelli ritirati."""
+
+    def test_default_model_is_gpt_oss(self):
+        self.assertEqual(clone_engine.DEFAULT_MODEL, "openai/gpt-oss-120b")
+
+    def test_retired_mercury_maps_to_default(self):
+        for model in (
+            "inception/mercury",
+            "inception/mercury-2",
+            "inception/mercury-2.5",
+            "inception/mercury-3",
+            "Inception/Mercury-3",
+        ):
+            self.assertEqual(clone_engine.normalize_llm_model(model), "", model)
+
+    def test_live_model_is_preserved(self):
+        self.assertEqual(
+            clone_engine.normalize_llm_model("openai/gpt-oss-120b"),
+            "openai/gpt-oss-120b",
+        )
+        self.assertEqual(clone_engine.normalize_llm_model(None), "")
 
 
 if __name__ == "__main__":

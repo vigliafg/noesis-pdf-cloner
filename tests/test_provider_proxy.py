@@ -35,7 +35,7 @@ class ProviderProxyTests(unittest.TestCase):
         for model in (
             "deepseek/deepseek-chat",
             "google/gemini-2.5-flash",
-            "inception/mercury-2.5",
+            "mistralai/mistral-small-3.2-24b-instruct",
         ):
             self.assertFalse(provider_proxy._should_pin(model), model)
 

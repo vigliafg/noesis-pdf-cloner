@@ -42,7 +42,7 @@ il padre misura solo l'attesa. Questo wrapper sostituisce (a runtime)
 ```bash
 .venv2/bin/python tools/child_profile.py --patch --out child.prof -- \
     /tmp/page.pdf --lang-in en --lang-out it --output /tmp/out/ \
-    --openai --openai-model inception/mercury-2.5 --pool-max-workers 4 \
+    --openai --openai-model openai/gpt-oss-120b --pool-max-workers 4 \
     --no-auto-extract-glossary --ignore-cache
 
 .venv2/bin/python -c "import pstats; \
@@ -57,7 +57,7 @@ il padre misura solo l'attesa. Questo wrapper sostituisce (a runtime)
 `pdf2zh_next` non espone il routing del provider: per forzare Groq su OpenRouter
 serve il campo `provider` nel body. Il proxy lo inietta, **solo per i modelli
 scelti** (`PROXY_MODELS`, default `openai/gpt-oss-120b`; `*` = tutti): così gli
-altri modelli (DeepSeek, Gemini, Mercury…) passano invariati.
+altri modelli (DeepSeek, Gemini, Mistral…) passano invariati.
 
 ```bash
 PROXY_PORT=8790 .venv/bin/python tools/provider_proxy.py   # in background

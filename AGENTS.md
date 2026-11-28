@@ -78,8 +78,9 @@ workflow GitHub Pages della guida: non hanno controparte nel servizio.
   **mai** in `config.json`, nei log o nei commit. La chiave non va negli argv se
   evitabile.
 - Il motore `llm` usa il percorso "OpenAI-compatibile" di `pdf2zh_next` (flag `--openai`)
-  puntato a **OpenRouter** (modello Mercury), **non** OpenAI. L'alias `openai` è
-  normalizzato a `llm`.
+  puntato a **OpenRouter** (modello di default `openai/gpt-oss-120b`), **non** OpenAI.
+  L'alias `openai` è normalizzato a `llm`. Mercury è ritirato dal provider
+  (8/11/2026): i vecchi id `inception/mercury*` vengono ignorati.
 
 ## Comandi utili
 - Avvio GUI: `./run.sh` (crea/aggiorna i due venv e apre la GUI) oppure

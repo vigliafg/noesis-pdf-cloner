@@ -22,7 +22,7 @@ Variabili: ``PROXY_PORT`` (default 8790), ``PROXY_PROVIDER`` (default ``groq``),
 Solo stdlib: nessuna dipendenza.
 
 **Model-aware**: il campo ``provider`` è iniettato solo per i modelli in
-``PROXY_MODELS``; per gli altri (DeepSeek, Gemini, Mercury…) il body passa
+``PROXY_MODELS``; per gli altri (DeepSeek, Gemini, Mistral…) il body passa
 invariato. Così un'unica base URL serve tutti i modelli.
 """
 
@@ -59,7 +59,7 @@ def _should_pin(model: str) -> bool:
     """True se il modello va pinnato al provider configurato.
 
     Così un'unica base URL può servire tutti i modelli: gpt-oss → Groq, mentre
-    DeepSeek/Gemini/Mercury passano invariati verso OpenRouter.
+    DeepSeek/Gemini/Mistral passano invariati verso OpenRouter.
     """
     if "*" in PROXY_MODELS:
         return True
@@ -88,7 +88,7 @@ def _inject_provider(payload: dict[str, Any]) -> dict[str, Any]:
     """Aggiunge/forza ``provider.only`` nel body, **solo** per i modelli scelti.
 
     Per i modelli non in ``PROXY_MODELS`` il body è restituito invariato, così
-    gli altri motori (DeepSeek, Gemini, Mercury…) funzionano normalmente.
+    gli altri motori (DeepSeek, Gemini, Mistral…) funzionano normalmente.
     """
     model = str(payload.get("model", ""))
     if not _should_pin(model):

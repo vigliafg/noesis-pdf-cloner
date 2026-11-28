@@ -175,7 +175,7 @@ def llm_translate(text: str) -> str | None:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         return None
-    model = os.environ.get("PDF_LLM_MODEL", "inception/mercury-2.5")
+    model = os.environ.get("PDF_LLM_MODEL", "openai/gpt-oss-120b")
     payload = {
         "model": model,
         "messages": [
